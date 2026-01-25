@@ -435,7 +435,7 @@ async function saveEdit() {
                     return (
                       <Button
                         key={emo}
-                        variant={active ? 'default' : 'ghost'}
+                        variant={active ? 'primary' : 'ghost'}
                         onClick={() => toggleReaction(p.id, emo)}
                       >
                         {emo} {c ? c : ''}
