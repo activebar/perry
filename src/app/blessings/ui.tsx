@@ -10,20 +10,14 @@ type Post = {
   author_name: string | null
   text: string | null
   media_url: string | null
+  video_url: string | null
   link_url: string | null
   media_path?: string | null
-  video_url: string | null
   status: string
   reaction_counts: Record<string, number>
   my_reactions: string[]
 }
-
-const EMOJIS = [
-  "\uD83D\uDC4D", // 👍
-  "\uD83D\uDE0D", // 😍
-  "\uD83D\uDD25", // 🔥
-  "\uD83D\uDE4F", // 🙏
-] as const
+const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
 async function jfetch(url: string, init?: RequestInit) {
   const res = await fetch(url, {
@@ -68,13 +62,6 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
-  const [nowTick, setNowTick] = useState(0);
-  useEffect(() => {
-    setNowTick(Date.now());
-    const t = setInterval(() => setNowTick(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
   const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
 
@@ -108,18 +95,24 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
     return !!p?.can_delete
   }
   function secondsLeft(p: any) {
-    const until = p?.editable_until;
-    if (!until) return 0;
-    if (!nowTick) return 0;
-    const ms = new Date(until).getTime() - nowTick;
-    if (!Number.isFinite(ms)) return 0;
-    return Math.max(0, Math.floor(ms / 1000));
+    const until = p?.editable_until
+    if (!until) return 0
+    const ms = new Date(until).getTime() - Date.now()
+    if (!Number.isFinite(ms)) return 0
+    return Math.max(0, Math.floor(ms / 1000))
   }
   function fmtMMSS(sec: number) {
     const m = Math.floor(sec / 60)
     const s = sec % 60
     return `${m}:${String(s).padStart(2, '0')}`
   }
+
+  const [nowTick, setNowTick] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
   const editPickRef = useRef<HTMLInputElement | null>(null)
   const editCameraPhotoRef = useRef<HTMLInputElement | null>(null)
   const editCameraVideoRef = useRef<HTMLInputElement | null>(null)
@@ -253,7 +246,7 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
       text: p.text || '',
       link_url: p.link_url || '',
       media_url: p.media_url || '',
-      media_path: (p as any).media_path || ''
+      media_path: p.media_path || ''
     })
     setEditOpen(true)
   } finally {
@@ -405,7 +398,7 @@ async function saveEdit() {
               <div className="text-right">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold">{p.author_name || 'אורח/ת'}</p>
-                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Jerusalem' })}</p>
+                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}</p>
                 </div>
 
                 {p.text && <p className="mt-2 whitespace-pre-wrap text-sm">{p.text}</p>}
