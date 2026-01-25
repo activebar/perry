@@ -1,9 +1,12 @@
 import { Suspense } from 'react'
-import ResetClient from './ResetClient'
+import ResetClient from './client'
 
-export default function AdminResetPage() {
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+export default function ResetPage() {
   return (
-    <Suspense fallback={<div className="mx-auto max-w-md p-4">טוען...</div>}>
+    <Suspense fallback={<div className="p-6 text-right">טוען…</div>}>
       <ResetClient />
     </Suspense>
   )

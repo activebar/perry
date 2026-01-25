@@ -57,8 +57,10 @@ function firstHttpUrl(input: string) {
   return u
 }
 
-export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }) {
+export default function BlessingsClient({ initialFeed, mediaSize }: { initialFeed: Post[]; mediaSize: number }) {
   const [items, setItems] = useState<Post[]>(initialFeed || [])
+  const safeMediaSize = Math.max(140, Math.min(520, Number(mediaSize || 260)))
+
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
@@ -401,21 +403,28 @@ async function saveEdit() {
                   <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}</p>
                 </div>
 
-                {p.text && <p className="mt-2 whitespace-pre-wrap text-sm">{p.text}</p>}
-
                 {(p.media_url || p.video_url) && (
-                  <div className="mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
-                    {(() => {
-                      const url = (p.video_url || p.media_url) as string
-                      if (!url) return null
-                      const video = !!p.video_url || isVideo(url)
-                      return video ? (
-                        <video src={url} controls className="w-full" playsInline />
-                      ) : (
-                        <img src={url} alt="" className="w-full object-cover" />
-                      )
-                    })()}
+                  <div className="mt-3 flex justify-center">
+                    <div
+                      className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
+                      style={{ width: safeMediaSize, maxWidth: '100%' }}
+                    >
+                      {(() => {
+                        const url = (p.video_url || p.media_url) as string
+                        if (!url) return null
+                        const video = !!p.video_url || isVideo(url)
+                        return video ? (
+                          <video src={url} controls className="w-full h-auto" playsInline />
+                        ) : (
+                          <img src={url} alt="" className="w-full h-auto object-contain" />
+                        )
+                      })()}
+                    </div>
                   </div>
+                )}
+
+                {p.text && <p className="mt-3 whitespace-pre-wrap text-sm">{p.text}</p>}
+</div>
                 )}
 
                 {p.link_url && <LinkPreview url={p.link_url} />}
