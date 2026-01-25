@@ -87,7 +87,6 @@ async function getFeed() {
 
 export default async function BlessingsPage() {
   const [feed, settings] = await Promise.all([getFeed(), fetchSettings()]);
-  const mediaSize = Math.max(120, Math.min(480, Number(settings?.blessings_media_size || 260)));
 
   return (
     <main>
@@ -129,7 +128,7 @@ export default async function BlessingsPage() {
         </div>
 
         <div className="mt-4">
-          <BlessingsClient initialFeed={feed} mediaSize={mediaSize} />
+          <BlessingsClient initialFeed={feed} />
         </div>
       </Container>
     </main>
