@@ -94,9 +94,9 @@ export default async function BlessingsPage() {
             </div>
           </div>
         </Card>
-
-        <Card className="mt-4">
-          <h2 className="text-xl font-bold">ברכות</h2>
+<div className="mt-4">
+  <Card>
+    <h2 className="text-xl font-bold">ברכות</h2>
           <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה, ותנו ריאקשן.</p>
         </Card>
 
