@@ -15,7 +15,7 @@ async function getFeed() {
   const { data: posts, error } = await srv
     .from("posts")
     .select(
-      "id, created_at, author_name, text, media_url, video_url, link_url, status, device_id"
+      "id, created_at, author_name, text, media_url, media_path, video_url, link_url, status, device_id"
     )
     .eq("kind", "blessing")
     .eq("status", "approved")
