@@ -11,6 +11,7 @@ type Post = {
   text: string | null
   media_url: string | null
   link_url: string | null
+  media_path?: string | null
   status: string
   reaction_counts: Record<string, number>
   my_reactions: string[]
@@ -251,7 +252,7 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
       text: p.text || '',
       link_url: p.link_url || '',
       media_url: p.media_url || '',
-      media_path: p.media_path || ''
+      media_path: (p as any).media_path || ''
     })
     setEditOpen(true)
   } finally {
