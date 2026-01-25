@@ -1,3 +1,4 @@
+// src/app/gift/page.tsx
 import Link from 'next/link'
 import { Container, Card, Button } from '@/components/ui'
 import { fetchSettings } from '@/lib/db'
@@ -18,7 +19,6 @@ function CircleImage({ src, size, alt }: { src: string; size: number; alt: strin
       style={{ width: size, height: size }}
       className="overflow-hidden rounded-full ring-1 ring-zinc-200 bg-white flex items-center justify-center"
     >
-      {/* img כדי לא להיתקע על next/image host */}
       <img src={src} alt={alt} className="h-full w-full object-contain p-6" />
     </div>
   )
@@ -58,7 +58,6 @@ export default async function GiftPage() {
             <p className="text-sm text-zinc-600">תודה! בחרו דרך תשלום:</p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {/* BIT */}
               <div className="rounded-2xl border border-zinc-200 p-3">
                 <p className="font-semibold">Bit</p>
 
@@ -79,7 +78,6 @@ export default async function GiftPage() {
                 </div>
               </div>
 
-              {/* PAYBOX */}
               <div className="rounded-2xl border border-zinc-200 p-3">
                 <p className="font-semibold">PayBox</p>
 
