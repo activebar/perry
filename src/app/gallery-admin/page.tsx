@@ -30,7 +30,7 @@ export default async function AdminGalleryPage() {
         </Card>
 
         <div className="mt-4">
-          <GalleryClient initialItems={items} readOnly />
+          <GalleryClient initialItems={items} />
         </div>
       </Container>
     </main>
