@@ -12,6 +12,7 @@ type Post = {
   media_url: string | null
   link_url: string | null
   media_path?: string | null
+  video_url: string | null
   status: string
   reaction_counts: Record<string, number>
   my_reactions: string[]
