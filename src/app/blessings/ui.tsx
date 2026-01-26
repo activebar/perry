@@ -103,6 +103,16 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
 
   const mediaBoxStyle = useMemo(() => ({ width: `${mediaSize}px`, height: `${mediaSize}px` }), [mediaSize])
 
+  // media lightbox (mobile friendly)
+  const [modalUrl, setModalUrl] = useState<string | null>(null)
+  function openModal(url: string) {
+    if (!url) return
+    setModalUrl(url)
+  }
+  function closeModal() {
+    setModalUrl(null)
+  }
+
 
 // edit (mine, within 1h)
   const [editOpen, setEditOpen] = useState(false)
@@ -548,6 +558,21 @@ async function saveEdit() {
           </div>
         </div>
       </Card>
+    </div>
+  </div>
+)}
+
+{/* MEDIA MODAL */}
+{modalUrl && (
+  <div className="fixed inset-0 z-[60] bg-black/80 p-4" onClick={closeModal}>
+    <div className="mx-auto flex h-full max-w-4xl items-center justify-center" onClick={e => e.stopPropagation()}>
+      <div className="w-full overflow-hidden rounded-2xl bg-black">
+        {isVideo(modalUrl) ? (
+          <video src={modalUrl} controls className="max-h-[85vh] w-full" playsInline />
+        ) : (
+          <img src={modalUrl} alt="" className="max-h-[85vh] w-full object-contain" />
+        )}
+      </div>
     </div>
   </div>
 )}
