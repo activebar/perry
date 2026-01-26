@@ -3,7 +3,7 @@
 ZIP זה כולל פרויקט Next.js 14 (App Router) + Supabase + Google Drive Sync + Cron.
 
 ## מה כלול
-- עמוד ראשי `/` עם מצבי זמן (לפני/במהלך/אחרי) + בלוקים לפי DB (הסתרה/הצגה).
+- עמוד ראשי `/` עם מצבי זמן (לפני/במהלך/אחרי) + בלוקים לפי DB (הסתרה/הצגה)....
 - `/blessings` ברכות + העלאת תמונה/וידאו (כקישור) + ריאקציות 👍😍🔥🙏 (toggle).
 - `/gallery` העלאת תמונות + Grid (מוכן למובייל).
 - `/gift` דף תשלום (Bit/PayBox) + תמונה עגולה (קוטר נשלט).
