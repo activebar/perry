@@ -378,14 +378,18 @@ export default function HomePage() {
               {Array.isArray(blessingsPreview) && blessingsPreview.length > 0 ? (
                 <div className="mt-3 grid gap-3">
                   {blessingsPreview.slice(0, Math.max(0, blessingsPreviewLimit)).map((p: any) => (
-                    <div key={p.id} className="rounded-2xl border border-zinc-200 p-3" dir="rtl">
-                      {/* media centered + text below (mobile-friendly) */}
-                      {(p.media_url || p.video_url) && (
-                        <div className="flex justify-center">
+                    <div key={p.id} className="rounded-2xl border border-zinc-200 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 text-right">
+                          <p className="font-medium">{p.author_name || 'אורח/ת'}</p>
+                          {p.text && <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{p.text}</p>}
+                        </div>
+
+                        {(p.media_url || p.video_url) && (
                           <button
                             type="button"
-                            className="relative w-full max-w-[360px] overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
-                            style={{ aspectRatio: '1 / 1' }}
+                            className="relative flex-none overflow-hidden rounded-xl bg-zinc-50"
+                            style={{ width: mediaSize, height: mediaSize }}
                             onClick={() => window.open((p.video_url || p.media_url) as string, '_blank')}
                             title="פתח מדיה"
                           >
@@ -395,12 +399,7 @@ export default function HomePage() {
                               className="absolute inset-0 h-full w-full object-cover"
                             />
                           </button>
-                        </div>
-                      )}
-
-                      <div className={(p.media_url || p.video_url) ? 'mt-3 text-right' : 'text-right'}>
-                        <p className="font-medium">{p.author_name || 'אורח/ת'}</p>
-                        {p.text && <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{p.text}</p>}
+                        )}
                       </div>
 
                       <HomeLinkPreview url={p.link_url} sizePx={mediaSize} showDetails={settings?.link_preview_show_details === true} />

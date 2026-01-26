@@ -395,30 +395,28 @@ async function saveEdit() {
         <div className="space-y-3">
           {items.map(p => (
             <Card key={p.id}>
-              <div dir="rtl" className="text-right">
-                {(p.media_url || p.video_url) && (
-                  <div className="mt-1 flex justify-center">
-                    <div className="w-full max-w-md overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
-                      {(() => {
-                        const url = (p.video_url || p.media_url) as string
-                        if (!url) return null
-                        const video = !!p.video_url || isVideo(url)
-                        return video ? (
-                          <video src={url} controls className="w-full" playsInline />
-                        ) : (
-                          <img src={url} alt="" className="w-full object-cover" />
-                        )
-                      })()}
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-3 flex items-center justify-between">
+              <div className="text-right">
+                <div className="flex items-center justify-between">
                   <p className="font-semibold">{p.author_name || 'אורח/ת'}</p>
                   <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}</p>
                 </div>
 
                 {p.text && <p className="mt-2 whitespace-pre-wrap text-sm">{p.text}</p>}
+
+                {(p.media_url || p.video_url) && (
+                  <div className="mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
+                    {(() => {
+                      const url = (p.video_url || p.media_url) as string
+                      if (!url) return null
+                      const video = !!p.video_url || isVideo(url)
+                      return video ? (
+                        <video src={url} controls className="w-full" playsInline />
+                      ) : (
+                        <img src={url} alt="" className="w-full object-cover" />
+                      )
+                    })()}
+                  </div>
+                )}
 
                 {p.link_url && <LinkPreview url={p.link_url} />}
 

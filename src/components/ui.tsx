@@ -1,33 +1,11 @@
 import React from 'react'
 
-export function Container({
-  children,
-  className = '',
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={`mx-auto w-full max-w-3xl px-4 py-6 ${className}`.trim()}
-      {...props}
-    >
-      {children}
-    </div>
-  )
+export function Container({ children }: { children: React.ReactNode }) {
+  return <div className="mx-auto w-full max-w-3xl px-4 py-6">{children}</div>
 }
 
-export function Card({
-  children,
-  className = '',
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={`rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 p-4 ${className}`.trim()}
-      {...props}
-    >
-      {children}
-    </div>
-  )
+export function Card({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 p-4">{children}</div>
 }
 
 export function Button(props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' }) {
