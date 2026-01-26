@@ -62,6 +62,8 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
+  // controlled by admin settings (same behavior as home page)
+  const [mediaSize, setMediaSize] = useState<number>(140)
   const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
 
@@ -78,6 +80,28 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
     if (!u && linkUrl) setLinkUrl('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text])
+
+  // load public settings once (so image size is controlled like on the home page)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/public/home?ts=${Date.now()}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const j = await res.json().catch(() => ({}))
+        const s = j?.settings || {}
+        const n = Number(s?.blessings_media_size)
+        if (!cancelled && Number.isFinite(n) && n > 0) setMediaSize(Math.max(64, Math.min(420, n)))
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const mediaBoxStyle = useMemo(() => ({ width: `${mediaSize}px`, height: `${mediaSize}px` }), [mediaSize])
 
 
 // edit (mine, within 1h)
@@ -401,22 +425,30 @@ async function saveEdit() {
                   <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}</p>
                 </div>
 
-                {p.text && <p className="mt-2 whitespace-pre-wrap text-sm">{p.text}</p>}
-
                 {(p.media_url || p.video_url) && (
-                  <div className="mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
-                    {(() => {
-                      const url = (p.video_url || p.media_url) as string
-                      if (!url) return null
-                      const video = !!p.video_url || isVideo(url)
-                      return video ? (
-                        <video src={url} controls className="w-full" playsInline />
-                      ) : (
-                        <img src={url} alt="" className="w-full object-cover" />
-                      )
-                    })()}
+                  <div className="mt-3 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => openModal(((p.video_url || p.media_url) as string) || '')}
+                      className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
+                      style={mediaBoxStyle}
+                      aria-label="פתח מדיה"
+                    >
+                      {(() => {
+                        const url = (p.video_url || p.media_url) as string
+                        if (!url) return null
+                        const video = !!p.video_url || isVideo(url)
+                        return video ? (
+                          <video src={url} controls className="h-full w-full object-cover" playsInline />
+                        ) : (
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                        )
+                      })()}
+                    </button>
                   </div>
                 )}
+
+                {p.text && <p className="mt-3 whitespace-pre-wrap text-sm">{p.text}</p>}
 
                 {p.link_url && <LinkPreview url={p.link_url} />}
 
