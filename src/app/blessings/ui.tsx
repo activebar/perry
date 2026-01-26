@@ -62,8 +62,6 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
-  // controlled by admin settings (same behavior as home page)
-  const [mediaSize, setMediaSize] = useState<number>(140)
   const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
 
@@ -80,38 +78,6 @@ export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }
     if (!u && linkUrl) setLinkUrl('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text])
-
-  // load public settings once (so image size is controlled like on the home page)
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/public/home?ts=${Date.now()}`, { cache: 'no-store' })
-        if (!res.ok) return
-        const j = await res.json().catch(() => ({}))
-        const s = j?.settings || {}
-        const n = Number(s?.blessings_media_size)
-        if (!cancelled && Number.isFinite(n) && n > 0) setMediaSize(Math.max(64, Math.min(420, n)))
-      } catch {
-        // ignore
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const mediaBoxStyle = useMemo(() => ({ width: `${mediaSize}px`, height: `${mediaSize}px` }), [mediaSize])
-
-  // media lightbox (mobile friendly)
-  const [modalUrl, setModalUrl] = useState<string | null>(null)
-  function openModal(url: string) {
-    if (!url) return
-    setModalUrl(url)
-  }
-  function closeModal() {
-    setModalUrl(null)
-  }
 
 
 // edit (mine, within 1h)
@@ -435,32 +401,27 @@ async function saveEdit() {
                   <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}</p>
                 </div>
 
+                {/* link preview before text so the blessing text sits under the preview */}
+                {p.link_url && <LinkPreview url={p.link_url} />}
+
+                {p.text && <p className="mt-2 whitespace-pre-wrap text-sm">{p.text}</p>}
+
                 {(p.media_url || p.video_url) && (
-                  <div className="mt-3 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={() => openModal(((p.video_url || p.media_url) as string) || '')}
-                      className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
-                      style={mediaBoxStyle}
-                      aria-label="פתח מדיה"
-                    >
-                      {(() => {
-                        const url = (p.video_url || p.media_url) as string
-                        if (!url) return null
-                        const video = !!p.video_url || isVideo(url)
-                        return video ? (
-                          <video src={url} controls className="h-full w-full object-cover" playsInline />
-                        ) : (
-                          <img src={url} alt="" className="h-full w-full object-cover" />
-                        )
-                      })()}
-                    </button>
+                  <div className="mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
+                    {(() => {
+                      const url = (p.video_url || p.media_url) as string
+                      if (!url) return null
+                      const video = !!p.video_url || isVideo(url)
+                      return video ? (
+                        <video src={url} controls className="w-full" playsInline />
+                      ) : (
+                        <img src={url} alt="" className="w-full object-cover" />
+                      )
+                    })()}
                   </div>
                 )}
 
-                {p.text && <p className="mt-3 whitespace-pre-wrap text-sm">{p.text}</p>}
-
-                {p.link_url && <LinkPreview url={p.link_url} />}
+                {/* moved above the text */}
 
                 {/* reactions */}
                 <div className="mt-3 flex flex-wrap gap-2 justify-end">
@@ -561,21 +522,6 @@ async function saveEdit() {
     </div>
   </div>
 )}
-
-{/* MEDIA MODAL */}
-{modalUrl && (
-  <div className="fixed inset-0 z-[60] bg-black/80 p-4" onClick={closeModal}>
-    <div className="mx-auto flex h-full max-w-4xl items-center justify-center" onClick={e => e.stopPropagation()}>
-      <div className="w-full overflow-hidden rounded-2xl bg-black">
-        {isVideo(modalUrl) ? (
-          <video src={modalUrl} controls className="max-h-[85vh] w-full" playsInline />
-        ) : (
-          <img src={modalUrl} alt="" className="max-h-[85vh] w-full object-contain" />
-        )}
-      </div>
-    </div>
-  </div>
-)}
 </Container>
     </main>
   )
@@ -654,25 +600,35 @@ function LinkPreview({ url }: { url?: string }) {
   if (!img) {
     // בלי "קוביה ריקה" – אם אין תמונה פשוט מציגים לינק.
     return (
-      <a className="mt-2 block text-sm underline" href={d.url} target="_blank" rel="noreferrer">
-        {d.url}
-      </a>
+      <div className="mt-2 flex justify-center">
+        <a
+          className="block max-w-md truncate text-sm underline"
+          href={d.url}
+          target="_blank"
+          rel="noreferrer"
+          dir="ltr"
+        >
+          {d.url}
+        </a>
+      </div>
     )
   }
 
   return (
-    <a
-      href={d.url}
-      target="_blank"
-      rel="noreferrer"
-      className="mt-2 block overflow-hidden rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50"
-    >
-      <div className="relative aspect-[12/5] w-full bg-zinc-100">
-        <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      </div>
-      <div className="px-3 py-2 text-[11px] text-zinc-600" dir="rtl">
-        {d.site_name || hostOf(d.url)}
-      </div>
-    </a>
+    <div className="mt-2 flex justify-center">
+      <a
+        href={d.url}
+        target="_blank"
+        rel="noreferrer"
+        className="block w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50"
+      >
+        <div className="relative aspect-[12/5] w-full bg-zinc-100">
+          <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        </div>
+        <div className="px-3 py-2 text-[11px] text-zinc-600" dir="rtl">
+          {d.site_name || hostOf(d.url)}
+        </div>
+      </a>
+    </div>
   )
 }

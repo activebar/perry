@@ -112,7 +112,7 @@ function HomeLinkPreview({ url, sizePx, showDetails }: { url?: string | null; si
       href={d.url}
       target="_blank"
       rel="noreferrer"
-      className="mt-2 flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
+      className="mt-2 mx-auto w-full max-w-md flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
     >
       <div className="relative flex-none overflow-hidden rounded-lg bg-zinc-100" style={{ width: sizePx, height: sizePx }}>
         <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -379,35 +379,33 @@ export default function HomePage() {
                 <div className="mt-3 grid gap-3">
                   {blessingsPreview.slice(0, Math.max(0, blessingsPreviewLimit)).map((p: any) => (
                     <div key={p.id} className="rounded-2xl border border-zinc-200 p-3">
-						  <div className="text-right">
-							<p className="font-medium">{p.author_name || 'אורח/ת'}</p>
-						  </div>
+                      <div className="text-right">
+                        <p className="font-medium">{p.author_name || 'אורח/ת'}</p>
+                      </div>
 
-						  {(p.media_url || p.video_url) && (
-							<div className="mt-3 flex justify-center">
-							  <button
-								type="button"
-								className="relative overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50"
-								style={{ width: mediaSize, height: mediaSize }}
-								onClick={() => window.open((p.video_url || p.media_url) as string, '_blank')}
-								title="פתח מדיה"
-							  >
-								{(() => {
-								  const url = (p.video_url || p.media_url) as string
-								  const video = !!p.video_url || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
-								  return video ? (
-									<video src={url} className="h-full w-full object-cover" muted playsInline />
-								  ) : (
-									<img src={url} alt="" className="h-full w-full object-cover" />
-								  )
-								})()}
-							  </button>
-							</div>
-						  )}
+                      {(p.media_url || p.video_url) && (
+                        <div className="mt-3 flex justify-center">
+                          <button
+                            type="button"
+                            className="relative aspect-square w-full overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
+                            style={{ maxWidth: mediaSize }}
+                            onClick={() => window.open((p.video_url || p.media_url) as string, '_blank')}
+                            title="פתח מדיה"
+                          >
+                            <img
+                              src={(p.media_url || p.video_url) as string}
+                              alt=""
+                              className="absolute inset-0 h-full w-full object-cover"
+                            />
+                          </button>
+                        </div>
+                      )}
 
-						  {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-700 text-right">{p.text}</p>}
+                      {p.link_url && (
+                        <HomeLinkPreview url={p.link_url} sizePx={mediaSize} showDetails={settings?.link_preview_show_details === true} />
+                      )}
 
-                      <HomeLinkPreview url={p.link_url} sizePx={mediaSize} showDetails={settings?.link_preview_show_details === true} />
+                      {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-700 text-center sm:text-right">{p.text}</p>}
 
                       <div className="mt-2 flex flex-wrap gap-2">
                         {EMOJIS.map(e => {
