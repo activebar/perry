@@ -57,7 +57,7 @@ function firstHttpUrl(input: string) {
   return u
 }
 
-export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }) {
+export default function BlessingsClient({ initialFeed, settings, showHeader = true }: { initialFeed: Post[]; settings?: any; showHeader?: boolean }) {
   const [items, setItems] = useState<Post[]>(initialFeed || [])
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
@@ -316,19 +316,26 @@ async function saveEdit() {
       setErr(friendlyError(e?.message || 'שגיאה'))
     }
   }
+  const blessingTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
+  const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
+  const mediaSize = Math.max(120, Math.min(520, Number(settings?.blessings_media_size || 320)))
+  const linkPreviewEnabled = settings?.link_preview_show_details !== false
+  const showLinkDetails = settings?.link_preview_show_details === true
 
   return (
     <main>
       <Container>
-        <Card>
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-right">
-              <h2 className="text-xl font-bold">ברכות</h2>
-              <p className="text-sm text-zinc-600">כתבו ברכה מרגשת לעידו ✨</p>
+        {showHeader && (
+          <Card>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-right">
+                <h2 className="text-xl font-bold">{blessingTitle}</h2>
+                <p className="text-sm text-zinc-600">{blessingSubtitle}</p>
+              </div>
+              <Link href="/"><Button variant="ghost">← בית</Button></Link>
             </div>
-            <Link href="/"><Button variant="ghost">← בית</Button></Link>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         <Card>
           <div className="space-y-2 text-right">
@@ -401,28 +408,45 @@ async function saveEdit() {
                   <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}</p>
                 </div>
 
-                {/* link preview before text so the blessing text sits under the preview */}
-                {p.link_url && <LinkPreview url={p.link_url} />}
+                {/* media / link preview (centered) */}
+                {(() => {
+                  const mediaUrl = (p.video_url || p.media_url) as string | null
+                  const linkUrl = (p.link_url || '') as string
+                  if (mediaUrl) {
+                    const video = !!p.video_url || isVideo(mediaUrl)
+                    return (
+                      <div className="mt-3 flex justify-center">
+                        <div
+                          className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
+                          style={{ width: mediaSize, height: mediaSize }}
+                        >
+                          {video ? (
+                            <video src={mediaUrl} controls className="h-full w-full object-contain" playsInline />
+                          ) : (
+                            <img src={mediaUrl} alt="" className="h-full w-full object-contain" />
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
+                  if (linkPreviewEnabled && linkUrl) {
+                    return (
+                      <div className="mt-3 flex justify-center">
+                        <LinkPreviewThumb url={linkUrl} size={mediaSize} />
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
 
-                {p.text && <p className="mt-2 whitespace-pre-wrap text-sm">{p.text}</p>}
+                {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
-                {(p.media_url || p.video_url) && (
-                  <div className="mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
-                    {(() => {
-                      const url = (p.video_url || p.media_url) as string
-                      if (!url) return null
-                      const video = !!p.video_url || isVideo(url)
-                      return video ? (
-                        <video src={url} controls className="w-full" playsInline />
-                      ) : (
-                        <img src={url} alt="" className="w-full object-cover" />
-                      )
-                    })()}
+                {/* link meta/details (single line, below text) */}
+                {p.link_url && ((linkPreviewEnabled && !canEditMine(p)) || linkPreviewEnabled) && (
+                  <div className="mt-2">
+                    <LinkPreviewMeta url={p.link_url} force={false} />
                   </div>
                 )}
-
-                {/* moved above the text */}
-
                 {/* reactions */}
                 <div className="mt-3 flex flex-wrap gap-2 justify-end">
                   {EMOJIS.map(emo => {
@@ -591,44 +615,62 @@ function useUnfurl(url?: string) {
   return data
 }
 
-function LinkPreview({ url }: { url?: string }) {
+function LinkPreviewThumb({ url, size }: { url?: string; size: number }) {
   const d = useUnfurl(url)
   if (!url) return null
   if (!d) return null
 
   const img = d.image || youtubeThumb(d.url)
-  if (!img) {
-    // בלי "קוביה ריקה" – אם אין תמונה פשוט מציגים לינק.
-    return (
-      <div className="mt-2 flex justify-center">
-        <a
-          className="block max-w-md truncate text-sm underline"
-          href={d.url}
-          target="_blank"
-          rel="noreferrer"
-          dir="ltr"
-        >
-          {d.url}
-        </a>
-      </div>
-    )
-  }
+  if (!img) return null
 
   return (
-    <div className="mt-2 flex justify-center">
-      <a
-        href={d.url}
-        target="_blank"
-        rel="noreferrer"
-        className="block w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50"
-      >
-        <div className="relative aspect-[12/5] w-full bg-zinc-100">
-          <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" />
-        </div>
-        <div className="px-3 py-2 text-[11px] text-zinc-600" dir="rtl">
-          {d.site_name || hostOf(d.url)}
-        </div>
-      </a>
+    <a
+      href={d.url}
+      target="_blank"
+      rel="noreferrer"
+      className="block overflow-hidden rounded-2xl bg-zinc-50"
+      style={{ width: size, height: size }}
+      aria-label="פתח קישור"
+    >
+      <img src={img} alt="" className="h-full w-full object-cover" />
+    </a>
+  )
+}
+
+function LinkPreviewMeta({ url, force }: { url?: string; force?: boolean }) {
+  const d = useUnfurl(url)
+  if (!url) return null
+  if (!d) return null
+
+  const domain = d.site_name || hostOf(d.url)
+  const title = (d.title || '').trim()
+  const line = title ? `${domain} — ${title}` : domain
+
+  return (
+    <a
+      href={d.url}
+      target="_blank"
+      rel="noreferrer"
+      className="block max-w-full truncate whitespace-nowrap text-[11px] text-zinc-600"
+      dir="ltr"
+      title={d.url}
+    >
+      {line}
+    </a>
+  )
+}
+
+function LinkPreview({ url }: { url?: string }) {
+  // composer preview: thumb + single-line meta
+  if (!url) return null
+  return (
+    <div className="mt-2">
+      <div className="flex justify-center">
+        <LinkPreviewThumb url={url} size={220} />
+      </div>
+      <div className="mt-2">
+        <LinkPreviewMeta url={url} force />
+      </div>
     </div>
   )
 }

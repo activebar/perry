@@ -85,46 +85,33 @@ function useUnfurl(url?: string) {
   return data
 }
 
-function HomeLinkPreview({ url, sizePx, showDetails }: { url?: string | null; sizePx: number; showDetails?: boolean }) {
-  const d = useUnfurl(url || '')
+function HomeLinkThumb({ url, sizePx }: { url?: string | null; sizePx: number }) {
+  const d = useUnfurl(url || undefined)
   if (!url) return null
   if (!d) return null
-
   const img = d.image || youtubeThumb(d.url)
+  if (!img) return null
+  return (
+    <a href={d.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl bg-zinc-50" style={{ width: sizePx, height: sizePx }} aria-label="פתח קישור">
+      <img src={img} alt="" className="h-full w-full object-cover" />
+    </a>
+  )
+}
 
-  // בלי תמונה -> מציגים רק "פתח קישור"
-  if (!img) {
-    return (
-      <a
-        className="mt-2 inline-block rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-50"
-        href={d.url}
-        target="_blank"
-        rel="noreferrer"
-      >
-        פתח קישור ({d.site_name || hostOf(d.url)})
-      </a>
-    )
-  }
-
-  // קומפקטי: בלי URL/כותרת ארוכה
+function HomeLinkMeta({ url }: { url?: string | null }) {
+  const d = useUnfurl(url || undefined)
+  if (!url) return null
+  if (!d) return null
   return (
     <a
       href={d.url}
       target="_blank"
       rel="noreferrer"
-      className="mt-2 mx-auto w-full max-w-md flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
+      className="mt-2 block max-w-full truncate whitespace-nowrap text-[11px] text-zinc-600"
+      dir="ltr"
+      title={d.url}
     >
-      <div className="relative flex-none overflow-hidden rounded-lg bg-zinc-100" style={{ width: sizePx, height: sizePx }}>
-        <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      </div>
-      <div className="min-w-0">
-        {showDetails ? (
-          <>
-            <div className="text-[11px] text-zinc-600">{d.site_name || hostOf(d.url)}</div>
-            <div className="mt-1 text-xs text-zinc-500">לחצו לפתיחה</div>
-          </>
-        ) : null}
-      </div>
+      {hostOf(d.url)}
     </a>
   )
 }
@@ -196,6 +183,7 @@ export default function HomePage() {
   const heroSeconds = Number(settings?.hero_rotate_seconds ?? 4)
 
   const mediaSize = Number(settings?.blessings_media_size ?? 140)
+  const linkPreviewEnabled = settings?.link_preview_show_details !== false
 
   const heroPre =
     settings?.hero_pre_text ||
@@ -383,29 +371,45 @@ export default function HomePage() {
                         <p className="font-medium">{p.author_name || 'אורח/ת'}</p>
                       </div>
 
-                      {(p.media_url || p.video_url) && (
-                        <div className="mt-3 flex justify-center">
+                      <div className="mt-3 flex justify-center">
+                        {(p.video_url || p.media_url) ? (
                           <button
                             type="button"
-                            className="relative aspect-square w-full overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
-                            style={{ maxWidth: mediaSize }}
-                            onClick={() => window.open((p.video_url || p.media_url) as string, '_blank')}
-                            title="פתח מדיה"
+                            className="relative overflow-hidden rounded-2xl bg-zinc-50"
+                            style={{ width: mediaSize, height: mediaSize }}
+                            onClick={() => setModalUrl(((p.video_url || p.media_url) as string) || '')}
+                            aria-label="פתח מדיה"
                           >
-                            <img
-                              src={(p.media_url || p.video_url) as string}
-                              alt=""
-                              className="absolute inset-0 h-full w-full object-cover"
-                            />
+                            {p.video_url ? (
+                              <video
+                                src={p.video_url}
+                                className="h-full w-full object-contain"
+                                muted
+                                playsInline
+                              />
+                            ) : (
+                              <img
+                                src={p.media_url as string}
+                                alt="תמונה"
+                                className="h-full w-full object-contain"
+                                loading="lazy"
+                              />
+                            )}
                           </button>
+                        ) : linkPreviewEnabled && p.link_url ? (
+                          <HomeLinkThumb url={p.link_url} sizePx={mediaSize} />
+                        ) : null}
+                      </div>
+
+                      {p.text && (
+                        <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-800 text-right">{p.text}</p>
+                      )}
+
+                      {p.link_url && linkPreviewEnabled && (
+                        <div className="mt-2">
+                          <HomeLinkMeta url={p.link_url} showDetails={!!settings.link_preview_show_details} />
                         </div>
                       )}
-
-                      {p.link_url && (
-                        <HomeLinkPreview url={p.link_url} sizePx={mediaSize} showDetails={settings?.link_preview_show_details === true} />
-                      )}
-
-                      {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-700 text-center sm:text-right">{p.text}</p>}
 
                       <div className="mt-2 flex flex-wrap gap-2">
                         {EMOJIS.map(e => {
