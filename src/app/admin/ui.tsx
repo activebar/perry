@@ -722,7 +722,7 @@ async function loadBlocks() {
 
                   <div className="mt-2 flex justify-center">
                     {(p.media_url || p.video_url) ? (
-                      <MediaBox url={(p.video_url || p.media_url) as any} size={mediaSize} />
+                      <MediaBox media_url={p.media_url as any} video_url={(p as any).video_url as any} size={mediaSize} />
                     ) : p.link_url ? (
                       <LinkPreview url={p.link_url} size={mediaSize} showDetails={false} />
                     ) : null}
