@@ -744,6 +744,10 @@ async function loadBlocks() {
               </div>
             ))}
           </div>
+
+        </Card>
+      )}
+
       {/* ===== ADMIN GALLERY ===== */}
       {tab === 'admin_gallery' && (
         <Card>
