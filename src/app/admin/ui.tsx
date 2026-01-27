@@ -131,7 +131,6 @@ function LinkPreview({
 }
 
 /* ===================== Media Box (Image/Video) ===================== */
- (Image/Video) ===================== */
 
 function isVideoUrl(url?: string | null) {
   return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
