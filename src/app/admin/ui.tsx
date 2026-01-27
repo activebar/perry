@@ -527,6 +527,14 @@ async function loadBlocks() {
     setPending(prev => prev.filter(p => p.id !== res.post.id))
   }
 
+
+  async function approve(id: string) {
+    await setPostStatus(id, 'approved')
+  }
+
+  async function reject(id: string) {
+    await setPostStatus(id, 'rejected')
+  }
   async function loadAds() {
     const res = await jfetch('/api/admin/ads', { method: 'GET', headers: {} as any })
     setAds(res.ads)
