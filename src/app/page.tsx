@@ -51,6 +51,10 @@ function youtubeThumb(u: string) {
   }
 }
 
+function isVideoUrl(url?: string | null) {
+  return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
+}
+
 function useUnfurl(url?: string) {
   const [data, setData] = useState<UnfurlData | null>(null)
 
@@ -123,6 +127,7 @@ function HomeLinkMeta({ url, showDetails }: { url?: string | null; showDetails?:
 export default function HomePage() {
   const [data, setData] = useState<HomePayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [modalUrl, setModalUrl] = useState<string>('')
 
   async function load() {
     setErr(null)
@@ -466,6 +471,33 @@ export default function HomePage() {
           )}
         </div>
       </Container>
+
+      {modalUrl ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setModalUrl('')}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="relative max-h-[90vh] w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setModalUrl('')}
+              className="absolute -top-3 -right-3 rounded-full bg-white px-3 py-1 text-sm shadow"
+              aria-label="סגור"
+            >
+              ✕
+            </button>
+
+            {isVideoUrl(modalUrl) ? (
+              <video src={modalUrl} controls className="h-full max-h-[90vh] w-full rounded-2xl bg-black" />
+            ) : (
+              // img כדי לא להיתקע על next/image host
+              <img src={modalUrl} alt="Media" className="h-full max-h-[90vh] w-full rounded-2xl object-contain bg-black" />
+            )}
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }
