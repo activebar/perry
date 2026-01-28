@@ -117,16 +117,6 @@ export default async function BlessingsPage() {
           </div>
         </Card>
 
-        {/* במקום Card className */}
-        <div className="mt-4">
-          <Card>
-            <h2 className="text-xl font-bold">ברכות</h2>
-            <p className="text-sm text-zinc-600">
-              כתבו ברכה, צרפו תמונה, ותנו ריאקשן.
-            </p>
-          </Card>
-        </div>
-
         <div className="mt-4">
           <BlessingsClient initialFeed={feed} />
         </div>

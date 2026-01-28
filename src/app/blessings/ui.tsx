@@ -328,7 +328,7 @@ async function saveEdit() {
         {showHeader && (
           <Card>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-right">
+              <div className="text-right" dir="rtl">
                 <h2 className="text-xl font-bold">{blessingTitle}</h2>
                 <p className="text-sm text-zinc-600">{blessingSubtitle}</p>
               </div>
@@ -423,7 +423,7 @@ async function saveEdit() {
                           {video ? (
                             <video src={mediaUrl} controls className="h-full w-full object-contain" playsInline />
                           ) : (
-                            <img src={mediaUrl} alt="" className="h-full w-full object-contain" />
+                            <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
                           )}
                         </div>
                       </div>
