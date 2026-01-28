@@ -98,10 +98,14 @@ function HomeLinkThumb({ url, sizePx }: { url?: string | null; sizePx: number })
   )
 }
 
-function HomeLinkMeta({ url }: { url?: string | null }) {
+function HomeLinkMeta({ url, showDetails }: { url?: string | null; showDetails?: boolean }) {
   const d = useUnfurl(url || undefined)
   if (!url) return null
   if (!d) return null
+
+  const host = hostOf(d.url)
+  const label = showDetails && d.title ? `${d.title} — ${host}` : host
+
   return (
     <a
       href={d.url}
@@ -111,7 +115,7 @@ function HomeLinkMeta({ url }: { url?: string | null }) {
       dir="ltr"
       title={d.url}
     >
-      {hostOf(d.url)}
+      {label}
     </a>
   )
 }
@@ -119,11 +123,6 @@ function HomeLinkMeta({ url }: { url?: string | null }) {
 export default function HomePage() {
   const [data, setData] = useState<HomePayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
-
-  // Lightbox for image/video in the blessings preview
-  const [modalUrl, setModalUrl] = useState<string>('')
-  const closeModal = () => setModalUrl('')
-  const isVideoUrl = (u?: string | null) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(u || ''))
 
   async function load() {
     setErr(null)
@@ -463,34 +462,6 @@ export default function HomePage() {
               <a href={settings.footer_url || 'https://www.activebar.co.il'} target="_blank" rel="noreferrer">
                 {settings.footer_label || 'Active Bar'}
               </a>
-            </div>
-          )}
-
-          {modalUrl && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-              onClick={closeModal}
-              role="dialog"
-              aria-modal="true"
-            >
-              <div className="max-h-[90vh] w-full max-w-3xl" onClick={e => e.stopPropagation()}>
-                <div className="relative overflow-hidden rounded-2xl bg-black">
-                  {isVideoUrl(modalUrl) ? (
-                    <video src={modalUrl} controls playsInline className="h-auto max-h-[90vh] w-full" />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={modalUrl} alt="" className="h-auto max-h-[90vh] w-full object-contain" />
-                  )}
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-sm"
-                    aria-label="סגור"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
             </div>
           )}
         </div>
