@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 
+/* ===================== Link Preview (Unfurl) ===================== */
 
 type UnfurlData = { url: string; title: string; description: string; image: string; site_name: string }
 const unfurlCache = new Map<string, UnfurlData>()
@@ -20,9 +21,8 @@ function youtubeThumb(u: string) {
     const url = new URL(u)
     const host = url.hostname.replace(/^www\./, '')
     let id = ''
-    if (host === 'youtu.be') {
-      id = url.pathname.replace(/^\//, '')
-    } else if (host.endsWith('youtube.com')) {
+    if (host === 'youtu.be') id = url.pathname.replace(/^\//, '')
+    else if (host.endsWith('youtube.com')) {
       if (url.pathname === '/watch') id = url.searchParams.get('v') || ''
       else if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2] || ''
       else if (url.pathname.startsWith('/embed/')) id = url.pathname.split('/')[2] || ''
@@ -68,15 +68,24 @@ function useUnfurl(url?: string) {
   return data
 }
 
-function LinkPreview({ url }: { url?: string }) {
-  const d = useUnfurl(url)
-  const [showDetails, setShowDetails] = useState(false)
+/** Preview נקי כמו בדף הבית/ברכות: תמונה + דומיין, בלי כותרות/תיאורים אלא אם showDetails=true */
+function LinkPreview({
+  url,
+  size,
+  showDetails
+}: {
+  url?: string | null
+  size: number
+  showDetails?: boolean
+}) {
+  const d = useUnfurl(url || '')
   if (!url) return null
   if (!d) return null
 
   const img = d.image || youtubeThumb(d.url)
+  const domain = d.site_name || hostOf(d.url)
+
   if (!img) {
-    // לא מציגים "קוביה ריקה" — רק לינק רגיל
     return (
       <a className="mt-2 block text-sm underline" href={d.url} target="_blank" rel="noreferrer">
         {d.url}
@@ -85,34 +94,76 @@ function LinkPreview({ url }: { url?: string }) {
   }
 
   return (
-    <div className="mt-2 rounded-xl border border-zinc-200 bg-white p-2">
-      <a href={d.url} target="_blank" rel="noreferrer" className="flex gap-3 hover:opacity-90">
-        <img src={img} alt="" className="h-20 w-24 rounded-lg object-cover" />
-        <div className="min-w-0">
-          <p className="text-[11px] text-zinc-600">{d.site_name || hostOf(d.url)}</p>
-          {showDetails && (
-            <>
-              <p className="mt-1 truncate text-sm font-semibold">{d.title || 'קישור'}</p>
-              {d.description && <p className="mt-0.5 line-clamp-2 text-xs text-zinc-600">{d.description}</p>}
-            </>
-          )}
-        </div>
-      </a>
+    <a
+      href={d.url}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-2 flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
+    >
+      <div className="relative flex-none overflow-hidden rounded-lg bg-zinc-100" style={{ width: size, height: size }}>
+        <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      </div>
 
-      {(d.title || d.description) && (
-        <div className="mt-2 flex justify-end">
-          <button
-            type="button"
-            onClick={() => setShowDetails(v => !v)}
-            className="text-xs underline text-zinc-700"
-          >
-            {showDetails ? 'הסתר פרטים' : 'הצג פרטים'}
-          </button>
-        </div>
-      )}
-    </div>
+      <div className="min-w-0">
+        <p className="text-[11px] text-zinc-600">{domain}</p>
+
+        {showDetails ? (
+          <>
+            <p className="mt-0.5 line-clamp-2 text-sm font-semibold">{d.title || 'קישור'}</p>
+            {d.description ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{d.description}</p> : null}
+            <p className="mt-1 truncate text-xs text-zinc-500" dir="ltr">
+              {d.url}
+            </p>
+          </>
+        ) : (
+          <p className="truncate text-xs text-zinc-500" dir="ltr">
+            {d.url}
+          </p>
+        )}
+      </div>
+    </a>
   )
 }
+
+/* ===================== Media Box (Image/Video) ===================== */
+
+function isVideoUrl(url?: string | null) {
+  return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
+}
+
+function MediaBox({
+  media_url,
+  video_url,
+  size
+}: {
+  media_url?: string | null
+  video_url?: string | null
+  size: number
+}) {
+  const url = (video_url || media_url || '') as string
+  if (!url) return null
+
+  const isVid = !!video_url || isVideoUrl(url)
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="relative flex-none overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200"
+      style={{ width: size, height: size }}
+      title="פתח מדיה"
+    >
+      {isVid ? (
+        <video src={url} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+      ) : (
+        <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      )}
+    </a>
+  )
+}
+
+/* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string }
 type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag'
@@ -143,6 +194,7 @@ function friendlyError(msg: string) {
   if (m.includes('invalid credentials')) return 'שם משתמש לא קיים או סיסמה לא נכונה.'
   if (m.includes('inactive')) return 'החשבון לא פעיל.'
   if (m.includes('service role')) return 'חסר מפתח Service Role בקובץ ENV (SUPABASE_SERVICE_ROLE_KEY).'
+  if (m.includes('unauthorized')) return 'אין הרשאה (401). נסה להתנתק/למחוק עוגיות ולהתחבר שוב.'
   return msg || 'שגיאה'
 }
 
@@ -153,7 +205,6 @@ function fmt(iso?: string) {
   return d.toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'medium' })
 }
 
-// Convert ISO (timestamptz) -> value for <input type="datetime-local">
 function isoToLocalInput(iso?: string) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -166,13 +217,18 @@ function isoToLocalInput(iso?: string) {
   const mi = pad(d.getMinutes())
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`
 }
-
-// Convert datetime-local -> ISO string (keeps local timezone when creating Date)
 function localInputToIso(v?: string) {
   if (!v) return ''
   const d = new Date(v)
   if (Number.isNaN(d.getTime())) return ''
   return d.toISOString()
+}
+
+function parseLinesToArray(s: string) {
+  return (s || '')
+    .split('\n')
+    .map(x => x.trim())
+    .filter(Boolean)
 }
 
 export default function AdminApp() {
@@ -191,9 +247,9 @@ export default function AdminApp() {
   const [settings, setSettings] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
-  const [startAtLocal, setStartAtLocal] = useState('') // datetime-local UI
+  const [startAtLocal, setStartAtLocal] = useState('')
 
-  // hero images
+  // HERO upload
   const [heroFiles, setHeroFiles] = useState<File[]>([])
   const [heroBusy, setHeroBusy] = useState(false)
   const [heroMsg, setHeroMsg] = useState<string | null>(null)
@@ -208,12 +264,10 @@ export default function AdminApp() {
   const [pendingBlessingsCount, setPendingBlessingsCount] = useState(0)
   const [pendingPhotosCount, setPendingPhotosCount] = useState(0)
 
-
   // blessings manage (approved)
   const [approvedBlessings, setApprovedBlessings] = useState<any[]>([])
   const [editBlessing, setEditBlessing] = useState<any | null>(null)
   const [editBusy, setEditBusy] = useState(false)
-
 
   // ads
   const [ads, setAds] = useState<any[]>([])
@@ -229,6 +283,10 @@ export default function AdminApp() {
   // diag
   const [diag, setDiag] = useState<any | null>(null)
 
+  const bSize = Number(settings?.blessings_media_size ?? 96)
+  const safeBSize = Number.isFinite(bSize) ? Math.max(56, Math.min(220, bSize)) : 96
+  const showLinkDetails = settings?.link_preview_show_details === true
+
   async function refreshMe() {
     try {
       const me = await jfetch('/api/admin/me', { method: 'GET', headers: {} as any })
@@ -240,16 +298,6 @@ export default function AdminApp() {
       setTab('login')
     }
   }
-
-  // refresh top counters occasionally when logged in
-  useEffect(() => {
-    if (!admin) return
-    const t = setInterval(() => {
-      fetchTopCounts()
-    }, 15000)
-    return () => clearInterval(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [admin?.email])
 
   useEffect(() => {
     refreshMe()
@@ -284,7 +332,9 @@ export default function AdminApp() {
   }
 
   async function logout() {
-    await jfetch('/api/admin/logout', { method: 'POST', body: '{}' })
+    try {
+      await jfetch('/api/admin/logout', { method: 'POST', body: '{}' })
+    } catch {}
     setAdmin(null)
     setTab('login')
   }
@@ -302,14 +352,10 @@ export default function AdminApp() {
     setSaving(true)
     try {
       const payload = { ...(patch || settings) }
-
-      // apply datetime-local into start_at ISO
       if (startAtLocal) payload.start_at = localInputToIso(startAtLocal)
-
       const res = await jfetch('/api/admin/settings', { method: 'PUT', body: JSON.stringify(payload) })
       setSettings(res.settings)
       setStartAtLocal(isoToLocalInput(res.settings?.start_at))
-
       setSavedMsg(`✅ נשמר בהצלחה • עודכן ב: ${fmt(res.settings?.updated_at)}`)
       setTimeout(() => setSavedMsg(null), 2500)
     } catch (e: any) {
@@ -364,7 +410,8 @@ export default function AdminApp() {
     await saveSettings(patch)
   }
 
-  async function loadBlocks() {
+  
+async function loadBlocks() {
     const res = await jfetch('/api/admin/blocks', { method: 'GET', headers: {} as any })
     setBlocks(res.blocks)
   }
@@ -394,21 +441,14 @@ export default function AdminApp() {
       ])
 
       const bCount = (b.posts || []).length
-      const pCount = ((g.posts || []).length) + ((ga.posts || []).length)
+      const pCount = (g.posts || []).length + (ga.posts || []).length
 
       setPendingBlessingsCount(bCount)
       setPendingPhotosCount(pCount)
-
-      // keep existing "pendingCount" as a TOTAL, used for the moderation tab badge
       setPendingCount(bCount + pCount)
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-
-
-  
   async function loadApprovedBlessings() {
     const res = await jfetch('/api/admin/posts?status=approved&kind=blessing', { method: 'GET', headers: {} as any })
     setApprovedBlessings(res.posts || [])
@@ -426,7 +466,7 @@ export default function AdminApp() {
         link_url: editBlessing.link_url || null,
         media_url: editBlessing.media_url || null,
         media_path: editBlessing.media_path || null,
-        video_url: editBlessing.video_url || null,
+        video_url: editBlessing.video_url || null
       }
       const res = await jfetch('/api/admin/posts', { method: 'PUT', body: JSON.stringify(payload) })
       setApprovedBlessings(prev => prev.map(p => (p.id === res.post.id ? res.post : p)))
@@ -448,12 +488,12 @@ export default function AdminApp() {
       fd.set('file', file)
       fd.set('kind', 'blessing')
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
-      const upJson = await up.json()
+      const upJson = await up.json().catch(() => ({}))
       if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
       const res = await jfetch('/api/admin/posts', {
         method: 'PUT',
-        body: JSON.stringify({ id: editBlessing.id, media_path: upJson.path, media_url: upJson.publicUrl })
+        body: JSON.stringify({ id: editBlessing.id, media_path: upJson.path, media_url: upJson.publicUrl, video_url: null })
       })
       setApprovedBlessings(prev => prev.map(p => (p.id === res.post.id ? res.post : p)))
       setPending(prev => prev.map(p => (p.id === res.post.id ? res.post : p)))
@@ -477,7 +517,7 @@ export default function AdminApp() {
     }
   }
 
-async function setPostStatus(id: string, status: string) {
+  async function setPostStatus(id: string, status: string) {
     const res = await jfetch('/api/admin/posts', { method: 'PUT', body: JSON.stringify({ id, status }) })
     setPending(prev => prev.filter(p => p.id !== res.post.id))
   }
@@ -518,7 +558,7 @@ async function setPostStatus(id: string, status: string) {
         fd.set('kind', 'gallery_admin')
 
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
-        const upJson = await up.json()
+        const upJson = await up.json().catch(() => ({}))
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
         const created = await fetch('/api/posts', {
@@ -532,7 +572,7 @@ async function setPostStatus(id: string, status: string) {
             media_url: upJson.publicUrl
           })
         })
-        const cJson = await created.json()
+        const cJson = await created.json().catch(() => ({}))
         if (!created.ok) throw new Error(cJson?.error || 'שגיאה ביצירת פוסט')
       }
 
@@ -567,14 +607,17 @@ async function setPostStatus(id: string, status: string) {
     if (!admin) return
     if (tab === 'settings') loadSettings()
     if (tab === 'blocks') loadBlocks()
-    if (tab === 'moderation') { loadPending(); loadApprovedBlessings(); }
+    if (tab === 'moderation') {
+      loadPending()
+      loadApprovedBlessings()
+    }
     if (tab === 'ads') loadAds()
     if (tab === 'admin_gallery') loadAdminGallery()
     if (tab === 'diag') loadDiag()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, admin, pendingKind])
 
-  // ===== LOGIN UI =====
+  /* ===== LOGIN UI ===== */
   if (!admin) {
     return (
       <Card>
@@ -629,7 +672,7 @@ async function setPostStatus(id: string, status: string) {
     )
   }
 
-  // ===== AUTHENTICATED UI =====
+  /* ===== AUTHENTICATED UI ===== */
   return (
     <div className="space-y-4" dir="rtl">
       <Card>
@@ -637,6 +680,7 @@ async function setPostStatus(id: string, status: string) {
           <div className="text-right">
             <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
+
             {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
               <div className="mt-1 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
@@ -646,10 +690,11 @@ async function setPostStatus(id: string, status: string) {
 
             {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
           </div>
+
           <div className="flex flex-wrap gap-2">
             {tabs.map(t => (
               <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
-                {t === "moderation" && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
+                {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
               </Button>
             ))}
             <Button variant="ghost" onClick={logout}>יציאה</Button>
@@ -657,30 +702,45 @@ async function setPostStatus(id: string, status: string) {
         </div>
       </Card>
 
+      {/* ===== SETTINGS ===== */}
       {tab === 'settings' && settings && (
         <Card>
-          <h3 className="font-semibold">הגדרות כלליות</h3>
+          <h3 className="font-semibold">הגדרות</h3>
 
-          <div className="mt-3 grid gap-2">
-            <Input value={settings.event_name || ''} onChange={e => setSettings({ ...settings, event_name: e.target.value })} placeholder="שם אירוע" />
+          <div className="mt-3 grid gap-3">
+            {/* כללי */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">הגדרות כלליות</p>
 
-            {/* start_at as datetime-local */}
-            <div className="grid gap-1">
-              <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
-              <input
-                type="datetime-local"
-                value={startAtLocal}
-                onChange={e => setStartAtLocal(e.target.value)}
-                className="w-full rounded-xl border border-zinc-200 px-3 py-2"
+              <Input
+                value={settings.event_name || ''}
+                onChange={e => setSettings({ ...settings, event_name: e.target.value })}
+                placeholder="שם אירוע"
               />
-              {settings.updated_at && <p className="text-[11px] text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
+
+              <div className="grid gap-1">
+                <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
+                <input
+                  type="datetime-local"
+                  value={startAtLocal}
+                  onChange={e => setStartAtLocal(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 px-3 py-2"
+                />
+              </div>
+
+              <Input
+                value={settings.location_text || ''}
+                onChange={e => setSettings({ ...settings, location_text: e.target.value })}
+                placeholder="אולם / כתובת"
+              />
+
+              <Input
+                value={settings.waze_url || ''}
+                onChange={e => setSettings({ ...settings, waze_url: e.target.value })}
+                placeholder="קישור Waze"
+                dir="ltr"
+              />
             </div>
-
-            <Input value={settings.location_text || ''} onChange={e => setSettings({ ...settings, location_text: e.target.value })} placeholder="מיקום" />
-
-            <Input value={settings.waze_url || ''} onChange={e => setSettings({ ...settings, waze_url: e.target.value })} placeholder="קישור Waze" />
-
-            <Textarea value={settings.thank_you_text || ''} onChange={e => setSettings({ ...settings, thank_you_text: e.target.value })} placeholder="טקסט תודה (כללי)" rows={3} />
 
             {/* HERO */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
@@ -769,75 +829,118 @@ async function setPostStatus(id: string, status: string) {
               </div>
             </div>
 
-            {/* מתנות */}
+            {/* גלריות */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">מתנות</p>
-              <label className="text-sm flex items-center gap-2">
-                <input type="checkbox" checked={!!settings.gift_enabled} onChange={e => setSettings({ ...settings, gift_enabled: e.target.checked })} />
-                הצג בלוק מתנה
-              </label>
-
-              <Input value={settings.gift_bit_url || ''} onChange={e => setSettings({ ...settings, gift_bit_url: e.target.value })} placeholder="Bit URL" />
-              <Input value={settings.gift_paybox_url || ''} onChange={e => setSettings({ ...settings, gift_paybox_url: e.target.value })} placeholder="PayBox URL" />
-
-              <Input value={settings.gift_bit_image_url || ''} onChange={e => setSettings({ ...settings, gift_bit_image_url: e.target.value })} placeholder="Bit image URL (לא חובה)" />
-              <Input value={settings.gift_paybox_image_url || ''} onChange={e => setSettings({ ...settings, gift_paybox_image_url: e.target.value })} placeholder="PayBox image URL (לא חובה)" />
+              <p className="text-sm font-medium">גלריות</p>
 
               <Input
-                value={String(settings.gift_image_diameter ?? 160)}
-                onChange={e => setSettings({ ...settings, gift_image_diameter: Number(e.target.value) })}
-                placeholder="קוטר תמונה (px)"
+                value={settings.guest_gallery_title || ''}
+                onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
+                placeholder="כותרת גלריית אורחים"
               />
-            </div>
-
-            {/* אישורים / מחיקה אוטומטית */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">אישורים / מחיקה אוטומטית</p>
 
               <label className="text-sm flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={!!settings.require_approval}
-                  onChange={e => setSettings({ ...settings, require_approval: e.target.checked })}
+                  checked={settings.guest_gallery_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
                 />
-                ברכות/תמונות דורשות אישור מנהל
+                להציג כפתור “לכל התמונות” בגלריית אורחים
               </label>
 
               <Input
-                value={String(settings.approval_lock_after_days ?? 7)}
-                onChange={e => setSettings({ ...settings, approval_lock_after_days: Number(e.target.value) })}
-                placeholder="אחרי כמה ימים מהאירוע להפעיל אישור אוטומטי"
-              />
-              <p className="text-[11px] text-zinc-500">
-                אחרי X ימים מתאריך האירוע — המערכת תדליק אוטומטית "דורש אישור מנהל". אפשר לפתוח ידנית, וזה יינעל שוב אחרי אותו X.
-              </p>
-
-              <Input
-                value={String(settings.archive_after_days ?? 120)}
-                onChange={e => setSettings({ ...settings, archive_after_days: Number(e.target.value) })}
-                placeholder="כמה ימים עד ארכיון (Drive)"
+                value={settings.admin_gallery_title || ''}
+                onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
+                placeholder="כותרת גלריית מנהל"
               />
 
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.admin_gallery_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
+                />
+                להציג כפתור “לכל התמונות” בגלריית מנהל
+              </label>
+            </div>
+
+            {/* ברכות */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">ברכות</p>
+
               <Input
-                value={String(settings.delete_after_hours ?? 24)}
-                onChange={e => setSettings({ ...settings, delete_after_hours: Number(e.target.value) })}
-                placeholder="כמה שעות עד מחיקה לאחר ארכיון"
+                value={String(settings.blessings_preview_limit ?? 3)}
+                onChange={e => setSettings({ ...settings, blessings_preview_limit: Number(e.target.value) })}
+                placeholder="כמה ברכות להציג בפריוויו בדף הבית (למשל 3)"
+              />
+
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.blessings_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, blessings_show_all_button: e.target.checked })}
+                />
+                להציג כפתור “שלח ברכה” בדף הבית
+              </label>
+
+              <label className="text-xs text-zinc-500">גודל תמונה/וידאו/Preview בברכות (px)</label>
+              <Input
+                value={String(settings.blessings_media_size ?? 96)}
+                onChange={e => setSettings({ ...settings, blessings_media_size: Number(e.target.value) })}
+                placeholder="למשל 96"
+              />
+
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.link_preview_show_details === true}
+                  onChange={e => setSettings({ ...settings, link_preview_show_details: e.target.checked })}
+                />
+                להציג פרטים בקישור (כותרת/תיאור). אם כבוי — תצוגה נקייה.
+              </label>
+            </div>
+
+            {/* פוטר */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">פוטר</p>
+
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!settings.footer_enabled}
+                  onChange={e => setSettings({ ...settings, footer_enabled: e.target.checked })}
+                />
+                להציג פוטר
+              </label>
+
+              <Input
+                value={settings.footer_label || ''}
+                onChange={e => setSettings({ ...settings, footer_label: e.target.value })}
+                placeholder="טקסט פוטר (למשל Active Bar)"
+              />
+
+              <Input
+                value={settings.footer_url || ''}
+                onChange={e => setSettings({ ...settings, footer_url: e.target.value })}
+                placeholder="קישור פוטר"
+                dir="ltr"
               />
             </div>
 
             <Button onClick={() => saveSettings()} disabled={saving}>
               {saving ? 'שומר...' : 'שמור'}
             </Button>
+
             {savedMsg && <p className="text-sm text-green-700">{savedMsg}</p>}
             {err && <p className="text-sm text-red-600">{err}</p>}
           </div>
         </Card>
       )}
 
+      {/* ===== BLOCKS ===== */}
       {tab === 'blocks' && (
         <Card>
           <h3 className="font-semibold">בלוקים</h3>
-          <p className="text-xs text-zinc-500">הצגה/הסתרה + auto-hide ל־Gift.</p>
 
           <div className="mt-3 grid gap-3">
             {blocks.map(b => (
@@ -848,7 +951,11 @@ async function setPostStatus(id: string, status: string) {
                     <p className="text-xs text-zinc-500">סדר: {b.order_index}</p>
                   </div>
                   <label className="text-sm flex items-center gap-2">
-                    <input type="checkbox" checked={!!b.is_visible} onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })} />
+                    <input
+                      type="checkbox"
+                      checked={!!b.is_visible}
+                      onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })}
+                    />
                     מוצג
                   </label>
                 </div>
@@ -869,21 +976,31 @@ async function setPostStatus(id: string, status: string) {
               </div>
             ))}
           </div>
+
+          {err && <p className="text-sm text-red-600">{err}</p>}
         </Card>
       )}
 
+      {/* ===== MODERATION ===== */}
       {tab === 'moderation' && (
         <Card>
           <h3 className="font-semibold">אישור תכנים</h3>
-          <p className="mt-2 text-right text-sm text-zinc-600">ממתינות לאישור: {pending.length}</p>
-          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex gap-2">
+              <Button variant={pendingKind === 'blessing' ? 'primary' : 'ghost'} onClick={() => setPendingKind('blessing')}>
+                ברכות
+              </Button>
+              <Button variant={pendingKind === 'gallery' ? 'primary' : 'ghost'} onClick={() => setPendingKind('gallery')}>
+                תמונות אורחים
+              </Button>
+            </div>
+
             <Button
               variant="ghost"
               disabled={pending.length === 0}
               onClick={async () => {
-                for (const p of pending) {
-                  await setPostStatus(p.id, "approved")
-                }
+                for (const p of pending) await setPostStatus(p.id, 'approved')
                 await loadPending()
               }}
             >
@@ -891,37 +1008,29 @@ async function setPostStatus(id: string, status: string) {
             </Button>
           </div>
 
+          <p className="mt-2 text-right text-sm text-zinc-600">ממתינות לאישור: {pending.length}</p>
 
           <div className="mt-3 grid gap-3">
             {pending.map(p => (
-                <div key={p.id} className="rounded-xl border border-zinc-200 p-3">
-                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
+              <div key={p.id} className="rounded-xl border border-zinc-200 p-3">
+                <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
 
-                  <div className="mt-1 flex items-start justify-between gap-3">
-                    <div className="text-right">
-                      <p className="font-semibold">
-                        {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונת מנהל')}
-                      </p>
-                      {p.text && <p className="mt-1 whitespace-pre-wrap text-sm">{p.text}</p>}
-                      {p.link_url && (
-                        <a className="mt-2 inline-block text-sm underline" href={p.link_url} target="_blank" rel="noreferrer">
-                          פתח קישור
-                        </a>
-                      )}
-                    </div>
+                <div className="mt-1 flex items-start justify-between gap-3">
+                  <div className="text-right min-w-0">
+                    <p className="font-semibold">
+                      {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונה')}
+                    </p>
 
-                    {p.media_url && (
-                      <div className="h-24 w-24 overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
-                        <img src={p.media_url} alt="" className="h-full w-full object-cover" />
-                      </div>
-                    )}
+                    {p.text && <p className="mt-1 whitespace-pre-wrap text-sm">{p.text}</p>}
+
+                    {p.link_url && <LinkPreview url={p.link_url} size={safeBSize} showDetails={showLinkDetails} />}
                   </div>
-                {p.text && <p className="mt-1 whitespace-pre-wrap text-sm">{p.text}</p>}
-                {p.media_url && <a className="mt-2 block text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח מדיה</a>}
+
+                  <MediaBox media_url={p.media_url} video_url={p.video_url} size={safeBSize} />
+                </div>
+
                 <div className="mt-2 flex gap-2">
-                  {p.kind === 'blessing' && (
-                    <Button variant="ghost" onClick={() => setEditBlessing(p)}>ערוך</Button>
-                  )}
+                  {p.kind === 'blessing' && <Button variant="ghost" onClick={() => setEditBlessing(p)}>ערוך</Button>}
                   <Button onClick={() => setPostStatus(p.id, 'approved')}>אשר</Button>
                   <Button variant="ghost" onClick={() => setPostStatus(p.id, 'deleted')}>מחק</Button>
                 </div>
@@ -940,14 +1049,21 @@ async function setPostStatus(id: string, status: string) {
               {approvedBlessings.map(b => (
                 <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
                   <p className="text-xs text-zinc-500">{new Date(b.created_at).toLocaleString('he-IL')}</p>
-                  {(b.author_name || b.text) && (
-                    <p className="mt-1 whitespace-pre-wrap text-sm">
-                      {b.author_name ? <span className="font-semibold">{b.author_name}: </span> : null}
-                      {b.text || ''}
-                    </p>
-                  )}
-                  {b.media_url && <a className="mt-2 block text-sm" href={b.media_url} target="_blank" rel="noreferrer">פתח מדיה</a>}
-                  {b.link_url && <a className="mt-1 block text-sm" href={b.link_url} target="_blank" rel="noreferrer">פתח קישור</a>}
+
+                  <div className="mt-1 flex items-start justify-between gap-3">
+                    <div className="min-w-0 text-right">
+                      {(b.author_name || b.text) && (
+                        <p className="whitespace-pre-wrap text-sm">
+                          {b.author_name ? <span className="font-semibold">{b.author_name}: </span> : null}
+                          {b.text || ''}
+                        </p>
+                      )}
+
+                      {b.link_url && <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />}
+                    </div>
+
+                    <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
+                  </div>
 
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
@@ -965,30 +1081,23 @@ async function setPostStatus(id: string, status: string) {
                 <h3 className="font-semibold">עריכת ברכה</h3>
 
                 <div className="mt-3 grid gap-2">
-                  <Input
-                    placeholder="שם"
-                    value={editBlessing.author_name || ''}
-                    onChange={e => setEditBlessing({ ...editBlessing, author_name: e.target.value })}
-                  />
-                  <Textarea
-                    placeholder="טקסט"
-                    rows={4}
-                    value={editBlessing.text || ''}
-                    onChange={e => setEditBlessing({ ...editBlessing, text: e.target.value })}
-                  />
-                  <Input
-                    placeholder="קישור (לא חובה)"
-                    value={editBlessing.link_url || ''}
-                    onChange={e => setEditBlessing({ ...editBlessing, link_url: e.target.value })}
-                  />
+                  <Input placeholder="שם" value={editBlessing.author_name || ''} onChange={e => setEditBlessing({ ...editBlessing, author_name: e.target.value })} />
+                  <Textarea placeholder="טקסט" rows={4} value={editBlessing.text || ''} onChange={e => setEditBlessing({ ...editBlessing, text: e.target.value })} />
+                  <Input placeholder="קישור (לא חובה)" value={editBlessing.link_url || ''} onChange={e => setEditBlessing({ ...editBlessing, link_url: e.target.value })} dir="ltr" />
+
+                  {editBlessing.link_url ? <LinkPreview url={editBlessing.link_url} size={safeBSize} showDetails={showLinkDetails} /> : null}
 
                   <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
                     <p className="text-sm font-medium">מדיה</p>
-                    {editBlessing.media_url ? (
-                      <a className="text-sm underline" href={editBlessing.media_url} target="_blank" rel="noreferrer">פתח מדיה נוכחית</a>
-                    ) : (
-                      <p className="text-sm text-zinc-500">אין מדיה</p>
-                    )}
+
+                    <div className="flex items-center justify-between gap-3">
+                      <MediaBox media_url={editBlessing.media_url} video_url={editBlessing.video_url} size={safeBSize} />
+                      {(editBlessing.media_url || editBlessing.video_url) && (
+                        <a className="text-sm underline" href={(editBlessing.video_url || editBlessing.media_url) as string} target="_blank" rel="noreferrer">
+                          פתח מדיה נוכחית
+                        </a>
+                      )}
+                    </div>
 
                     <input
                       type="file"
@@ -1008,9 +1117,7 @@ async function setPostStatus(id: string, status: string) {
                   </div>
 
                   <div className="flex gap-2">
-                    <Button onClick={saveBlessingEdits} disabled={editBusy}>
-                      {editBusy ? 'שומר...' : 'שמור'}
-                    </Button>
+                    <Button onClick={saveBlessingEdits} disabled={editBusy}>{editBusy ? 'שומר...' : 'שמור'}</Button>
                     <Button variant="ghost" onClick={() => setEditBlessing(null)}>סגור</Button>
                   </div>
                 </div>
@@ -1018,9 +1125,11 @@ async function setPostStatus(id: string, status: string) {
             </div>
           )}
 
+          {err && <p className="text-sm text-red-600">{err}</p>}
         </Card>
       )}
 
+      {/* ===== ADS ===== */}
       {tab === 'ads' && (
         <Card>
           <h3 className="font-semibold">פרסומות</h3>
@@ -1028,8 +1137,8 @@ async function setPostStatus(id: string, status: string) {
           <div className="mt-3 grid gap-2 rounded-xl border border-zinc-200 p-3">
             <Input placeholder="כותרת" value={newAd.title} onChange={e => setNewAd({ ...newAd, title: e.target.value })} />
             <Textarea placeholder="טקסט (לא חובה)" rows={2} value={newAd.body} onChange={e => setNewAd({ ...newAd, body: e.target.value })} />
-            <Input placeholder="image_url (לא חובה)" value={newAd.image_url} onChange={e => setNewAd({ ...newAd, image_url: e.target.value })} />
-            <Input placeholder="link_url (לא חובה)" value={newAd.link_url} onChange={e => setNewAd({ ...newAd, link_url: e.target.value })} />
+            <Input placeholder="image_url (לא חובה)" value={newAd.image_url} onChange={e => setNewAd({ ...newAd, image_url: e.target.value })} dir="ltr" />
+            <Input placeholder="link_url (לא חובה)" value={newAd.link_url} onChange={e => setNewAd({ ...newAd, link_url: e.target.value })} dir="ltr" />
             <label className="text-sm flex items-center gap-2">
               <input type="checkbox" checked={!!newAd.is_active} onChange={e => setNewAd({ ...newAd, is_active: e.target.checked })} />
               פעיל
@@ -1058,10 +1167,10 @@ async function setPostStatus(id: string, status: string) {
         </Card>
       )}
 
+      {/* ===== ADMIN GALLERY ===== */}
       {tab === 'admin_gallery' && (
         <Card>
           <h3 className="font-semibold">גלריית מנהל</h3>
-          <p className="text-xs text-zinc-500">העלאה מרובת תמונות + תצוגה + מחיקה.</p>
 
           <div className="mt-3 grid gap-2 rounded-xl border border-zinc-200 p-3">
             <input type="file" accept="image/*" multiple onChange={e => setAdminFiles(Array.from(e.target.files || []))} />
@@ -1093,9 +1202,7 @@ async function setPostStatus(id: string, status: string) {
                   <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
                   <div className="mt-2 flex gap-2">
                     <Button variant="ghost" onClick={() => deleteAdminImage(p.id)}>מחק</Button>
-                    {p.media_url && (
-                      <a className="text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח</a>
-                    )}
+                    {p.media_url && <a className="text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח</a>}
                   </div>
                 </div>
               </div>
@@ -1106,24 +1213,19 @@ async function setPostStatus(id: string, status: string) {
         </Card>
       )}
 
+      {/* ===== DIAG ===== */}
       {tab === 'diag' && (
         <Card>
           <h3 className="font-semibold">דיאגנוסטיקה</h3>
-          <p className="text-xs text-zinc-500">בדיקות מהירות כדי להבין למה משהו לא מסתנכרן.</p>
 
           <div className="mt-3 grid gap-2">
             <Button variant="ghost" onClick={loadDiag}>רענן דיאגנוסטיקה</Button>
-
             <div className="rounded-xl border border-zinc-200 p-3 text-xs">
               <pre className="whitespace-pre-wrap">{JSON.stringify(diag, null, 2)}</pre>
             </div>
-
-            <p className="text-xs text-zinc-500">אפשר לפתוח ישירות: /api/admin/diag</p>
           </div>
         </Card>
       )}
-
-      {err && <p className="text-sm text-red-600">{err}</p>}
     </div>
   )
 }
