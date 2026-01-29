@@ -42,12 +42,10 @@ export default async function GalleryPage() {
           </div>
         </Card>
 
-        <div className="mt-4">
-  <Card>
-    <h2 className="text-xl font-bold">גלריה</h2>
-    <p className="text-sm text-zinc-600">העלו תמונות מהאירוע.</p>
-  </Card>
-</div>
+        <Card className="mt-4">
+          <h2 className="text-xl font-bold">גלריה</h2>
+          <p className="text-sm text-zinc-600">העלו תמונות מהאירוע.</p>
+        </Card>
 
         <div className="mt-4">
           <GalleryClient initialItems={items} />

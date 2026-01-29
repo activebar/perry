@@ -10,13 +10,12 @@ type Post = {
   author_name: string | null
   text: string | null
   media_url: string | null
-  video_url: string | null
   link_url: string | null
-  media_path?: string | null
   status: string
   reaction_counts: Record<string, number>
   my_reactions: string[]
 }
+
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
 async function jfetch(url: string, init?: RequestInit) {
@@ -45,34 +44,11 @@ function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/')
 }
 
-
-function firstHttpUrl(input: string) {
-  const s = String(input || '')
-  const m = s.match(/https?:\/\/[^\s]+/i)
-  if (!m) return ''
-  let u = m[0].trim()
-
-  // trim common trailing punctuation
-  u = u.replace(/[\]\)\}\>,\.\!\?\:;]+$/g, '')
-  return u
-}
-
-export default function BlessingsClient({
-  initialFeed,
-  settings,
-  blocks,
-  showHeader = true,
-}: {
-  initialFeed: Post[]
-  settings?: any
-  blocks?: any[]
-  showHeader?: boolean
-}) {
+export default function BlessingsClient({ initialFeed }: { initialFeed: Post[] }) {
   const [items, setItems] = useState<Post[]>(initialFeed || [])
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
-  const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
 
   // media pickers (mobile-friendly)
@@ -80,53 +56,16 @@ export default function BlessingsClient({
   const cameraPhotoRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoRef = useRef<HTMLInputElement | null>(null)
 
-  // auto-detect link from the text (WhatsApp-style)
-  useEffect(() => {
-    if (linkTouched) return
-    const u = firstHttpUrl(text)
-    if (u && u !== linkUrl) setLinkUrl(u)
-    if (!u && linkUrl) setLinkUrl('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text])
-
-
 // edit (mine, within 1h)
   const [editOpen, setEditOpen] = useState(false)
-  const [editLoading, setEditLoading] = useState(false)
-  const [editErr, setEditErr] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<any | null>(null)
   const [editFile, setEditFile] = useState<File | null>(null)
   const [editRemoveMedia, setEditRemoveMedia] = useState(false)
-
-  function canEditMine(p: any) {
-    return !!p?.can_edit
-  }
-  function canDeleteMine(p: any) {
-    return !!p?.can_delete
-  }
-  function secondsLeft(p: any) {
-    const until = p?.editable_until
-    if (!until) return 0
-    const ms = new Date(until).getTime() - Date.now()
-    if (!Number.isFinite(ms)) return 0
-    return Math.max(0, Math.floor(ms / 1000))
-  }
-  function fmtMMSS(sec: number) {
-    const m = Math.floor(sec / 60)
-    const s = sec % 60
-    return `${m}:${String(s).padStart(2, '0')}`
-  }
-
-  const [nowTick, setNowTick] = useState(Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [])
-
   const editPickRef = useRef<HTMLInputElement | null>(null)
   const editCameraPhotoRef = useRef<HTMLInputElement | null>(null)
   const editCameraVideoRef = useRef<HTMLInputElement | null>(null)
   const [editBusy, setEditBusy] = useState(false)
+  const [editErr, setEditErr] = useState<string | null>(null)
 
 
   const [busy, setBusy] = useState(false)
@@ -135,27 +74,15 @@ export default function BlessingsClient({
 
   // refresh list occasionally (helps when require_approval is on)
   useEffect(() => {
-    let cancelled = false
-
-    async function pull() {
+    const t = setInterval(async () => {
       try {
-        const res = await fetch(`/api/blessings/feed?ts=${Date.now()}`, { cache: 'no-store' })
+        const res = await fetch('/api/blessings/feed', { cache: 'no-store' })
         if (!res.ok) return
-        const j = await res.json().catch(() => ({}))
-        if (!cancelled && Array.isArray(j.items)) setItems(j.items)
-      } catch {
-        // ignore
-      }
-    }
-
-    // immediate pull (important when SSR returns empty for any reason)
-    pull()
-
-    const t = setInterval(pull, 15000)
-    return () => {
-      cancelled = true
-      clearInterval(t)
-    }
+        const j = await res.json()
+        if (Array.isArray(j.items)) setItems(j.items)
+      } catch {}
+    }, 15000)
+    return () => clearInterval(t)
   }, [])
 
   async function submitBlessing() {
@@ -201,7 +128,6 @@ export default function BlessingsClient({
       setAuthor('')
       setText('')
       setLinkUrl('')
-      setLinkTouched(false)
       setFile(null)
 
       setMsg(res.status === 'pending' ? '✅ נשלח לאישור מנהל' : '✅ נשמר!')
@@ -228,40 +154,20 @@ export default function BlessingsClient({
     }
   }
 
-  async function editMine(id: string) {
-  const p = (items || []).find((x: any) => x.id === id)
-  if (!p) return
-  if (!canEditMine(p)) return
+  async function editMine(p: any) {
+  // open modal editor (name + text + link + media)
   setEditErr(null)
   setEditFile(null)
   setEditRemoveMedia(false)
-  setEditLoading(true)
-  try {
-    const res = await jfetch(`/api/blessings/item?id=${encodeURIComponent(id)}`, { method: 'GET', headers: {} as any })
-    const item = res?.item || p
-    setEditDraft({
-      id: item.id,
-      author_name: item.author_name || '',
-      text: item.text || '',
-      link_url: item.link_url || '',
-      media_url: item.media_url || '',
-      media_path: item.media_path || ''
-    })
-    setEditOpen(true)
-  } catch (e: any) {
-    // fallback to local item
-    setEditDraft({
-      id: p.id,
-      author_name: p.author_name || '',
-      text: p.text || '',
-      link_url: p.link_url || '',
-      media_url: p.media_url || '',
-      media_path: p.media_path || ''
-    })
-    setEditOpen(true)
-  } finally {
-    setEditLoading(false)
-  }
+  setEditDraft({
+    id: p.id,
+    author_name: p.author_name || '',
+    text: p.text || '',
+    link_url: p.link_url || '',
+    media_url: p.media_url || null,
+    media_path: p.media_path || null
+  })
+  setEditOpen(true)
 }
 
 async function saveEdit() {
@@ -326,34 +232,25 @@ async function saveEdit() {
       setErr(friendlyError(e?.message || 'שגיאה'))
     }
   }
-  const blessingTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
-  const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
-  const mediaSize = Math.max(120, Math.min(520, Number(settings?.blessings_media_size || 320)))
-  const blessingsBlock = (blocks || []).find((b: any) => b?.type === 'blessings')
-  const linkPreviewEnabled = !!blessingsBlock?.config?.link_preview_enabled
-  const showLinkDetails = !!blessingsBlock?.config?.link_preview_show_details
 
   return (
-    <main dir="rtl" className="text-right">
+    <main>
       <Container>
-        {showHeader && (
-          <Card>
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-right">
-                <h2 className="text-xl font-bold">{blessingTitle}</h2>
-                <p className="text-sm text-zinc-600">{blessingSubtitle}</p>
-              </div>
-              <Link href="/"><Button variant="ghost">← בית</Button></Link>
+        <Card>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-right">
+              <h2 className="text-xl font-bold">ברכות</h2>
+              <p className="text-sm text-zinc-600">כתבו ברכה מרגשת לעידו ✨</p>
             </div>
-          </Card>
-        )}
+            <Link href="/"><Button variant="ghost">← בית</Button></Link>
+          </div>
+        </Card>
 
         <Card>
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
-            <Input placeholder="קישור (אופציונלי)" value={linkUrl} onChange={e => { setLinkTouched(true); setLinkUrl(e.target.value) }} dir="ltr" />
-            <LinkPreview url={linkUrl} />
+            <Input placeholder="קישור (אופציונלי)" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} dir="ltr" />
             <div className="flex items-center justify-between gap-3">
               <div className="grid gap-2">
                 {/* hidden inputs */}
@@ -415,52 +312,35 @@ async function saveEdit() {
             <Card key={p.id}>
               <div className="text-right">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-zinc-500">
-                    {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
-                  </p>
                   <p className="font-semibold">{p.author_name || 'אורח/ת'}</p>
+                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}</p>
                 </div>
 
-                {/* media / link preview (centered) */}
-                {(() => {
-                  const mediaUrl = (p.video_url || p.media_url) as string | null
-                  const linkUrl = (p.link_url || '') as string
-                  if (mediaUrl) {
-                    const video = !!p.video_url || isVideo(mediaUrl)
-                    return (
-                      <div className="mt-3 flex justify-center">
-                        <div
-                          className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
-                          style={{ width: mediaSize, height: mediaSize }}
-                        >
-                          {video ? (
-                            <video src={mediaUrl} controls className="h-full w-full object-contain" playsInline />
-                          ) : (
-                            <img src={mediaUrl} alt="" className="h-full w-full object-contain" />
-                          )}
-                        </div>
-                      </div>
-                    )
-                  }
-                  if (linkPreviewEnabled && linkUrl) {
-                    return (
-                      <div className="mt-3 flex justify-center">
-                        <LinkPreviewThumb url={linkUrl} size={mediaSize} />
-                      </div>
-                    )
-                  }
-                  return null
-                })()}
+                {p.text && <p className="mt-2 whitespace-pre-wrap text-sm">{p.text}</p>}
 
-                {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
-
-                {/* link meta/details (single line, below text) */}
-                {p.link_url && ((linkPreviewEnabled && !canEditMine(p)) || linkPreviewEnabled) && (
-                  <div className="mt-2">
-                    <LinkPreviewMeta url={p.link_url} force={false} />
+                {(p.media_url || p.video_url) && (
+                  <div className="mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
+                    {(() => {
+                      const url = (p.video_url || p.media_url) as string
+                      if (!url) return null
+                      const video = !!p.video_url || isVideo(url)
+                      return video ? (
+                        <video src={url} controls className="w-full" playsInline />
+                      ) : (
+                        <img src={url} alt="" className="w-full object-cover" />
+                      )
+                    })()}
                   </div>
                 )}
-                {/* reactions */}
+
+                {p.link_url && (
+                  <div className="mt-3">
+                    <a href={p.link_url} target="_blank" rel="noreferrer" className="text-sm underline">
+                      {p.link_url}
+                    </a>
+                  </div>
+                )}
+
                 <div className="mt-3 flex flex-wrap gap-2 justify-end">
                   {EMOJIS.map(emo => {
                     const active = (p.my_reactions || []).includes(emo)
@@ -468,7 +348,7 @@ async function saveEdit() {
                     return (
                       <Button
                         key={emo}
-                        variant={active ? 'primary' : 'ghost'}
+                        variant={active ? 'default' : 'ghost'}
                         onClick={() => toggleReaction(p.id, emo)}
                       >
                         {emo} {c ? c : ''}
@@ -477,20 +357,10 @@ async function saveEdit() {
                   })}
                 </div>
 
-                {/* edit/delete (mine, within 1h) */}
-                {canEditMine(p) && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2 justify-end">
-                    <Button variant="ghost" onClick={() => editMine(p.id)}>
-                      ערוך (שעה)
-                    </Button>
-                    {canDeleteMine(p) && (
-                      <Button variant="ghost" onClick={() => deleteMine(p.id)}>
-                        מחק (שעה)
-                      </Button>
-                    )}
-                    <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeft(p))}</span>
-                  </div>
-                )}
+                <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                  <Button variant="ghost" onClick={() => editMine(p.id)}>ערוך (שעה)</Button>
+                  <Button variant="ghost" onClick={() => deleteMine(p.id)}>מחק (שעה)</Button>
+                </div>
               </div>
             </Card>
           ))}
@@ -567,33 +437,6 @@ type UnfurlData = { url: string; title: string; description: string; image: stri
 
 const unfurlCache = new Map<string, UnfurlData>()
 
-function hostOf(u: string) {
-  try {
-    return new URL(u).hostname
-  } catch {
-    return u
-  }
-}
-
-function youtubeThumb(u: string) {
-  try {
-    const url = new URL(u)
-    const host = url.hostname.replace(/^www\./, '')
-    let id = ''
-    if (host === 'youtu.be') {
-      id = url.pathname.replace(/^\//, '')
-    } else if (host.endsWith('youtube.com')) {
-      if (url.pathname === '/watch') id = url.searchParams.get('v') || ''
-      else if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2] || ''
-      else if (url.pathname.startsWith('/embed/')) id = url.pathname.split('/')[2] || ''
-    }
-    if (!id) return ''
-    return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
-  } catch {
-    return ''
-  }
-}
-
 function useUnfurl(url?: string) {
   const [data, setData] = useState<UnfurlData | null>(null)
 
@@ -607,11 +450,7 @@ function useUnfurl(url?: string) {
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch('/api/unfurl', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: u })
-        })
+        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(u)}`)
         const json = await res.json().catch(() => ({}))
         if (!res.ok) return
         const d = json?.data as UnfurlData
@@ -628,62 +467,29 @@ function useUnfurl(url?: string) {
   return data
 }
 
-function LinkPreviewThumb({ url, size }: { url?: string; size: number }) {
-  const d = useUnfurl(url)
-  if (!url) return null
-  if (!d) return null
-
-  const img = d.image || youtubeThumb(d.url)
-  if (!img) return null
-
-  return (
-    <a
-      href={d.url}
-      target="_blank"
-      rel="noreferrer"
-      className="block overflow-hidden rounded-2xl bg-zinc-50"
-      style={{ width: size, height: size }}
-      aria-label="פתח קישור"
-    >
-      <img src={img} alt="" className="h-full w-full object-cover" />
-    </a>
-  )
-}
-
-function LinkPreviewMeta({ url, force }: { url?: string; force?: boolean }) {
-  const d = useUnfurl(url)
-  if (!url) return null
-  if (!d) return null
-
-  const domain = d.site_name || hostOf(d.url)
-  const title = (d.title || '').trim()
-  const line = title ? `${domain} — ${title}` : domain
-
-  return (
-    <a
-      href={d.url}
-      target="_blank"
-      rel="noreferrer"
-      className="block max-w-full truncate whitespace-nowrap text-[11px] text-zinc-600"
-      dir="ltr"
-      title={d.url}
-    >
-      {line}
-    </a>
-  )
-}
-
 function LinkPreview({ url }: { url?: string }) {
-  // composer preview: thumb + single-line meta
+  const d = useUnfurl(url)
   if (!url) return null
+  if (!d) return null
+
   return (
-    <div className="mt-2">
-      <div className="flex justify-center">
-        <LinkPreviewThumb url={url} size={220} />
+    <a
+      href={d.url}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-2 flex gap-3 rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
+    >
+      {d.image ? (
+        <img src={d.image} alt="" className="h-20 w-24 rounded-lg object-cover" />
+      ) : (
+        <div className="h-20 w-24 rounded-lg bg-zinc-100" />
+      )}
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold">{d.title || d.site_name || 'קישור'}</p>
+        {d.description && <p className="mt-0.5 line-clamp-2 text-xs text-zinc-600">{d.description}</p>}
+        <p className="mt-1 text-[11px] text-zinc-500">{d.site_name || new URL(d.url).hostname}</p>
       </div>
-      <div className="mt-2">
-        <LinkPreviewMeta url={url} force />
-      </div>
-    </div>
+    </a>
   )
 }
+

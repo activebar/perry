@@ -22,119 +22,6 @@ function fmt(dt: string) {
 }
 
 const EMOJIS: Array<'👍' | '😍' | '🔥' | '🙏'> = ['👍', '😍', '🔥', '🙏']
-type UnfurlData = { url: string; title: string; description: string; image: string; site_name: string }
-const unfurlCache = new Map<string, UnfurlData>()
-
-function hostOf(u: string) {
-  try {
-    return new URL(u).hostname
-  } catch {
-    return u
-  }
-}
-
-function youtubeThumb(u: string) {
-  try {
-    const url = new URL(u)
-    const host = url.hostname.replace(/^www\./, '')
-    let id = ''
-    if (host === 'youtu.be') id = url.pathname.replace(/^\//, '')
-    else if (host.endsWith('youtube.com')) {
-      if (url.pathname === '/watch') id = url.searchParams.get('v') || ''
-      else if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2] || ''
-      else if (url.pathname.startsWith('/embed/')) id = url.pathname.split('/')[2] || ''
-    }
-    if (!id) return ''
-    return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
-  } catch {
-    return ''
-  }
-}
-
-function useUnfurl(url?: string) {
-  const [data, setData] = useState<UnfurlData | null>(null)
-
-  useEffect(() => {
-    const u = (url || '').trim()
-    if (!u) return
-    if (unfurlCache.has(u)) {
-      setData(unfurlCache.get(u)!)
-      return
-    }
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch('/api/unfurl', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: u })
-        })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) return
-        const d = json?.data as UnfurlData
-        if (!d?.url) return
-        unfurlCache.set(u, d)
-        if (!cancelled) setData(d)
-      } catch {}
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [url])
-
-  return data
-}
-
-function HomeLinkThumb({ url, sizePx }: { url?: string | null; sizePx: number }) {
-  const d = useUnfurl(url || undefined)
-  if (!url) return null
-  if (!d) return null
-  const img = d.image || youtubeThumb(d.url)
-  if (!img) return null
-  return (
-    <a href={d.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl bg-zinc-50" style={{ width: sizePx, height: sizePx }} aria-label="פתח קישור">
-      <img src={img} alt="" className="h-full w-full object-cover" />
-    </a>
-  )
-}
-
-function HomeLinkMeta({
-  url,
-  showDetails = false,
-}: {
-  url?: string | null
-  showDetails?: boolean
-}) {
-  const d = useUnfurl(url || undefined)
-  if (!url) return null
-  if (!d) return null
-
-  const title = (d.title || '').trim()
-  const desc = (d.description || '').trim()
-  const host = hostOf(d.url)
-
-  return (
-    <div className="mt-2 text-[11px] text-zinc-600">
-      <a
-        href={d.url}
-        target="_blank"
-        rel="noreferrer"
-        className="block max-w-full truncate whitespace-nowrap"
-        dir="ltr"
-        title={d.url}
-      >
-        {host}
-      </a>
-
-      {showDetails && (title || desc) ? (
-        <div className="mt-1 space-y-0.5">
-          {title ? <div className="truncate whitespace-nowrap">{title}</div> : null}
-          {desc ? <div className="truncate whitespace-nowrap opacity-80">{desc}</div> : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
 
 export default function HomePage() {
   const [data, setData] = useState<HomePayload | null>(null)
@@ -171,6 +58,8 @@ export default function HomePage() {
       (blocks || [])
         .filter((b: any) => {
           if (!b?.is_visible) return false
+
+          // auto-hide ל-gift
           if (b.type === 'gift' && b.config?.auto_hide_after_hours) {
             const hours = Number(b.config.auto_hide_after_hours)
             if (Number.isFinite(hours) && hours > 0) {
@@ -179,6 +68,7 @@ export default function HomePage() {
               if (now > hideAt) return false
             }
           }
+
           return true
         })
         .map((b: any) => b.type)
@@ -202,22 +92,17 @@ export default function HomePage() {
   const heroImages = Array.isArray(settings?.hero_images) ? settings.hero_images : []
   const heroSeconds = Number(settings?.hero_rotate_seconds ?? 4)
 
-  const mediaSize = Number(settings?.blessings_media_size ?? 140)
-  const blessingsBlock = (blocks || []).find((b: any) => b?.type === 'blessings')
-  const linkPreviewEnabled = !!blessingsBlock?.config?.link_preview_enabled
-  const linkPreviewShowDetails = !!blessingsBlock?.config?.link_preview_show_details
-
   const heroPre =
     settings?.hero_pre_text ||
     `מחכים לכם באירוע 🎉\n${settings?.location_text || ''}`.trim()
 
   const heroLive =
     settings?.hero_live_text ||
-    'האירוע התחיל! 📸\nהעלו תמונות, כתבו ברכות, ותעשו שמח.'.trim()
+    'האירוע התחיל! 📸\nהעלו תמונות, כתבו ברכה, ותנו אהבה.'.trim()
 
   const heroPost =
     settings?.hero_post_text ||
-    (settings?.thank_you_text || 'תודה שבאתם ❤️ נשמח שתמשיכו להעלות תמונות וברכות למזכרת.')
+    (settings?.thank_you_text || 'תודה שהייתם איתנו ❤️ אפשר להמשיך להעלות תמונות וברכות למזכרת.')
 
   const heroText = phase === 'pre' ? heroPre : phase === 'live' ? heroLive : heroPost
 
@@ -231,13 +116,16 @@ export default function HomePage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Request failed')
 
+      // update local state
       setData(prev => {
         if (!prev) return prev
         const upd = (arr: any[]) =>
           (arr || []).map(p => (p.id === postId ? { ...p, reaction_counts: json.counts, my_reactions: json.my } : p))
         return { ...prev, blessingsPreview: upd(prev.blessingsPreview) }
       })
-    } catch {}
+    } catch {
+      // silent
+    }
   }
 
   if (!data) {
@@ -258,6 +146,7 @@ export default function HomePage() {
   return (
     <main>
       <Container>
+        {/* Header */}
         <div className="flex items-center justify-between gap-3" dir="rtl">
           <div className="text-right">
             <h1 className="text-2xl font-bold">{settings?.event_name}</h1>
@@ -266,57 +155,59 @@ export default function HomePage() {
 
           {showMenu && (
             <div className="flex gap-2">
-              <Link href="/gallery">
-                <Button variant="ghost">גלריה</Button>
-              </Link>
-              <Link href="/blessings">
-                <Button variant="ghost">ברכות</Button>
-              </Link>
-              {showGiftBlock && (
-                <Link href="/gift">
-                  <Button>מתנה</Button>
-                </Link>
-              )}
-              <Link href="/admin">
-                <Button variant="ghost">מנהל</Button>
-              </Link>
+              <Link href="/gallery"><Button variant="ghost">גלריה</Button></Link>
+              <Link href="/blessings"><Button variant="ghost">ברכות</Button></Link>
+              {showGiftBlock && <Link href="/gift"><Button>מתנה</Button></Link>}
+              <Link href="/admin"><Button variant="ghost">מנהל</Button></Link>
             </div>
           )}
         </div>
 
         <div className="mt-4 space-y-4">
+          {/* HERO */}
           {showHero && (
             <Card dir="rtl">
               <div className="space-y-3 text-right">
                 {heroImages.length > 0 && <HeroRotator images={heroImages} seconds={heroSeconds} />}
+
                 <div className="whitespace-pre-wrap text-sm text-zinc-700">{heroText}</div>
 
+                {/* CTA */}
                 <div className="flex flex-wrap gap-2">
-                  {settings?.waze_url && (
-                    <a href={settings.waze_url} target="_blank" rel="noreferrer">
-                      <Button>Waze</Button>
-                    </a>
+                  {phase === 'pre' && (
+                    <>
+                      {settings?.waze_url && (
+                        <a href={settings.waze_url} target="_blank" rel="noreferrer">
+                          <Button>Waze</Button>
+                        </a>
+                      )}
+                      {showGiftBlock && <Link href="/gift"><Button>מתנה</Button></Link>}
+                      {showGalleryBlock && <Link href="/gallery"><Button variant="ghost">לגלריה</Button></Link>}
+                      {showBlessingsBlock && <Link href="/blessings"><Button variant="ghost">לברכות</Button></Link>}
+                    </>
                   )}
-                  {showGiftBlock && (
-                    <Link href="/gift">
-                      <Button variant="ghost">מתנה</Button>
-                    </Link>
+
+                  {phase === 'live' && (
+                    <>
+                      {showGalleryBlock && <Link href="/gallery"><Button>העלאת תמונה</Button></Link>}
+                      {showBlessingsBlock && <Link href="/blessings"><Button variant="ghost">כתיבת ברכה</Button></Link>}
+                      {showGiftBlock && <Link href="/gift"><Button variant="ghost">מתנה</Button></Link>}
+                    </>
                   )}
-                  {showGalleryBlock && (
-                    <Link href="/gallery">
-                      <Button variant="ghost">גלריה</Button>
-                    </Link>
-                  )}
-                  {showBlessingsBlock && (
-                    <Link href="/blessings">
-                      <Button variant="ghost">ברכות</Button>
-                    </Link>
+
+                  {phase === 'post' && (
+                    <>
+                      {showGalleryBlock && <Link href="/gallery"><Button>לגלריה</Button></Link>}
+                      {showBlessingsBlock && <Link href="/blessings"><Button variant="ghost">לברכות</Button></Link>}
+                      {showGiftBlock && <Link href="/gift"><Button variant="ghost">מתנה</Button></Link>}
+                    </>
                   )}
                 </div>
               </div>
             </Card>
           )}
 
+          {/* Galleries */}
           {showGalleryBlock && (
             <Card dir="rtl">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -324,11 +215,7 @@ export default function HomePage() {
                   <p className="font-semibold">{guestTitle}</p>
                   <p className="text-sm text-zinc-600">תמונות מהאורחים.</p>
                 </div>
-                {guestShowAll && (
-                  <Link href="/gallery">
-                    <Button>לכל התמונות</Button>
-                  </Link>
-                )}
+                {guestShowAll && <Link href="/gallery"><Button>לכל התמונות</Button></Link>}
               </div>
 
               {Array.isArray(guestPreview) && guestPreview.length > 0 && (
@@ -348,13 +235,9 @@ export default function HomePage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-right">
                   <p className="font-semibold">{adminTitle}</p>
-                  <p className="text-sm text-zinc-600">תמונות המנהל.</p>
+                  <p className="text-sm text-zinc-600">תמונות שמנהלים העלו.</p>
                 </div>
-                {adminShowAll && (
-                  <Link href="/gallery-admin">
-                    <Button>לכל התמונות</Button>
-                  </Link>
-                )}
+                {adminShowAll && <Link href="/gallery-admin"><Button>לכל התמונות</Button></Link>}
               </div>
 
               {Array.isArray(adminPreview) && adminPreview.length > 0 && (
@@ -369,19 +252,16 @@ export default function HomePage() {
             </Card>
           )}
 
+          {/* Blessings preview */}
           {showBlessingsBlock && (
             <Card dir="rtl">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-right">
                   <p className="font-semibold">ברכות</p>
-                  <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה/וידאו או קישור.</p>
+                  <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה, ותנו ריאקשן.</p>
                 </div>
                 <div className="flex gap-2">
-                  {blessingsShowAll && (
-                    <Link href="/blessings">
-                      <Button>שלח ברכה</Button>
-                    </Link>
-                  )}
+                  {blessingsShowAll && <Link href="/blessings"><Button>שלח ברכה</Button></Link>}
                 </div>
               </div>
 
@@ -389,51 +269,27 @@ export default function HomePage() {
                 <div className="mt-3 grid gap-3">
                   {blessingsPreview.slice(0, Math.max(0, blessingsPreviewLimit)).map((p: any) => (
                     <div key={p.id} className="rounded-2xl border border-zinc-200 p-3">
-                      <div className="text-right">
-                        <p className="font-medium">{p.author_name || 'אורח/ת'}</p>
-                      </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 text-right">
+                          <p className="font-medium">{p.author_name || 'אורח/ת'}</p>
+                          {p.text && <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{p.text}</p>}
+                        </div>
 
-                      <div className="mt-3 flex justify-center">
-                        {(p.video_url || p.media_url) ? (
+                        {p.media_url && (
                           <button
                             type="button"
-                            className="relative overflow-hidden rounded-2xl bg-zinc-50"
-                            style={{ width: mediaSize, height: mediaSize }}
-                            onClick={() => {
-                              const u = ((p.video_url || p.media_url) as string) || ''
-                              if (u) window.open(u, '_blank', 'noopener,noreferrer')
-                            }}
-                            aria-label="פתח מדיה"
+                            className="relative h-20 w-20 flex-none overflow-hidden rounded-xl bg-zinc-50"
+                            onClick={() => window.open(p.media_url, '_blank')}
                           >
-                            {p.video_url ? (
-                              <video
-                                src={p.video_url}
-                                className="h-full w-full object-contain"
-                                muted
-                                playsInline
-                              />
-                            ) : (
-                              <img
-                                src={p.media_url as string}
-                                alt="תמונה"
-                                className="h-full w-full object-contain"
-                                loading="lazy"
-                              />
-                            )}
+                            <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
                           </button>
-                        ) : linkPreviewEnabled && p.link_url ? (
-                          <HomeLinkThumb url={p.link_url} sizePx={mediaSize} />
-                        ) : null}
+                        )}
                       </div>
 
-                      {p.text && (
-                        <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-800 text-right">{p.text}</p>
-                      )}
-
-                      {p.link_url && linkPreviewEnabled && (
-                        <div className="mt-2">
-                            <HomeLinkMeta url={p.link_url} showDetails={linkPreviewShowDetails} />
-                        </div>
+                      {p.link_url && (
+                        <a className="mt-2 block text-sm underline" href={p.link_url} target="_blank" rel="noreferrer">
+                          {p.link_url}
+                        </a>
                       )}
 
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -459,21 +315,20 @@ export default function HomePage() {
                   ))}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-zinc-600 text-right">עדיין אין ברכות. תהיו הראשונים 💌</p>
+                <p className="mt-3 text-sm text-zinc-600 text-right">עדיין אין ברכות. תהיו הראשונים 💛</p>
               )}
             </Card>
           )}
 
+          {/* Gift */}
           {showGiftBlock && (
             <Card dir="rtl">
               <div className="flex items-center justify-between">
                 <div className="text-right">
-                  <p className="font-semibold">מתנה</p>
-                  <p className="text-sm text-zinc-600">אפשר להשאיר מתנה בלחיצה.</p>
+                  <p className="font-semibold">תשלום / מתנה</p>
+                  <p className="text-sm text-zinc-600">בקליק עוברים לעמוד המתנה.</p>
                 </div>
-                <Link href="/gift">
-                  <Button>למתנה</Button>
-                </Link>
+                <Link href="/gift"><Button>למתנה</Button></Link>
               </div>
             </Card>
           )}

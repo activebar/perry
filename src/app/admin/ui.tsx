@@ -3,36 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 
-/* ===================== Link Preview (Unfurl) ===================== */
 
 type UnfurlData = { url: string; title: string; description: string; image: string; site_name: string }
 const unfurlCache = new Map<string, UnfurlData>()
-
-function hostOf(u: string) {
-  try {
-    return new URL(u).hostname
-  } catch {
-    return u
-  }
-}
-
-function youtubeThumb(u: string) {
-  try {
-    const url = new URL(u)
-    const host = url.hostname.replace(/^www\./, '')
-    let id = ''
-    if (host === 'youtu.be') id = url.pathname.replace(/^\//, '')
-    else if (host.endsWith('youtube.com')) {
-      if (url.pathname === '/watch') id = url.searchParams.get('v') || ''
-      else if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2] || ''
-      else if (url.pathname.startsWith('/embed/')) id = url.pathname.split('/')[2] || ''
-    }
-    if (!id) return ''
-    return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
-  } catch {
-    return ''
-  }
-}
 
 function useUnfurl(url?: string) {
   const [data, setData] = useState<UnfurlData | null>(null)
@@ -47,11 +20,7 @@ function useUnfurl(url?: string) {
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch('/api/unfurl', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: u })
-        })
+        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(u)}`)
         const json = await res.json().catch(() => ({}))
         if (!res.ok) return
         const d = json?.data as UnfurlData
@@ -68,107 +37,31 @@ function useUnfurl(url?: string) {
   return data
 }
 
-/** Preview נקי: תמונה/thumbnail ממורכז + שורת דומיין/URL (ללא שבירת בלוק) */
-function LinkPreview({
-  url,
-  size,
-  showDetails
-}: {
-  url?: string | null
-  size: number
-  showDetails?: boolean
-}) {
-  const d = useUnfurl(url || undefined)
+function LinkPreview({ url }: { url?: string }) {
+  const d = useUnfurl(url)
   if (!url) return null
   if (!d) return null
 
-  const img = d.image || youtubeThumb(d.url)
-  const domain = (() => {
-    try {
-      return new URL(d.url).hostname
-    } catch {
-      return ''
-    }
-  })()
-
-  return (
-    <div className="mt-2">
-      {img ? (
-        <div className="flex justify-center">
-          <a
-            href={d.url}
-            target="_blank"
-            rel="noreferrer"
-            className="block overflow-hidden rounded-2xl bg-zinc-100"
-            style={{ width: size, height: size }}
-            title={d.title || d.url}
-          >
-            <img src={img} alt={d.title || domain || 'Link preview'} className="h-full w-full object-cover" />
-          </a>
-        </div>
-      ) : null}
-
-      {showDetails ? (
-        <div className="mt-2 space-y-1">
-          <a
-            href={d.url}
-            target="_blank"
-            rel="noreferrer"
-            className="block text-[12px] text-zinc-700 hover:underline whitespace-nowrap overflow-hidden text-ellipsis"
-            dir="ltr"
-          >
-            {domain || d.url}
-          </a>
-          {d.title ? (
-            <div className="text-[12px] text-zinc-600 whitespace-nowrap overflow-hidden text-ellipsis" dir="ltr">
-              {d.title}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-/* ===================== Media Box (Image/Video) ===================== */
-
-function isVideoUrl(url?: string | null) {
-  return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
-}
-
-function MediaBox({
-  media_url,
-  video_url,
-  size
-}: {
-  media_url?: string | null
-  video_url?: string | null
-  size: number
-}) {
-  const url = (video_url || media_url || '') as string
-  if (!url) return null
-
-  const isVid = !!video_url || isVideoUrl(url)
-
   return (
     <a
-      href={url}
+      href={d.url}
       target="_blank"
       rel="noreferrer"
-      className="relative flex-none overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200"
-      style={{ width: size, height: size }}
-      title="פתח מדיה"
+      className="mt-2 flex gap-3 rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
     >
-      {isVid ? (
-        <video src={url} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+      {d.image ? (
+        <img src={d.image} alt="" className="h-20 w-24 rounded-lg object-cover" />
       ) : (
-        <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="h-20 w-24 rounded-lg bg-zinc-100" />
       )}
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold">{d.title || d.site_name || 'קישור'}</p>
+        {d.description && <p className="mt-0.5 line-clamp-2 text-xs text-zinc-600">{d.description}</p>}
+        <p className="mt-1 text-[11px] text-zinc-500">{d.site_name || new URL(d.url).hostname}</p>
+      </div>
     </a>
   )
 }
-
-/* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string }
 type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag'
@@ -199,7 +92,6 @@ function friendlyError(msg: string) {
   if (m.includes('invalid credentials')) return 'שם משתמש לא קיים או סיסמה לא נכונה.'
   if (m.includes('inactive')) return 'החשבון לא פעיל.'
   if (m.includes('service role')) return 'חסר מפתח Service Role בקובץ ENV (SUPABASE_SERVICE_ROLE_KEY).'
-  if (m.includes('unauthorized')) return 'אין הרשאה (401). נסה להתנתק/למחוק עוגיות ולהתחבר שוב.'
   return msg || 'שגיאה'
 }
 
@@ -210,6 +102,7 @@ function fmt(iso?: string) {
   return d.toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'medium' })
 }
 
+// Convert ISO (timestamptz) -> value for <input type="datetime-local">
 function isoToLocalInput(iso?: string) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -222,18 +115,13 @@ function isoToLocalInput(iso?: string) {
   const mi = pad(d.getMinutes())
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`
 }
+
+// Convert datetime-local -> ISO string (keeps local timezone when creating Date)
 function localInputToIso(v?: string) {
   if (!v) return ''
   const d = new Date(v)
   if (Number.isNaN(d.getTime())) return ''
   return d.toISOString()
-}
-
-function parseLinesToArray(s: string) {
-  return (s || '')
-    .split('\n')
-    .map(x => x.trim())
-    .filter(Boolean)
 }
 
 export default function AdminApp() {
@@ -252,9 +140,9 @@ export default function AdminApp() {
   const [settings, setSettings] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
-  const [startAtLocal, setStartAtLocal] = useState('')
+  const [startAtLocal, setStartAtLocal] = useState('') // datetime-local UI
 
-  // HERO upload
+  // hero images
   const [heroFiles, setHeroFiles] = useState<File[]>([])
   const [heroBusy, setHeroBusy] = useState(false)
   const [heroMsg, setHeroMsg] = useState<string | null>(null)
@@ -266,13 +154,13 @@ export default function AdminApp() {
   const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>('blessing')
   const [pending, setPending] = useState<any[]>([])
   const [pendingCount, setPendingCount] = useState(0)
-  const [pendingBlessingsCount, setPendingBlessingsCount] = useState(0)
-  const [pendingPhotosCount, setPendingPhotosCount] = useState(0)
+
 
   // blessings manage (approved)
   const [approvedBlessings, setApprovedBlessings] = useState<any[]>([])
   const [editBlessing, setEditBlessing] = useState<any | null>(null)
   const [editBusy, setEditBusy] = useState(false)
+
 
   // ads
   const [ads, setAds] = useState<any[]>([])
@@ -288,16 +176,11 @@ export default function AdminApp() {
   // diag
   const [diag, setDiag] = useState<any | null>(null)
 
-  const bSize = Number(settings?.blessings_media_size ?? 96)
-  const safeBSize = Number.isFinite(bSize) ? Math.max(56, Math.min(220, bSize)) : 96
-  const showLinkDetails = settings?.link_preview_show_details === true
-
   async function refreshMe() {
     try {
       const me = await jfetch('/api/admin/me', { method: 'GET', headers: {} as any })
       setAdmin(me.admin)
       setTab('settings')
-      fetchTopCounts()
     } catch {
       setAdmin(null)
       setTab('login')
@@ -307,13 +190,6 @@ export default function AdminApp() {
   useEffect(() => {
     refreshMe()
   }, [])
-
-  useEffect(() => {
-    if (!admin) return
-    fetchTopCounts()
-    const t = setInterval(() => fetchTopCounts(), 15000)
-    return () => clearInterval(t)
-  }, [admin])
 
   const tabs = useMemo(() => {
     if (!admin) return []
@@ -337,9 +213,7 @@ export default function AdminApp() {
   }
 
   async function logout() {
-    try {
-      await jfetch('/api/admin/logout', { method: 'POST', body: '{}' })
-    } catch {}
+    await jfetch('/api/admin/logout', { method: 'POST', body: '{}' })
     setAdmin(null)
     setTab('login')
   }
@@ -357,10 +231,14 @@ export default function AdminApp() {
     setSaving(true)
     try {
       const payload = { ...(patch || settings) }
+
+      // apply datetime-local into start_at ISO
       if (startAtLocal) payload.start_at = localInputToIso(startAtLocal)
+
       const res = await jfetch('/api/admin/settings', { method: 'PUT', body: JSON.stringify(payload) })
       setSettings(res.settings)
       setStartAtLocal(isoToLocalInput(res.settings?.start_at))
+
       setSavedMsg(`✅ נשמר בהצלחה • עודכן ב: ${fmt(res.settings?.updated_at)}`)
       setTimeout(() => setSavedMsg(null), 2500)
     } catch (e: any) {
@@ -415,8 +293,7 @@ export default function AdminApp() {
     await saveSettings(patch)
   }
 
-  
-async function loadBlocks() {
+  async function loadBlocks() {
     const res = await jfetch('/api/admin/blocks', { method: 'GET', headers: {} as any })
     setBlocks(res.blocks)
   }
@@ -437,23 +314,7 @@ async function loadBlocks() {
     setPendingCount((res.posts || []).length)
   }
 
-  async function fetchTopCounts() {
-    try {
-      const [b, g, ga] = await Promise.all([
-        jfetch(`/api/admin/posts?status=pending&kind=blessing`, { method: 'GET', headers: {} as any }),
-        jfetch(`/api/admin/posts?status=pending&kind=gallery`, { method: 'GET', headers: {} as any }),
-        jfetch(`/api/admin/posts?status=pending&kind=gallery_admin`, { method: 'GET', headers: {} as any })
-      ])
-
-      const bCount = (b.posts || []).length
-      const pCount = (g.posts || []).length + (ga.posts || []).length
-
-      setPendingBlessingsCount(bCount)
-      setPendingPhotosCount(pCount)
-      setPendingCount(bCount + pCount)
-    } catch {}
-  }
-
+  
   async function loadApprovedBlessings() {
     const res = await jfetch('/api/admin/posts?status=approved&kind=blessing', { method: 'GET', headers: {} as any })
     setApprovedBlessings(res.posts || [])
@@ -471,7 +332,7 @@ async function loadBlocks() {
         link_url: editBlessing.link_url || null,
         media_url: editBlessing.media_url || null,
         media_path: editBlessing.media_path || null,
-        video_url: editBlessing.video_url || null
+        video_url: editBlessing.video_url || null,
       }
       const res = await jfetch('/api/admin/posts', { method: 'PUT', body: JSON.stringify(payload) })
       setApprovedBlessings(prev => prev.map(p => (p.id === res.post.id ? res.post : p)))
@@ -493,12 +354,12 @@ async function loadBlocks() {
       fd.set('file', file)
       fd.set('kind', 'blessing')
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
-      const upJson = await up.json().catch(() => ({}))
+      const upJson = await up.json()
       if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
       const res = await jfetch('/api/admin/posts', {
         method: 'PUT',
-        body: JSON.stringify({ id: editBlessing.id, media_path: upJson.path, media_url: upJson.publicUrl, video_url: null })
+        body: JSON.stringify({ id: editBlessing.id, media_path: upJson.path, media_url: upJson.publicUrl })
       })
       setApprovedBlessings(prev => prev.map(p => (p.id === res.post.id ? res.post : p)))
       setPending(prev => prev.map(p => (p.id === res.post.id ? res.post : p)))
@@ -522,19 +383,11 @@ async function loadBlocks() {
     }
   }
 
-  async function setPostStatus(id: string, status: string) {
+async function setPostStatus(id: string, status: string) {
     const res = await jfetch('/api/admin/posts', { method: 'PUT', body: JSON.stringify({ id, status }) })
     setPending(prev => prev.filter(p => p.id !== res.post.id))
   }
 
-
-  async function approve(id: string) {
-    await setPostStatus(id, 'approved')
-  }
-
-  async function reject(id: string) {
-    await setPostStatus(id, 'rejected')
-  }
   async function loadAds() {
     const res = await jfetch('/api/admin/ads', { method: 'GET', headers: {} as any })
     setAds(res.ads)
@@ -571,7 +424,7 @@ async function loadBlocks() {
         fd.set('kind', 'gallery_admin')
 
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
-        const upJson = await up.json().catch(() => ({}))
+        const upJson = await up.json()
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
         const created = await fetch('/api/posts', {
@@ -585,7 +438,7 @@ async function loadBlocks() {
             media_url: upJson.publicUrl
           })
         })
-        const cJson = await created.json().catch(() => ({}))
+        const cJson = await created.json()
         if (!created.ok) throw new Error(cJson?.error || 'שגיאה ביצירת פוסט')
       }
 
@@ -620,17 +473,14 @@ async function loadBlocks() {
     if (!admin) return
     if (tab === 'settings') loadSettings()
     if (tab === 'blocks') loadBlocks()
-    if (tab === 'moderation') {
-      loadPending()
-      loadApprovedBlessings()
-    }
+    if (tab === 'moderation') { loadPending(); loadApprovedBlessings(); }
     if (tab === 'ads') loadAds()
     if (tab === 'admin_gallery') loadAdminGallery()
     if (tab === 'diag') loadDiag()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, admin, pendingKind])
 
-  /* ===== LOGIN UI ===== */
+  // ===== LOGIN UI =====
   if (!admin) {
     return (
       <Card>
@@ -685,7 +535,7 @@ async function loadBlocks() {
     )
   }
 
-  /* ===== AUTHENTICATED UI ===== */
+  // ===== AUTHENTICATED UI =====
   return (
     <div className="space-y-4" dir="rtl">
       <Card>
@@ -693,21 +543,16 @@ async function loadBlocks() {
           <div className="text-right">
             <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
-
-            {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
-              <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {pendingPhotosCount}</span>
-              </div>
+            {pendingCount > 0 && (
+              <p className="text-xs text-amber-700">ממתינות לאישור: {pendingCount}</p>
             )}
 
             {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
           </div>
-
           <div className="flex flex-wrap gap-2">
             {tabs.map(t => (
               <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
-                {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
+                {t === "moderation" && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
               </Button>
             ))}
             <Button variant="ghost" onClick={logout}>יציאה</Button>
@@ -715,51 +560,411 @@ async function loadBlocks() {
         </div>
       </Card>
 
-      {/* ===== SETTINGS ===== */}
       {tab === 'settings' && settings && (
         <Card>
-          <h3 className="font-semibold">הגדרות</h3>
+          <h3 className="font-semibold">הגדרות כלליות</h3>
+
+          <div className="mt-3 grid gap-2">
+            <Input value={settings.event_name || ''} onChange={e => setSettings({ ...settings, event_name: e.target.value })} placeholder="שם אירוע" />
+
+            {/* start_at as datetime-local */}
+            <div className="grid gap-1">
+              <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
+              <input
+                type="datetime-local"
+                value={startAtLocal}
+                onChange={e => setStartAtLocal(e.target.value)}
+                className="w-full rounded-xl border border-zinc-200 px-3 py-2"
+              />
+              {settings.updated_at && <p className="text-[11px] text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
+            </div>
+
+            <Input value={settings.location_text || ''} onChange={e => setSettings({ ...settings, location_text: e.target.value })} placeholder="מיקום" />
+
+            <Input value={settings.waze_url || ''} onChange={e => setSettings({ ...settings, waze_url: e.target.value })} placeholder="קישור Waze" />
+
+            <Textarea value={settings.thank_you_text || ''} onChange={e => setSettings({ ...settings, thank_you_text: e.target.value })} placeholder="טקסט תודה (כללי)" rows={3} />
+
+            {/* HERO */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
+
+              <div className="mt-3 rounded-2xl border border-zinc-200 p-3">
+                <p className="font-semibold text-right">ברכות בדף הבית</p>
+                <div className="mt-2 grid gap-2">
+                  <Input
+                    value={String(settings.blessings_preview_limit ?? 3)}
+                    onChange={e => setSettings({ ...settings, blessings_preview_limit: Number(e.target.value) })}
+                    placeholder="כמה ברכות להציג בפריוויו בדף הבית (למשל 3)"
+                  />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={settings.blessings_show_all_button !== false}
+                      onChange={e => setSettings({ ...settings, blessings_show_all_button: e.target.checked })}
+                    />
+                    להציג כפתור “לכל הברכות” בדף הבית
+                  </label>
+                </div>
+              </div>
+
+              <Textarea
+                value={settings.hero_pre_text || ''}
+                onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
+                placeholder="טקסט לפני האירוע (עד 30 דק׳ אחרי start_at)"
+                rows={4}
+              />
+
+              <Textarea
+                value={settings.hero_live_text || ''}
+                onChange={e => setSettings({ ...settings, hero_live_text: e.target.value })}
+                placeholder="טקסט בזמן האירוע (אחרי 30 דק׳ ועד יום אחרי)"
+                rows={3}
+              />
+
+              <Textarea
+                value={settings.hero_post_text || ''}
+                onChange={e => setSettings({ ...settings, hero_post_text: e.target.value })}
+                placeholder="טקסט אחרי האירוע"
+                rows={4}
+              />
+
+              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+                <p className="text-sm font-medium">תמונות מתחלפות</p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="file" accept="image/*" multiple onChange={e => setHeroFiles(Array.from(e.target.files || []))} />
+                  <Button onClick={uploadHeroImages} disabled={heroBusy || heroFiles.length === 0}>
+                    {heroBusy ? 'מעלה...' : `העלה ${heroFiles.length || ''} תמונות`}
+                  </Button>
+                </div>
+
+                {heroMsg && <p className="text-sm text-zinc-700">{heroMsg}</p>}
+
+                <div className="grid gap-2">
+                  <label className="text-xs text-zinc-500">מהירות החלפה (שניות)</label>
+                  <Input
+                    value={String(settings.hero_rotate_seconds ?? 5)}
+                    onChange={e => setSettings({ ...settings, hero_rotate_seconds: Number(e.target.value) })}
+                    placeholder="למשל 5"
+                  />
+                </div>
+
+                {Array.isArray(settings.hero_images) && settings.hero_images.length > 0 && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {settings.hero_images.map((u: string) => (
+                      <div key={u} className="overflow-hidden rounded-2xl border border-zinc-200">
+                        <div className="relative aspect-[16/9] bg-zinc-50">
+                          <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                        </div>
+                        <div className="p-2 flex items-center justify-between gap-2">
+                          <Button variant="ghost" onClick={() => removeHeroImage(u)}>הסר</Button>
+                          <a className="text-xs underline" href={u} target="_blank" rel="noreferrer">פתח</a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(!Array.isArray(settings.hero_images) || settings.hero_images.length === 0) && (
+                  <p className="text-xs text-zinc-500">אין עדיין תמונות HERO.</p>
+                )}
+              </div>
+            </div>
+
+            {/* מתנות */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">מתנות</p>
+              <label className="text-sm flex items-center gap-2">
+                <input type="checkbox" checked={!!settings.gift_enabled} onChange={e => setSettings({ ...settings, gift_enabled: e.target.checked })} />
+                הצג בלוק מתנה
+              </label>
+
+              <Input value={settings.gift_bit_url || ''} onChange={e => setSettings({ ...settings, gift_bit_url: e.target.value })} placeholder="Bit URL" />
+              <Input value={settings.gift_paybox_url || ''} onChange={e => setSettings({ ...settings, gift_paybox_url: e.target.value })} placeholder="PayBox URL" />
+
+              <Input value={settings.gift_bit_image_url || ''} onChange={e => setSettings({ ...settings, gift_bit_image_url: e.target.value })} placeholder="Bit image URL (לא חובה)" />
+              <Input value={settings.gift_paybox_image_url || ''} onChange={e => setSettings({ ...settings, gift_paybox_image_url: e.target.value })} placeholder="PayBox image URL (לא חובה)" />
+
+              <Input
+                value={String(settings.gift_image_diameter ?? 160)}
+                onChange={e => setSettings({ ...settings, gift_image_diameter: Number(e.target.value) })}
+                placeholder="קוטר תמונה (px)"
+              />
+            </div>
+
+            {/* אישורים / מחיקה אוטומטית */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">אישורים / מחיקה אוטומטית</p>
+
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!settings.require_approval}
+                  onChange={e => setSettings({ ...settings, require_approval: e.target.checked })}
+                />
+                ברכות/תמונות דורשות אישור מנהל
+              </label>
+
+              <Input
+                value={String(settings.approval_lock_after_days ?? 7)}
+                onChange={e => setSettings({ ...settings, approval_lock_after_days: Number(e.target.value) })}
+                placeholder="אחרי כמה ימים מהאירוע להפעיל אישור אוטומטי"
+              />
+              <p className="text-[11px] text-zinc-500">
+                אחרי X ימים מתאריך האירוע — המערכת תדליק אוטומטית "דורש אישור מנהל". אפשר לפתוח ידנית, וזה יינעל שוב אחרי אותו X.
+              </p>
+
+              <Input
+                value={String(settings.archive_after_days ?? 120)}
+                onChange={e => setSettings({ ...settings, archive_after_days: Number(e.target.value) })}
+                placeholder="כמה ימים עד ארכיון (Drive)"
+              />
+
+              <Input
+                value={String(settings.delete_after_hours ?? 24)}
+                onChange={e => setSettings({ ...settings, delete_after_hours: Number(e.target.value) })}
+                placeholder="כמה שעות עד מחיקה לאחר ארכיון"
+              />
+            </div>
+
+            <Button onClick={() => saveSettings()} disabled={saving}>
+              {saving ? 'שומר...' : 'שמור'}
+            </Button>
+            {savedMsg && <p className="text-sm text-green-700">{savedMsg}</p>}
+            {err && <p className="text-sm text-red-600">{err}</p>}
+          </div>
+        </Card>
+      )}
+
+      {tab === 'blocks' && (
+        <Card>
+          <h3 className="font-semibold">בלוקים</h3>
+          <p className="text-xs text-zinc-500">הצגה/הסתרה + auto-hide ל־Gift.</p>
 
           <div className="mt-3 grid gap-3">
-            {pending.map(p => (
-              <div key={p.id} className="rounded-xl border border-zinc-200 p-3">
-                <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
-
-                <div className="mt-1">
-                  <p className="font-semibold text-right">{p.author_name || 'אורח'}</p>
-
-                  <div className="mt-2 flex justify-center">
-                    {(p.media_url || p.video_url) ? (
-                      <MediaBox media_url={p.media_url as any} video_url={(p as any).video_url as any} size={bSize} />
-                    ) : p.link_url ? (
-                      <LinkPreview url={p.link_url} size={bSize} showDetails={false} />
-                    ) : null}
+            {blocks.map(b => (
+              <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-right">
+                    <p className="font-medium">{b.type}</p>
+                    <p className="text-xs text-zinc-500">סדר: {b.order_index}</p>
                   </div>
-
-                  {p.text && <p className="mt-2 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
-
-                  {p.link_url && (
-                    <div className="mt-2">
-                      <LinkPreview url={p.link_url} size={bSize} showDetails />
-                    </div>
-                  )}
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button onClick={() => approve(p.id)} className="text-sm">אשר</Button>
-                    <Button onClick={() => reject(p.id)} variant="ghost" className="text-sm">דחה</Button>
-                  </div>
+                  <label className="text-sm flex items-center gap-2">
+                    <input type="checkbox" checked={!!b.is_visible} onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })} />
+                    מוצג
+                  </label>
                 </div>
+
+                {b.type === 'gift' && (
+                  <div className="mt-2 grid gap-2">
+                    <Input
+                      value={String(b.config?.auto_hide_after_hours ?? '')}
+                      onChange={e => {
+                        const v = e.target.value
+                        updateBlock({ id: b.id, config: { ...(b.config || {}), auto_hide_after_hours: v ? Number(v) : null } })
+                      }}
+                      placeholder="הסתר אחרי X שעות (למשל 24)"
+                    />
+                    <p className="text-xs text-zinc-500">אחרי X שעות מתחילת האירוע — בלוק מתנה נעלם מהדף הראשי.</p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {tab === 'moderation' && (
+        <Card>
+          <h3 className="font-semibold">אישור תכנים</h3>
+          <p className="mt-2 text-right text-sm text-zinc-600">ממתינות לאישור: {pending.length}</p>
+          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              disabled={pending.length === 0}
+              onClick={async () => {
+                for (const p of pending) {
+                  await setPostStatus(p.id, "approved")
+                }
+                await loadPending()
+              }}
+            >
+              אשר הכל
+            </Button>
+          </div>
+
+
+          <div className="mt-3 grid gap-3">
+            {pending.map(p => (
+                <div key={p.id} className="rounded-xl border border-zinc-200 p-3">
+                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
+
+                  <div className="mt-1 flex items-start justify-between gap-3">
+                    <div className="text-right">
+                      <p className="font-semibold">
+                        {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונת מנהל')}
+                      </p>
+                      {p.text && <p className="mt-1 whitespace-pre-wrap text-sm">{p.text}</p>}
+                      {p.link_url && (
+                        <a className="mt-2 inline-block text-sm underline" href={p.link_url} target="_blank" rel="noreferrer">
+                          פתח קישור
+                        </a>
+                      )}
+                    </div>
+
+                    {p.media_url && (
+                      <div className="h-24 w-24 overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
+                        <img src={p.media_url} alt="" className="h-full w-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                {p.text && <p className="mt-1 whitespace-pre-wrap text-sm">{p.text}</p>}
+                {p.media_url && <a className="mt-2 block text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח מדיה</a>}
+                <div className="mt-2 flex gap-2">
+                  {p.kind === 'blessing' && (
+                    <Button variant="ghost" onClick={() => setEditBlessing(p)}>ערוך</Button>
+                  )}
+                  <Button onClick={() => setPostStatus(p.id, 'approved')}>אשר</Button>
+                  <Button variant="ghost" onClick={() => setPostStatus(p.id, 'deleted')}>מחק</Button>
+                </div>
+              </div>
+            ))}
+            {pending.length === 0 && <p className="text-sm text-zinc-600">אין ממתינים.</p>}
+          </div>
+
+          <div className="mt-6 border-t border-zinc-200 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="font-semibold">ברכות מאושרות</h4>
+              <Button variant="ghost" onClick={loadApprovedBlessings}>רענן</Button>
+            </div>
+
+            <div className="mt-3 grid gap-3">
+              {approvedBlessings.map(b => (
+                <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
+                  <p className="text-xs text-zinc-500">{new Date(b.created_at).toLocaleString('he-IL')}</p>
+                  {(b.author_name || b.text) && (
+                    <p className="mt-1 whitespace-pre-wrap text-sm">
+                      {b.author_name ? <span className="font-semibold">{b.author_name}: </span> : null}
+                      {b.text || ''}
+                    </p>
+                  )}
+                  {b.media_url && <a className="mt-2 block text-sm" href={b.media_url} target="_blank" rel="noreferrer">פתח מדיה</a>}
+                  {b.link_url && <a className="mt-1 block text-sm" href={b.link_url} target="_blank" rel="noreferrer">פתח קישור</a>}
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
+                    <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
+                  </div>
+                </div>
+              ))}
+              {approvedBlessings.length === 0 && <p className="text-sm text-zinc-600">אין ברכות מאושרות.</p>}
+            </div>
+          </div>
+
+          {editBlessing && (
+            <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setEditBlessing(null)}>
+              <div className="mx-auto w-full max-w-xl rounded-2xl bg-white p-4" onClick={e => e.stopPropagation()}>
+                <h3 className="font-semibold">עריכת ברכה</h3>
+
+                <div className="mt-3 grid gap-2">
+                  <Input
+                    placeholder="שם"
+                    value={editBlessing.author_name || ''}
+                    onChange={e => setEditBlessing({ ...editBlessing, author_name: e.target.value })}
+                  />
+                  <Textarea
+                    placeholder="טקסט"
+                    rows={4}
+                    value={editBlessing.text || ''}
+                    onChange={e => setEditBlessing({ ...editBlessing, text: e.target.value })}
+                  />
+                  <Input
+                    placeholder="קישור (לא חובה)"
+                    value={editBlessing.link_url || ''}
+                    onChange={e => setEditBlessing({ ...editBlessing, link_url: e.target.value })}
+                  />
+
+                  <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+                    <p className="text-sm font-medium">מדיה</p>
+                    {editBlessing.media_url ? (
+                      <a className="text-sm underline" href={editBlessing.media_url} target="_blank" rel="noreferrer">פתח מדיה נוכחית</a>
+                    ) : (
+                      <p className="text-sm text-zinc-500">אין מדיה</p>
+                    )}
+
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      onChange={e => {
+                        const f = e.target.files?.[0]
+                        if (f) replaceBlessingMedia(f)
+                      }}
+                    />
+
+                    <Button
+                      variant="ghost"
+                      onClick={() => setEditBlessing({ ...editBlessing, media_url: null, media_path: null, video_url: null })}
+                    >
+                      הסר מדיה
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button onClick={saveBlessingEdits} disabled={editBusy}>
+                      {editBusy ? 'שומר...' : 'שמור'}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setEditBlessing(null)}>סגור</Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         </Card>
       )}
 
-      {/* ===== ADMIN GALLERY ===== */}
+      {tab === 'ads' && (
+        <Card>
+          <h3 className="font-semibold">פרסומות</h3>
+
+          <div className="mt-3 grid gap-2 rounded-xl border border-zinc-200 p-3">
+            <Input placeholder="כותרת" value={newAd.title} onChange={e => setNewAd({ ...newAd, title: e.target.value })} />
+            <Textarea placeholder="טקסט (לא חובה)" rows={2} value={newAd.body} onChange={e => setNewAd({ ...newAd, body: e.target.value })} />
+            <Input placeholder="image_url (לא חובה)" value={newAd.image_url} onChange={e => setNewAd({ ...newAd, image_url: e.target.value })} />
+            <Input placeholder="link_url (לא חובה)" value={newAd.link_url} onChange={e => setNewAd({ ...newAd, link_url: e.target.value })} />
+            <label className="text-sm flex items-center gap-2">
+              <input type="checkbox" checked={!!newAd.is_active} onChange={e => setNewAd({ ...newAd, is_active: e.target.checked })} />
+              פעיל
+            </label>
+            <Button onClick={createAd} disabled={!newAd.title}>הוסף פרסומת</Button>
+          </div>
+
+          <div className="mt-3 grid gap-3">
+            {ads.map(a => (
+              <div key={a.id} className="rounded-xl border border-zinc-200 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-right">
+                    <p className="font-medium">{a.title}</p>
+                    {a.link_url && <p className="text-xs text-zinc-500">{a.link_url}</p>}
+                  </div>
+                  <label className="text-sm flex items-center gap-2">
+                    <input type="checkbox" checked={!!a.is_active} onChange={e => toggleAd(a.id, e.target.checked)} />
+                    פעיל
+                  </label>
+                </div>
+                {a.body && <p className="mt-2 text-sm">{a.body}</p>}
+              </div>
+            ))}
+            {ads.length === 0 && <p className="text-sm text-zinc-600">אין פרסומות.</p>}
+          </div>
+        </Card>
+      )}
+
       {tab === 'admin_gallery' && (
         <Card>
           <h3 className="font-semibold">גלריית מנהל</h3>
+          <p className="text-xs text-zinc-500">העלאה מרובת תמונות + תצוגה + מחיקה.</p>
 
           <div className="mt-3 grid gap-2 rounded-xl border border-zinc-200 p-3">
             <input type="file" accept="image/*" multiple onChange={e => setAdminFiles(Array.from(e.target.files || []))} />
@@ -791,7 +996,9 @@ async function loadBlocks() {
                   <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
                   <div className="mt-2 flex gap-2">
                     <Button variant="ghost" onClick={() => deleteAdminImage(p.id)}>מחק</Button>
-                    {p.media_url && <a className="text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח</a>}
+                    {p.media_url && (
+                      <a className="text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח</a>
+                    )}
                   </div>
                 </div>
               </div>
@@ -802,19 +1009,24 @@ async function loadBlocks() {
         </Card>
       )}
 
-      {/* ===== DIAG ===== */}
       {tab === 'diag' && (
         <Card>
           <h3 className="font-semibold">דיאגנוסטיקה</h3>
+          <p className="text-xs text-zinc-500">בדיקות מהירות כדי להבין למה משהו לא מסתנכרן.</p>
 
           <div className="mt-3 grid gap-2">
             <Button variant="ghost" onClick={loadDiag}>רענן דיאגנוסטיקה</Button>
+
             <div className="rounded-xl border border-zinc-200 p-3 text-xs">
               <pre className="whitespace-pre-wrap">{JSON.stringify(diag, null, 2)}</pre>
             </div>
+
+            <p className="text-xs text-zinc-500">אפשר לפתוח ישירות: /api/admin/diag</p>
           </div>
         </Card>
       )}
+
+      {err && <p className="text-sm text-red-600">{err}</p>}
     </div>
   )
 }

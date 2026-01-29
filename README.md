@@ -13,7 +13,7 @@ ZIP זה כולל פרויקט Next.js 14 (App Router) + Supabase + Google Drive
   - `POST /api/posts` (ברכה/גלריה)
   - `POST /api/reactions/toggle`
   - Cron: `GET /api/cron/drive-sync`, `GET /api/cron/archive-and-delete`
-******
+
 ## התקנה מקומית
 ```bash
 npm install
