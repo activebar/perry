@@ -45,11 +45,6 @@ export type EventSettings = {
   admin_gallery_preview_limit?: number | null
   admin_gallery_show_all_button?: boolean | null
 
-  blessings_preview_limit?: number | null
-  blessings_show_all_button?: boolean | null
-
-  approval_lock_after_days?: number | null
-
   created_at?: string
   updated_at?: string
 }

@@ -27,17 +27,7 @@ export async function GET(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   try {
-    let row = await getLatestSettingsRow()
-
-    const lockDays = Number((row as any).approval_lock_after_days ?? 7)
-    const startAt = new Date((row as any).start_at)
-    const lockAt = Number.isFinite(lockDays) && lockDays > 0 ? new Date(startAt.getTime() + lockDays * 24 * 60 * 60 * 1000) : null
-    const isLocked = lockAt ? new Date() >= lockAt : false
-
-    if (isLocked && (row as any).require_approval === false) {
-      await supabaseServiceRole().from('event_settings').update({ require_approval: true }).eq('id', (row as any).id)
-      row = await getLatestSettingsRow()
-    }
+    const row = await getLatestSettingsRow()
     return NextResponse.json({ ok: true, settings: row })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })

@@ -1,19 +1,10 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
 
-const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
+import { computeEventPhase, fetchBlocks, fetchSettings } from '@/lib/db'
+import { supabaseAnon } from '@/lib/supabase'
 
-async function fetchSettingsAndBlocks() {
-  const sb = supabaseAnon()
-  const [{ data: settings, error: sErr }, { data: blocks, error: bErr }] = await Promise.all([
-    sb.from('event_settings').select('*').order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(1).single(),
-    sb.from('blocks').select('*').order('order_index', { ascending: true })
-  ])
-  if (sErr) throw sErr
-  if (bErr) throw bErr
-  return { settings, blocks: blocks || [] }
-}
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 async function fetchGalleryPreview(kind: 'gallery' | 'gallery_admin', limit: number) {
   const sb = supabaseAnon()
@@ -32,105 +23,35 @@ async function fetchGalleryPreview(kind: 'gallery' | 'gallery_admin', limit: num
   return data || []
 }
 
-async function fetchBlessingsPreview(limit: number, device_id?: string | null) {
-  const sb = supabaseAnon()
-  const safeLimit = Math.max(0, Math.min(20, Number(limit || 0)))
-  if (!safeLimit) return []
-
-  const { data: posts, error } = await sb
-    .from('posts')
-    .select('id, author_name, text, media_url, link_url, created_at')
-    .eq('kind', 'blessing')
-    .eq('status', 'approved')
-    .order('created_at', { ascending: false })
-    .limit(safeLimit)
-
-  if (error || !posts || posts.length === 0) return []
-
-  // counts + my reaction (service role)
-  const ids = posts.map(p => p.id)
-  const srv = supabaseServiceRole()
-  const { data: reactions } = await srv
-    .from('reactions')
-    .select('post_id, emoji, device_id')
-    .in('post_id', ids)
-
-  const countsById: Record<string, Record<string, number>> = {}
-  const myById: Record<string, string | null> = {}
-
-  for (const id of ids) {
-    countsById[id] = { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }
-    myById[id] = null
-  }
-
-  for (const r of reactions || []) {
-    const pid = (r as any).post_id
-    const emo = (r as any).emoji
-    if (!countsById[pid]) continue
-    if (countsById[pid][emo] == null) continue
-    countsById[pid][emo] += 1
-
-    if (device_id && (r as any).device_id === device_id) {
-      myById[pid] = emo
-    }
-  }
-
-  return (posts as any[]).map(p => ({
-    ...p,
-    reaction_counts: countsById[p.id] || { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
-    my_reactions: myById[p.id] ? [myById[p.id]] : []
-  }))
-}
-
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
-
 export async function GET() {
-  try {
-    const { settings, blocks } = await fetchSettingsAndBlocks()
-    const device_id = cookies().get('device_id')?.value || null
+  const now = new Date()
+  const [settings, blocks] = await Promise.all([fetchSettings(), fetchBlocks()])
 
-    // visible types
-    const now = new Date()
-    const visibleTypes = new Set(
-      (blocks || [])
-        .filter((b: any) => {
-          if (!b?.is_visible) return false
-          if (b.type === 'gift' && b.config?.auto_hide_after_hours) {
-            const hours = Number(b.config.auto_hide_after_hours)
-            if (Number.isFinite(hours) && hours > 0) {
-              const start = new Date(settings.start_at)
-              const hideAt = new Date(start.getTime() + hours * 60 * 60 * 1000)
-              if (now > hideAt) return false
-            }
-          }
-          return true
-        })
-        .map((b: any) => b.type)
-    )
+  const guestPreviewLimit = Number((settings as any).guest_gallery_preview_limit ?? 6)
+  const adminPreviewLimit = Number((settings as any).admin_gallery_preview_limit ?? 6)
 
-    const showGalleryBlock = visibleTypes.has('gallery')
+  const [guestPreview, adminPreview] = await Promise.all([
+    fetchGalleryPreview('gallery', guestPreviewLimit),
+    fetchGalleryPreview('gallery_admin', adminPreviewLimit)
+  ])
 
-    const guestPreviewLimit = Number(settings.guest_gallery_preview_limit ?? 6)
-    const adminPreviewLimit = Number(settings.admin_gallery_preview_limit ?? 6)
+  const phase = computeEventPhase(settings.start_at, now)
 
-    const blessingsPreviewLimit = Number(settings.blessings_preview_limit ?? 3)
-
-    const [guestPreview, adminPreview, blessingsPreview] = await Promise.all([
-      showGalleryBlock ? fetchGalleryPreview('gallery', guestPreviewLimit) : Promise.resolve([]),
-      showGalleryBlock ? fetchGalleryPreview('gallery_admin', adminPreviewLimit) : Promise.resolve([]),
-      fetchBlessingsPreview(blessingsPreviewLimit, device_id)
-    ])
-
-    return NextResponse.json({
+  return NextResponse.json(
+    {
       ok: true,
+      now: now.toISOString(),
+      phase,
       settings,
       blocks,
       guestPreview,
-      adminPreview,
-      blessingsPreview
-    })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
-  }
+      adminPreview
+    },
+    {
+      headers: {
+        // חשוב כדי שלא יהיו "תקיעות" בעדכון נתונים אחרי שמירה באדמין
+        'Cache-Control': 'no-store, max-age=0'
+      }
+    }
+  )
 }
