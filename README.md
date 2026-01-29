@@ -15,6 +15,8 @@ ZIP זה כולל פרויקט Next.js 14 (App Router) + Supabase + Google Drive
   - Cron: `GET /api/cron/drive-sync`, `GET /api/cron/archive-and-delete`
 
 ## התקנה מקומית
+
+
 ```bash
 npm install
 cp .env.example .env.local
