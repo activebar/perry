@@ -7,6 +7,33 @@ import { Button, Card, Input, Textarea } from '@/components/ui'
 type UnfurlData = { url: string; title: string; description: string; image: string; site_name: string }
 const unfurlCache = new Map<string, UnfurlData>()
 
+function hostOf(u: string) {
+  try {
+    return new URL(u).hostname
+  } catch {
+    return u
+  }
+}
+
+function youtubeThumb(u: string) {
+  try {
+    const url = new URL(u)
+    const host = url.hostname.replace(/^www\./, '')
+    let id = ''
+    if (host === 'youtu.be') {
+      id = url.pathname.replace(/^\//, '')
+    } else if (host.endsWith('youtube.com')) {
+      if (url.pathname === '/watch') id = url.searchParams.get('v') || ''
+      else if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2] || ''
+      else if (url.pathname.startsWith('/embed/')) id = url.pathname.split('/')[2] || ''
+    }
+    if (!id) return ''
+    return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+  } catch {
+    return ''
+  }
+}
+
 function useUnfurl(url?: string) {
   const [data, setData] = useState<UnfurlData | null>(null)
 
@@ -20,7 +47,11 @@ function useUnfurl(url?: string) {
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(u)}`)
+        const res = await fetch('/api/unfurl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: u })
+        })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) return
         const d = json?.data as UnfurlData
@@ -39,27 +70,47 @@ function useUnfurl(url?: string) {
 
 function LinkPreview({ url }: { url?: string }) {
   const d = useUnfurl(url)
+  const [showDetails, setShowDetails] = useState(false)
   if (!url) return null
   if (!d) return null
 
+  const img = d.image || youtubeThumb(d.url)
+  if (!img) {
+    // לא מציגים "קוביה ריקה" — רק לינק רגיל
+    return (
+      <a className="mt-2 block text-sm underline" href={d.url} target="_blank" rel="noreferrer">
+        {d.url}
+      </a>
+    )
+  }
+
   return (
-    <a
-      href={d.url}
-      target="_blank"
-      rel="noreferrer"
-      className="mt-2 flex gap-3 rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
-    >
-      {d.image ? (
-        <img src={d.image} alt="" className="h-20 w-24 rounded-lg object-cover" />
-      ) : (
-        <div className="h-20 w-24 rounded-lg bg-zinc-100" />
+    <div className="mt-2 rounded-xl border border-zinc-200 bg-white p-2">
+      <a href={d.url} target="_blank" rel="noreferrer" className="flex gap-3 hover:opacity-90">
+        <img src={img} alt="" className="h-20 w-24 rounded-lg object-cover" />
+        <div className="min-w-0">
+          <p className="text-[11px] text-zinc-600">{d.site_name || hostOf(d.url)}</p>
+          {showDetails && (
+            <>
+              <p className="mt-1 truncate text-sm font-semibold">{d.title || 'קישור'}</p>
+              {d.description && <p className="mt-0.5 line-clamp-2 text-xs text-zinc-600">{d.description}</p>}
+            </>
+          )}
+        </div>
+      </a>
+
+      {(d.title || d.description) && (
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowDetails(v => !v)}
+            className="text-xs underline text-zinc-700"
+          >
+            {showDetails ? 'הסתר פרטים' : 'הצג פרטים'}
+          </button>
+        </div>
       )}
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">{d.title || d.site_name || 'קישור'}</p>
-        {d.description && <p className="mt-0.5 line-clamp-2 text-xs text-zinc-600">{d.description}</p>}
-        <p className="mt-1 text-[11px] text-zinc-500">{d.site_name || new URL(d.url).hostname}</p>
-      </div>
-    </a>
+    </div>
   )
 }
 
@@ -154,6 +205,8 @@ export default function AdminApp() {
   const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>('blessing')
   const [pending, setPending] = useState<any[]>([])
   const [pendingCount, setPendingCount] = useState(0)
+  const [pendingBlessingsCount, setPendingBlessingsCount] = useState(0)
+  const [pendingPhotosCount, setPendingPhotosCount] = useState(0)
 
 
   // blessings manage (approved)
@@ -181,15 +234,33 @@ export default function AdminApp() {
       const me = await jfetch('/api/admin/me', { method: 'GET', headers: {} as any })
       setAdmin(me.admin)
       setTab('settings')
+      fetchTopCounts()
     } catch {
       setAdmin(null)
       setTab('login')
     }
   }
 
+  // refresh top counters occasionally when logged in
+  useEffect(() => {
+    if (!admin) return
+    const t = setInterval(() => {
+      fetchTopCounts()
+    }, 15000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admin?.email])
+
   useEffect(() => {
     refreshMe()
   }, [])
+
+  useEffect(() => {
+    if (!admin) return
+    fetchTopCounts()
+    const t = setInterval(() => fetchTopCounts(), 15000)
+    return () => clearInterval(t)
+  }, [admin])
 
   const tabs = useMemo(() => {
     if (!admin) return []
@@ -313,6 +384,29 @@ export default function AdminApp() {
     setPending(res.posts)
     setPendingCount((res.posts || []).length)
   }
+
+  async function fetchTopCounts() {
+    try {
+      const [b, g, ga] = await Promise.all([
+        jfetch(`/api/admin/posts?status=pending&kind=blessing`, { method: 'GET', headers: {} as any }),
+        jfetch(`/api/admin/posts?status=pending&kind=gallery`, { method: 'GET', headers: {} as any }),
+        jfetch(`/api/admin/posts?status=pending&kind=gallery_admin`, { method: 'GET', headers: {} as any })
+      ])
+
+      const bCount = (b.posts || []).length
+      const pCount = ((g.posts || []).length) + ((ga.posts || []).length)
+
+      setPendingBlessingsCount(bCount)
+      setPendingPhotosCount(pCount)
+
+      // keep existing "pendingCount" as a TOTAL, used for the moderation tab badge
+      setPendingCount(bCount + pCount)
+    } catch {
+      // ignore
+    }
+  }
+
+
 
   
   async function loadApprovedBlessings() {
@@ -543,8 +637,11 @@ async function setPostStatus(id: string, status: string) {
           <div className="text-right">
             <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
-            {pendingCount > 0 && (
-              <p className="text-xs text-amber-700">ממתינות לאישור: {pendingCount}</p>
+            {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
+              <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {pendingPhotosCount}</span>
+              </div>
             )}
 
             {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
