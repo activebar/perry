@@ -98,33 +98,39 @@ function HomeLinkThumb({ url, sizePx }: { url?: string | null; sizePx: number })
   )
 }
 
-function HomeLinkMeta({ url, showDetails }: { url?: string | null; showDetails?: boolean }) {
+function HomeLinkMeta({
+  url,
+  showDetails = false,
+}: {
+  url?: string | null
+  showDetails?: boolean
+}) {
   const d = useUnfurl(url || undefined)
   if (!url) return null
   if (!d) return null
+
+  const title = (d.title || '').trim()
+  const desc = (d.description || '').trim()
+  const host = hostOf(d.url)
+
   return (
-    <div className="mt-2 max-w-full" dir="ltr">
-      {/* דומיין תמיד */}
+    <div className="mt-2 text-[11px] text-zinc-600">
       <a
         href={d.url}
         target="_blank"
         rel="noreferrer"
-        className="block max-w-full truncate whitespace-nowrap text-[11px] text-zinc-600"
+        className="block max-w-full truncate whitespace-nowrap"
+        dir="ltr"
         title={d.url}
       >
-        {hostOf(d.url)}
+        {host}
       </a>
-      {/* אופציונלי: כותרת/תקציר (נשלט מהגדרה) */}
-      {showDetails && d.title ? (
-        <a
-          href={d.url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-0.5 block max-w-full truncate whitespace-nowrap text-[11px] text-zinc-500"
-          title={d.title}
-        >
-          {d.title}
-        </a>
+
+      {showDetails && (title || desc) ? (
+        <div className="mt-1 space-y-0.5">
+          {title ? <div className="truncate whitespace-nowrap">{title}</div> : null}
+          {desc ? <div className="truncate whitespace-nowrap opacity-80">{desc}</div> : null}
+        </div>
       ) : null}
     </div>
   )
@@ -197,7 +203,9 @@ export default function HomePage() {
   const heroSeconds = Number(settings?.hero_rotate_seconds ?? 4)
 
   const mediaSize = Number(settings?.blessings_media_size ?? 140)
-  const linkPreviewEnabled = settings?.link_preview_show_details !== false
+  const blessingsBlock = (blocks || []).find((b: any) => b?.type === 'blessings')
+  const linkPreviewEnabled = !!blessingsBlock?.config?.link_preview_enabled
+  const linkPreviewShowDetails = !!blessingsBlock?.config?.link_preview_show_details
 
   const heroPre =
     settings?.hero_pre_text ||
@@ -387,9 +395,15 @@ export default function HomePage() {
 
                       <div className="mt-3 flex justify-center">
                         {(p.video_url || p.media_url) ? (
-                          <div
+                          <button
+                            type="button"
                             className="relative overflow-hidden rounded-2xl bg-zinc-50"
                             style={{ width: mediaSize, height: mediaSize }}
+                            onClick={() => {
+                              const u = ((p.video_url || p.media_url) as string) || ''
+                              if (u) window.open(u, '_blank', 'noopener,noreferrer')
+                            }}
+                            aria-label="פתח מדיה"
                           >
                             {p.video_url ? (
                               <video
@@ -402,11 +416,11 @@ export default function HomePage() {
                               <img
                                 src={p.media_url as string}
                                 alt="תמונה"
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain"
                                 loading="lazy"
                               />
                             )}
-                          </div>
+                          </button>
                         ) : linkPreviewEnabled && p.link_url ? (
                           <HomeLinkThumb url={p.link_url} sizePx={mediaSize} />
                         ) : null}
@@ -418,7 +432,7 @@ export default function HomePage() {
 
                       {p.link_url && linkPreviewEnabled && (
                         <div className="mt-2">
-                          <HomeLinkMeta url={p.link_url} showDetails={!!settings.link_preview_show_details} />
+                            <HomeLinkMeta url={p.link_url} showDetails={linkPreviewShowDetails} />
                         </div>
                       )}
 

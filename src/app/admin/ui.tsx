@@ -68,7 +68,7 @@ function useUnfurl(url?: string) {
   return data
 }
 
-/** Preview נקי כמו בדף הבית/ברכות: תמונה + דומיין, בלי כותרות/תיאורים אלא אם showDetails=true */
+/** Preview נקי: תמונה/thumbnail ממורכז + שורת דומיין/URL (ללא שבירת בלוק) */
 function LinkPreview({
   url,
   size,
@@ -78,50 +78,55 @@ function LinkPreview({
   size: number
   showDetails?: boolean
 }) {
-  const d = useUnfurl(url || '')
+  const d = useUnfurl(url || undefined)
   if (!url) return null
   if (!d) return null
 
   const img = d.image || youtubeThumb(d.url)
-  const domain = d.site_name || hostOf(d.url)
-
-  if (!img) {
-    return (
-      <a className="mt-2 block text-sm underline" href={d.url} target="_blank" rel="noreferrer">
-        {d.url}
-      </a>
-    )
-  }
+  const domain = (() => {
+    try {
+      return new URL(d.url).hostname
+    } catch {
+      return ''
+    }
+  })()
 
   return (
-    <a
-      href={d.url}
-      target="_blank"
-      rel="noreferrer"
-      className="mt-2 flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
-    >
-      <div className="relative flex-none overflow-hidden rounded-lg bg-zinc-100" style={{ width: size, height: size }}>
-        <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      </div>
+    <div className="mt-2">
+      {img ? (
+        <div className="flex justify-center">
+          <a
+            href={d.url}
+            target="_blank"
+            rel="noreferrer"
+            className="block overflow-hidden rounded-2xl bg-zinc-100"
+            style={{ width: size, height: size }}
+            title={d.title || d.url}
+          >
+            <img src={img} alt={d.title || domain || 'Link preview'} className="h-full w-full object-cover" />
+          </a>
+        </div>
+      ) : null}
 
-      <div className="min-w-0">
-        <p className="text-[11px] text-zinc-600">{domain}</p>
-
-        {showDetails ? (
-          <>
-            <p className="mt-0.5 line-clamp-2 text-sm font-semibold">{d.title || 'קישור'}</p>
-            {d.description ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{d.description}</p> : null}
-            <p className="mt-1 truncate text-xs text-zinc-500" dir="ltr">
-              {d.url}
-            </p>
-          </>
-        ) : (
-          <p className="truncate text-xs text-zinc-500" dir="ltr">
-            {d.url}
-          </p>
-        )}
-      </div>
-    </a>
+      {showDetails ? (
+        <div className="mt-2 space-y-1">
+          <a
+            href={d.url}
+            target="_blank"
+            rel="noreferrer"
+            className="block text-[12px] text-zinc-700 hover:underline whitespace-nowrap overflow-hidden text-ellipsis"
+            dir="ltr"
+          >
+            {domain || d.url}
+          </a>
+          {d.title ? (
+            <div className="text-[12px] text-zinc-600 whitespace-nowrap overflow-hidden text-ellipsis" dir="ltr">
+              {d.title}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -248,7 +253,11 @@ export default function AdminApp() {
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
-  const [heroImagesText, setHeroImagesText] = useState('')
+
+  // HERO upload
+  const [heroFiles, setHeroFiles] = useState<File[]>([])
+  const [heroBusy, setHeroBusy] = useState(false)
+  const [heroMsg, setHeroMsg] = useState<string | null>(null)
 
   // blocks
   const [blocks, setBlocks] = useState<any[]>([])
@@ -339,7 +348,6 @@ export default function AdminApp() {
     const s = await jfetch('/api/admin/settings', { method: 'GET', headers: {} as any })
     setSettings(s.settings)
     setStartAtLocal(isoToLocalInput(s.settings?.start_at))
-    setHeroImagesText(Array.isArray(s.settings?.hero_images) ? s.settings.hero_images.join('\n') : '')
   }
 
   async function saveSettings(patch?: any) {
@@ -350,13 +358,9 @@ export default function AdminApp() {
     try {
       const payload = { ...(patch || settings) }
       if (startAtLocal) payload.start_at = localInputToIso(startAtLocal)
-      payload.hero_images = parseLinesToArray(heroImagesText)
-
       const res = await jfetch('/api/admin/settings', { method: 'PUT', body: JSON.stringify(payload) })
       setSettings(res.settings)
       setStartAtLocal(isoToLocalInput(res.settings?.start_at))
-      setHeroImagesText(Array.isArray(res.settings?.hero_images) ? res.settings.hero_images.join('\n') : '')
-
       setSavedMsg(`✅ נשמר בהצלחה • עודכן ב: ${fmt(res.settings?.updated_at)}`)
       setTimeout(() => setSavedMsg(null), 2500)
     } catch (e: any) {
@@ -366,7 +370,53 @@ export default function AdminApp() {
     }
   }
 
-  async function loadBlocks() {
+  async function uploadHeroImages() {
+    setHeroMsg(null)
+    if (!settings) return
+    if (!heroFiles.length) {
+      setHeroMsg('בחר תמונות להעלאה')
+      return
+    }
+    setHeroBusy(true)
+    try {
+      const uploaded: string[] = []
+      for (const f of heroFiles) {
+        const fd = new FormData()
+        fd.set('file', f)
+        fd.set('kind', 'hero')
+        const up = await fetch('/api/upload', { method: 'POST', body: fd })
+        const upJson = await up.json()
+        if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+        uploaded.push(upJson.publicUrl)
+      }
+
+      const prev = Array.isArray(settings.hero_images) ? settings.hero_images : []
+      const next = [...prev, ...uploaded]
+      const patch = { ...settings, hero_images: next }
+      setSettings(patch)
+      setHeroFiles([])
+      await saveSettings(patch)
+
+      setHeroMsg('✅ התמונות הועלו ונשמרו בהגדרות HERO')
+    } catch (e: any) {
+      setHeroMsg(friendlyError(e?.message || 'שגיאה'))
+    } finally {
+      setHeroBusy(false)
+    }
+  }
+
+  async function removeHeroImage(url: string) {
+    if (!settings) return
+    if (!confirm('להסיר את התמונה מהרוטציה?')) return
+    const prev = Array.isArray(settings.hero_images) ? settings.hero_images : []
+    const next = prev.filter((u: string) => u !== url)
+    const patch = { ...settings, hero_images: next }
+    setSettings(patch)
+    await saveSettings(patch)
+  }
+
+  
+async function loadBlocks() {
     const res = await jfetch('/api/admin/blocks', { method: 'GET', headers: {} as any })
     setBlocks(res.blocks)
   }
@@ -477,6 +527,14 @@ export default function AdminApp() {
     setPending(prev => prev.filter(p => p.id !== res.post.id))
   }
 
+
+  async function approve(id: string) {
+    await setPostStatus(id, 'approved')
+  }
+
+  async function reject(id: string) {
+    await setPostStatus(id, 'rejected')
+  }
   async function loadAds() {
     const res = await jfetch('/api/admin/ads', { method: 'GET', headers: {} as any })
     setAds(res.ads)
@@ -663,427 +721,38 @@ export default function AdminApp() {
           <h3 className="font-semibold">הגדרות</h3>
 
           <div className="mt-3 grid gap-3">
-            {/* כללי */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">הגדרות כלליות</p>
-
-              <Input
-                value={settings.event_name || ''}
-                onChange={e => setSettings({ ...settings, event_name: e.target.value })}
-                placeholder="שם אירוע"
-              />
-
-              <div className="grid gap-1">
-                <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
-                <input
-                  type="datetime-local"
-                  value={startAtLocal}
-                  onChange={e => setStartAtLocal(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 px-3 py-2"
-                />
-              </div>
-
-              <Input
-                value={settings.location_text || ''}
-                onChange={e => setSettings({ ...settings, location_text: e.target.value })}
-                placeholder="אולם / כתובת"
-              />
-
-              <Input
-                value={settings.waze_url || ''}
-                onChange={e => setSettings({ ...settings, waze_url: e.target.value })}
-                placeholder="קישור Waze"
-                dir="ltr"
-              />
-            </div>
-
-            {/* HERO */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">Hero / מסך פתיחה</p>
-
-              <label className="text-xs text-zinc-500">תמונות Hero (כל שורה URL אחד)</label>
-              <Textarea
-                rows={4}
-                value={heroImagesText}
-                onChange={e => setHeroImagesText(e.target.value)}
-                placeholder="https://...\nhttps://..."
-                dir="ltr"
-              />
-
-              <Input
-                value={String(settings.hero_rotate_seconds ?? 4)}
-                onChange={e => setSettings({ ...settings, hero_rotate_seconds: Number(e.target.value) })}
-                placeholder="כל כמה שניות להחליף תמונה (למשל 4)"
-              />
-
-              <label className="text-xs text-zinc-500">טקסט לפני האירוע</label>
-              <Textarea
-                rows={3}
-                value={settings.hero_pre_text || ''}
-                onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
-                placeholder="טקסט לפני האירוע"
-              />
-
-              <label className="text-xs text-zinc-500">טקסט בזמן האירוע</label>
-              <Textarea
-                rows={3}
-                value={settings.hero_live_text || ''}
-                onChange={e => setSettings({ ...settings, hero_live_text: e.target.value })}
-                placeholder="טקסט בזמן האירוע"
-              />
-
-              <label className="text-xs text-zinc-500">טקסט אחרי האירוע</label>
-              <Textarea
-                rows={3}
-                value={settings.hero_post_text || ''}
-                onChange={e => setSettings({ ...settings, hero_post_text: e.target.value })}
-                placeholder="טקסט אחרי האירוע"
-              />
-
-              <label className="text-xs text-zinc-500">טקסט תודה (fallback)</label>
-              <Textarea
-                rows={2}
-                value={settings.thank_you_text || ''}
-                onChange={e => setSettings({ ...settings, thank_you_text: e.target.value })}
-                placeholder="תודה שהייתם איתנו..."
-              />
-            </div>
-
-            {/* גלריות */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">גלריות</p>
-
-              <Input
-                value={settings.guest_gallery_title || ''}
-                onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
-                placeholder="כותרת גלריית אורחים"
-              />
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.guest_gallery_show_all_button !== false}
-                  onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
-                />
-                להציג כפתור “לכל התמונות” בגלריית אורחים
-              </label>
-
-              <Input
-                value={settings.admin_gallery_title || ''}
-                onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
-                placeholder="כותרת גלריית מנהל"
-              />
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.admin_gallery_show_all_button !== false}
-                  onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
-                />
-                להציג כפתור “לכל התמונות” בגלריית מנהל
-              </label>
-            </div>
-
-            {/* ברכות */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">ברכות</p>
-
-              <Input
-                value={String(settings.blessings_preview_limit ?? 3)}
-                onChange={e => setSettings({ ...settings, blessings_preview_limit: Number(e.target.value) })}
-                placeholder="כמה ברכות להציג בפריוויו בדף הבית (למשל 3)"
-              />
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.blessings_show_all_button !== false}
-                  onChange={e => setSettings({ ...settings, blessings_show_all_button: e.target.checked })}
-                />
-                להציג כפתור “שלח ברכה” בדף הבית
-              </label>
-
-              <label className="text-xs text-zinc-500">גודל תמונה/וידאו/Preview בברכות (px)</label>
-              <Input
-                value={String(settings.blessings_media_size ?? 96)}
-                onChange={e => setSettings({ ...settings, blessings_media_size: Number(e.target.value) })}
-                placeholder="למשל 96"
-              />
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.link_preview_show_details === true}
-                  onChange={e => setSettings({ ...settings, link_preview_show_details: e.target.checked })}
-                />
-                להציג פרטים בקישור (כותרת/תיאור). אם כבוי — תצוגה נקייה.
-              </label>
-            </div>
-
-            {/* פוטר */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">פוטר</p>
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!!settings.footer_enabled}
-                  onChange={e => setSettings({ ...settings, footer_enabled: e.target.checked })}
-                />
-                להציג פוטר
-              </label>
-
-              <Input
-                value={settings.footer_label || ''}
-                onChange={e => setSettings({ ...settings, footer_label: e.target.value })}
-                placeholder="טקסט פוטר (למשל Active Bar)"
-              />
-
-              <Input
-                value={settings.footer_url || ''}
-                onChange={e => setSettings({ ...settings, footer_url: e.target.value })}
-                placeholder="קישור פוטר"
-                dir="ltr"
-              />
-            </div>
-
-            <Button onClick={() => saveSettings()} disabled={saving}>
-              {saving ? 'שומר...' : 'שמור'}
-            </Button>
-
-            {savedMsg && <p className="text-sm text-green-700">{savedMsg}</p>}
-            {err && <p className="text-sm text-red-600">{err}</p>}
-          </div>
-        </Card>
-      )}
-
-      {/* ===== BLOCKS ===== */}
-      {tab === 'blocks' && (
-        <Card>
-          <h3 className="font-semibold">בלוקים</h3>
-
-          <div className="mt-3 grid gap-3">
-            {blocks.map(b => (
-              <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-right">
-                    <p className="font-medium">{b.type}</p>
-                    <p className="text-xs text-zinc-500">סדר: {b.order_index}</p>
-                  </div>
-                  <label className="text-sm flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={!!b.is_visible}
-                      onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })}
-                    />
-                    מוצג
-                  </label>
-                </div>
-
-                {b.type === 'gift' && (
-                  <div className="mt-2 grid gap-2">
-                    <Input
-                      value={String(b.config?.auto_hide_after_hours ?? '')}
-                      onChange={e => {
-                        const v = e.target.value
-                        updateBlock({ id: b.id, config: { ...(b.config || {}), auto_hide_after_hours: v ? Number(v) : null } })
-                      }}
-                      placeholder="הסתר אחרי X שעות (למשל 24)"
-                    />
-                    <p className="text-xs text-zinc-500">אחרי X שעות מתחילת האירוע — בלוק מתנה נעלם מהדף הראשי.</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {err && <p className="text-sm text-red-600">{err}</p>}
-        </Card>
-      )}
-
-      {/* ===== MODERATION ===== */}
-      {tab === 'moderation' && (
-        <Card>
-          <h3 className="font-semibold">אישור תכנים</h3>
-
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex gap-2">
-              <Button variant={pendingKind === 'blessing' ? 'primary' : 'ghost'} onClick={() => setPendingKind('blessing')}>
-                ברכות
-              </Button>
-              <Button variant={pendingKind === 'gallery' ? 'primary' : 'ghost'} onClick={() => setPendingKind('gallery')}>
-                תמונות אורחים
-              </Button>
-            </div>
-
-            <Button
-              variant="ghost"
-              disabled={pending.length === 0}
-              onClick={async () => {
-                for (const p of pending) await setPostStatus(p.id, 'approved')
-                await loadPending()
-              }}
-            >
-              אשר הכל
-            </Button>
-          </div>
-
-          <p className="mt-2 text-right text-sm text-zinc-600">ממתינות לאישור: {pending.length}</p>
-
-          <div className="mt-3 grid gap-3">
             {pending.map(p => (
               <div key={p.id} className="rounded-xl border border-zinc-200 p-3">
                 <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
 
-                <div className="mt-1 flex items-start justify-between gap-3">
-                  <div className="text-right min-w-0">
-                    <p className="font-semibold">
-                      {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונה')}
-                    </p>
+                <div className="mt-1">
+                  <p className="font-semibold text-right">{p.author_name || 'אורח'}</p>
 
-                    {p.text && <p className="mt-1 whitespace-pre-wrap text-sm">{p.text}</p>}
-
-                    {p.link_url && <LinkPreview url={p.link_url} size={safeBSize} showDetails={showLinkDetails} />}
+                  <div className="mt-2 flex justify-center">
+                    {(p.media_url || p.video_url) ? (
+                      <MediaBox media_url={p.media_url as any} video_url={(p as any).video_url as any} size={bSize} />
+                    ) : p.link_url ? (
+                      <LinkPreview url={p.link_url} size={bSize} showDetails={false} />
+                    ) : null}
                   </div>
 
-                  <MediaBox media_url={p.media_url} video_url={p.video_url} size={safeBSize} />
-                </div>
+                  {p.text && <p className="mt-2 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
-                <div className="mt-2 flex gap-2">
-                  {p.kind === 'blessing' && <Button variant="ghost" onClick={() => setEditBlessing(p)}>ערוך</Button>}
-                  <Button onClick={() => setPostStatus(p.id, 'approved')}>אשר</Button>
-                  <Button variant="ghost" onClick={() => setPostStatus(p.id, 'deleted')}>מחק</Button>
+                  {p.link_url && (
+                    <div className="mt-2">
+                      <LinkPreview url={p.link_url} size={bSize} showDetails />
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button onClick={() => approve(p.id)} className="text-sm">אשר</Button>
+                    <Button onClick={() => reject(p.id)} variant="ghost" className="text-sm">דחה</Button>
+                  </div>
                 </div>
               </div>
             ))}
-            {pending.length === 0 && <p className="text-sm text-zinc-600">אין ממתינים.</p>}
           </div>
 
-          <div className="mt-6 border-t border-zinc-200 pt-4">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="font-semibold">ברכות מאושרות</h4>
-              <Button variant="ghost" onClick={loadApprovedBlessings}>רענן</Button>
-            </div>
-
-            <div className="mt-3 grid gap-3">
-              {approvedBlessings.map(b => (
-                <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
-                  <p className="text-xs text-zinc-500">{new Date(b.created_at).toLocaleString('he-IL')}</p>
-
-                  <div className="mt-1 flex items-start justify-between gap-3">
-                    <div className="min-w-0 text-right">
-                      {(b.author_name || b.text) && (
-                        <p className="whitespace-pre-wrap text-sm">
-                          {b.author_name ? <span className="font-semibold">{b.author_name}: </span> : null}
-                          {b.text || ''}
-                        </p>
-                      )}
-
-                      {b.link_url && <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />}
-                    </div>
-
-                    <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
-                    <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
-                  </div>
-                </div>
-              ))}
-              {approvedBlessings.length === 0 && <p className="text-sm text-zinc-600">אין ברכות מאושרות.</p>}
-            </div>
-          </div>
-
-          {editBlessing && (
-            <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setEditBlessing(null)}>
-              <div className="mx-auto w-full max-w-xl rounded-2xl bg-white p-4" onClick={e => e.stopPropagation()}>
-                <h3 className="font-semibold">עריכת ברכה</h3>
-
-                <div className="mt-3 grid gap-2">
-                  <Input placeholder="שם" value={editBlessing.author_name || ''} onChange={e => setEditBlessing({ ...editBlessing, author_name: e.target.value })} />
-                  <Textarea placeholder="טקסט" rows={4} value={editBlessing.text || ''} onChange={e => setEditBlessing({ ...editBlessing, text: e.target.value })} />
-                  <Input placeholder="קישור (לא חובה)" value={editBlessing.link_url || ''} onChange={e => setEditBlessing({ ...editBlessing, link_url: e.target.value })} dir="ltr" />
-
-                  {editBlessing.link_url ? <LinkPreview url={editBlessing.link_url} size={safeBSize} showDetails={showLinkDetails} /> : null}
-
-                  <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-                    <p className="text-sm font-medium">מדיה</p>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <MediaBox media_url={editBlessing.media_url} video_url={editBlessing.video_url} size={safeBSize} />
-                      {(editBlessing.media_url || editBlessing.video_url) && (
-                        <a className="text-sm underline" href={(editBlessing.video_url || editBlessing.media_url) as string} target="_blank" rel="noreferrer">
-                          פתח מדיה נוכחית
-                        </a>
-                      )}
-                    </div>
-
-                    <input
-                      type="file"
-                      accept="image/*,video/*"
-                      onChange={e => {
-                        const f = e.target.files?.[0]
-                        if (f) replaceBlessingMedia(f)
-                      }}
-                    />
-
-                    <Button
-                      variant="ghost"
-                      onClick={() => setEditBlessing({ ...editBlessing, media_url: null, media_path: null, video_url: null })}
-                    >
-                      הסר מדיה
-                    </Button>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button onClick={saveBlessingEdits} disabled={editBusy}>{editBusy ? 'שומר...' : 'שמור'}</Button>
-                    <Button variant="ghost" onClick={() => setEditBlessing(null)}>סגור</Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {err && <p className="text-sm text-red-600">{err}</p>}
-        </Card>
-      )}
-
-      {/* ===== ADS ===== */}
-      {tab === 'ads' && (
-        <Card>
-          <h3 className="font-semibold">פרסומות</h3>
-
-          <div className="mt-3 grid gap-2 rounded-xl border border-zinc-200 p-3">
-            <Input placeholder="כותרת" value={newAd.title} onChange={e => setNewAd({ ...newAd, title: e.target.value })} />
-            <Textarea placeholder="טקסט (לא חובה)" rows={2} value={newAd.body} onChange={e => setNewAd({ ...newAd, body: e.target.value })} />
-            <Input placeholder="image_url (לא חובה)" value={newAd.image_url} onChange={e => setNewAd({ ...newAd, image_url: e.target.value })} dir="ltr" />
-            <Input placeholder="link_url (לא חובה)" value={newAd.link_url} onChange={e => setNewAd({ ...newAd, link_url: e.target.value })} dir="ltr" />
-            <label className="text-sm flex items-center gap-2">
-              <input type="checkbox" checked={!!newAd.is_active} onChange={e => setNewAd({ ...newAd, is_active: e.target.checked })} />
-              פעיל
-            </label>
-            <Button onClick={createAd} disabled={!newAd.title}>הוסף פרסומת</Button>
-          </div>
-
-          <div className="mt-3 grid gap-3">
-            {ads.map(a => (
-              <div key={a.id} className="rounded-xl border border-zinc-200 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-right">
-                    <p className="font-medium">{a.title}</p>
-                    {a.link_url && <p className="text-xs text-zinc-500">{a.link_url}</p>}
-                  </div>
-                  <label className="text-sm flex items-center gap-2">
-                    <input type="checkbox" checked={!!a.is_active} onChange={e => toggleAd(a.id, e.target.checked)} />
-                    פעיל
-                  </label>
-                </div>
-                {a.body && <p className="mt-2 text-sm">{a.body}</p>}
-              </div>
-            ))}
-            {ads.length === 0 && <p className="text-sm text-zinc-600">אין פרסומות.</p>}
-          </div>
         </Card>
       )}
 

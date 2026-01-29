@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Container, Card, Button } from "@/components/ui";
 import { supabaseServiceRole } from "@/lib/supabase";
-import { fetchSettings } from "@/lib/db";
+import { fetchBlocks, fetchSettings } from "@/lib/db";
 import BlessingsClient from "./ui";
 
 export const dynamic = "force-dynamic";
@@ -86,7 +86,11 @@ async function getFeed() {
 }
 
 export default async function BlessingsPage() {
-  const [feed, settings] = await Promise.all([getFeed(), fetchSettings()]);
+  const [feed, settings, blocks] = await Promise.all([
+    getFeed(),
+    fetchSettings(),
+    fetchBlocks(),
+  ]);
 
   return (
     <main>
@@ -117,8 +121,18 @@ export default async function BlessingsPage() {
           </div>
         </Card>
 
+        {/* במקום Card className */}
         <div className="mt-4">
-          <BlessingsClient initialFeed={feed} />
+          <Card>
+            <h2 className="text-xl font-bold">ברכות</h2>
+            <p className="text-sm text-zinc-600">
+              כתבו ברכה, צרפו תמונה, ותנו ריאקשן.
+            </p>
+          </Card>
+        </div>
+
+        <div className="mt-4">
+          <BlessingsClient initialFeed={feed} settings={settings} blocks={blocks} showHeader={false} />
         </div>
       </Container>
     </main>

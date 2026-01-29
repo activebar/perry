@@ -57,7 +57,17 @@ function firstHttpUrl(input: string) {
   return u
 }
 
-export default function BlessingsClient({ initialFeed, settings, showHeader = true }: { initialFeed: Post[]; settings?: any; showHeader?: boolean }) {
+export default function BlessingsClient({
+  initialFeed,
+  settings,
+  blocks,
+  showHeader = true,
+}: {
+  initialFeed: Post[]
+  settings?: any
+  blocks?: any[]
+  showHeader?: boolean
+}) {
   const [items, setItems] = useState<Post[]>(initialFeed || [])
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
@@ -319,16 +329,17 @@ async function saveEdit() {
   const blessingTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
   const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
   const mediaSize = Math.max(120, Math.min(520, Number(settings?.blessings_media_size || 320)))
-  const linkPreviewEnabled = settings?.link_preview_show_details !== false
-  const showLinkDetails = settings?.link_preview_show_details === true
+  const blessingsBlock = (blocks || []).find((b: any) => b?.type === 'blessings')
+  const linkPreviewEnabled = !!blessingsBlock?.config?.link_preview_enabled
+  const showLinkDetails = !!blessingsBlock?.config?.link_preview_show_details
 
   return (
-    <main>
+    <main dir="rtl" className="text-right">
       <Container>
         {showHeader && (
           <Card>
             <div className="flex items-center justify-between gap-2">
-              <div className="text-right" dir="rtl">
+              <div className="text-right">
                 <h2 className="text-xl font-bold">{blessingTitle}</h2>
                 <p className="text-sm text-zinc-600">{blessingSubtitle}</p>
               </div>
@@ -404,8 +415,10 @@ async function saveEdit() {
             <Card key={p.id}>
               <div className="text-right">
                 <div className="flex items-center justify-between">
+                  <p className="text-xs text-zinc-500">
+                    {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
+                  </p>
                   <p className="font-semibold">{p.author_name || 'אורח/ת'}</p>
-                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}</p>
                 </div>
 
                 {/* media / link preview (centered) */}
@@ -423,7 +436,7 @@ async function saveEdit() {
                           {video ? (
                             <video src={mediaUrl} controls className="h-full w-full object-contain" playsInline />
                           ) : (
-                            <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
+                            <img src={mediaUrl} alt="" className="h-full w-full object-contain" />
                           )}
                         </div>
                       </div>
