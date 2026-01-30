@@ -37,18 +37,31 @@ async function fetchBlessingsPreview(limit: number, device_id?: string | null) {
   const safeLimit = Math.max(0, Math.min(20, Number(limit || 0)))
   if (!safeLimit) return []
 
-  const { data: posts, error } = await sb
+  // Prefer server-side random order via RPC (if exists)
+const { data: rpcPosts, error: rpcErr } = await sb.rpc('get_home_posts_random', { p_limit: safeLimit })
+const posts = (rpcErr ? null : (rpcPosts as any[] | null)) || null
+const error = rpcErr || null
+
+// Fallback: latest first if RPC not installed yet
+const fallback = async () => {
+  const { data, error } = await sb
     .from('posts')
     .select('id, author_name, text, media_url, link_url, created_at')
     .eq('kind', 'blessing')
     .eq('status', 'approved')
     .order('created_at', { ascending: false })
     .limit(safeLimit)
+  return { data, error }
+}
 
-  if (error || !posts || posts.length === 0) return []
+const final = !posts ? await fallback() : { data: posts, error: null }
+const postsFinal = final.data as any[] | null
+const errFinal = final.error
+
+  if (errFinal || !postsFinal || postsFinal.length === 0) return []
 
   // counts + my reaction (service role)
-  const ids = posts.map(p => p.id)
+  const ids = postsFinal.map(p => p.id)
   const srv = supabaseServiceRole()
   const { data: reactions } = await srv
     .from('reactions')
@@ -75,7 +88,7 @@ async function fetchBlessingsPreview(limit: number, device_id?: string | null) {
     }
   }
 
-  return (posts as any[]).map(p => ({
+  return (postsFinal as any[]).map(p => ({
     ...p,
     reaction_counts: countsById[p.id] || { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
     my_reactions: myById[p.id] ? [myById[p.id]] : []

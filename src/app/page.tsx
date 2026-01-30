@@ -139,6 +139,24 @@ function HomeLinkMeta({
 export default function HomePage() {
   const [data, setData] = useState<HomePayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
+
+  async function triggerDownload(url: string) {
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = 'image'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   async function load() {
     setErr(null)
@@ -402,7 +420,8 @@ export default function HomePage() {
                             style={{ width: mediaSize, height: mediaSize }}
                             onClick={() => {
                               const u = ((p.video_url || p.media_url) as string) || ''
-                              if (u) window.open(u, '_blank', 'noopener,noreferrer')
+                              if (!u) return
+                              setLightbox({ url: u, isVideo: Boolean(p.video_url) })
                             }}
                             aria-label="פתח מדיה"
                           >
@@ -426,7 +445,7 @@ export default function HomePage() {
                         <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-800 text-right">{p.text}</p>
                       )}
 
-                      {p.link_url && linkPreviewEnabled && !linkPreviewShowDetails && (
+                      {p.link_url && linkPreviewEnabled && linkPreviewShowDetails && (
                         <div className="mt-2 mx-auto" style={{ width: mediaSize }}>
                           <HomeLinkMeta url={p.link_url} showDetails={true} />
                         </div>
@@ -482,6 +501,47 @@ export default function HomePage() {
             </div>
           )}
         </div>
+{lightbox && (
+  <div className="fixed inset-0 z-50 bg-black/80 p-4" onClick={() => setLightbox(null)}>
+    <div className="mx-auto flex h-full max-w-5xl items-center justify-center">
+      <div className="w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          {!lightbox.isVideo && (
+            <Button
+              variant="ghost"
+              className="bg-white/90 text-black shadow hover:bg-white"
+              onClick={() => triggerDownload(lightbox.url)}
+              type="button"
+            >
+              הורד תמונה
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            className="bg-white/90 text-black shadow hover:bg-white"
+            onClick={() => setLightbox(null)}
+            type="button"
+          >
+            סגור
+          </Button>
+        </div>
+        <div className="w-full overflow-hidden rounded-2xl bg-black">
+          {lightbox.isVideo ? (
+            <video
+              src={lightbox.url}
+              controls
+              autoPlay
+              playsInline
+              className="max-h-[85vh] w-full object-contain"
+            />
+          ) : (
+            <img src={lightbox.url} alt="" className="max-h-[85vh] w-full object-contain" />
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
       </Container>
     </main>
   )
