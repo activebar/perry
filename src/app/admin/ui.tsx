@@ -94,34 +94,40 @@ function LinkPreview({
   }
 
   return (
-    <a
-      href={d.url}
-      target="_blank"
-      rel="noreferrer"
-      className="mt-2 flex items-center gap-3 overflow-hidden rounded-xl border border-zinc-200 bg-white p-2 hover:bg-zinc-50"
-    >
-      <div className="relative flex-none overflow-hidden rounded-lg bg-zinc-100" style={{ width: size, height: size }}>
-        <img src={img} alt="" className="absolute inset-0 h-full w-full object-cover" />
+    <div className="mt-2">
+      <div className="flex justify-center">
+        <a
+          href={d.url}
+          target="_blank"
+          rel="noreferrer"
+          className="block overflow-hidden rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50"
+          style={{ width: size, height: size }}
+          aria-label="פתח קישור"
+        >
+          <img src={img} alt="" className="h-full w-full object-cover" />
+        </a>
       </div>
 
-      <div className="min-w-0">
-        <p className="text-[11px] text-zinc-600">{domain}</p>
+      <div className="mt-2 mx-auto" style={{ width: size }}>
+        <p className="text-[11px] text-zinc-600 truncate" dir="ltr" title={domain}>
+          {domain}
+        </p>
 
         {showDetails ? (
           <>
-            <p className="mt-0.5 line-clamp-2 text-sm font-semibold">{d.title || 'קישור'}</p>
+            {d.title ? <p className="mt-0.5 truncate text-sm font-semibold" title={d.title}>{d.title}</p> : null}
             {d.description ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{d.description}</p> : null}
-            <p className="mt-1 truncate text-xs text-zinc-500" dir="ltr">
+            <p className="mt-1 truncate text-xs text-zinc-500" dir="ltr" title={d.url}>
               {d.url}
             </p>
           </>
         ) : (
-          <p className="truncate text-xs text-zinc-500" dir="ltr">
+          <p className="mt-1 truncate text-xs text-zinc-500" dir="ltr" title={d.url}>
             {d.url}
           </p>
         )}
       </div>
-    </a>
+    </div>
   )
 }
 
@@ -285,6 +291,7 @@ export default function AdminApp() {
 
   const bSize = Number(settings?.blessings_media_size ?? 96)
   const safeBSize = Number.isFinite(bSize) ? Math.max(56, Math.min(220, bSize)) : 96
+  const linkPreviewEnabled = settings?.link_preview_enabled === true
   const showLinkDetails = settings?.link_preview_show_details === true
 
   async function refreshMe() {
@@ -748,27 +755,6 @@ async function loadBlocks() {
 
               <div className="mt-3 rounded-2xl border border-zinc-200 p-3">
                 <p className="font-semibold text-right">ברכות בדף הבית</p>
-<div className="mt-2 grid gap-2">
-  <Input
-    value={settings.blessings_title || ''}
-    onChange={e => setSettings({ ...settings, blessings_title: e.target.value })}
-    placeholder="כותרת בלוק הברכות (למשל: ברכות לעידו)"
-  />
-  <Input
-    value={settings.blessings_subtitle || ''}
-    onChange={e => setSettings({ ...settings, blessings_subtitle: e.target.value })}
-    placeholder='תיאור מתחת לכותרת (למשל: כתבו ברכה, צרפו תמונה, ותנו ריאקשן)'
-  />
-
-  <label className="text-sm flex items-center gap-2">
-    <input
-      type="checkbox"
-      checked={settings.link_preview_enabled !== false}
-      onChange={e => setSettings({ ...settings, link_preview_enabled: e.target.checked })}
-    />
-    להציג תצוגה מקדימה לקישורים (Link Preview)
-  </label>
-</div>
                 <div className="mt-2 grid gap-2">
                   <Input
                     value={String(settings.blessings_preview_limit ?? 3)}
@@ -1004,7 +990,7 @@ async function loadBlocks() {
 
       {/* ===== MODERATION ===== */}
       {tab === 'moderation' && (
-        <Card>
+        <Card dir="rtl">
           <h3 className="font-semibold">אישור תכנים</h3>
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -1034,21 +1020,28 @@ async function loadBlocks() {
           <div className="mt-3 grid gap-3">
             {pending.map(p => (
               <div key={p.id} className="rounded-xl border border-zinc-200 p-3">
-                <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
-
-                <div className="mt-1 flex items-start justify-between gap-3">
-                  <div className="text-right min-w-0">
-                    <p className="font-semibold">
-                      {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונה')}
-                    </p>
-
-                    {p.text && <p className="mt-1 whitespace-pre-wrap text-sm">{p.text}</p>}
-
-                    {p.link_url && <LinkPreview url={p.link_url} size={safeBSize} showDetails={showLinkDetails} />}
-                  </div>
-
-                  <MediaBox media_url={p.media_url} video_url={p.video_url} size={safeBSize} />
+                <div className="flex items-center justify-between flex-row-reverse">
+                  <p className="font-semibold text-right">
+                    {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונה')}
+                  </p>
+                  <p className="text-xs text-zinc-500" dir="ltr">{new Date(p.created_at).toLocaleString('he-IL')}</p>
                 </div>
+
+                {/* media (always centered) */}
+                {(p.media_url || p.video_url) ? (
+                  <div className="mt-3 flex justify-center">
+                    <MediaBox media_url={p.media_url} video_url={p.video_url} size={safeBSize} />
+                  </div>
+                ) : null}
+
+                {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
+
+                {/* pending blessings: always show link preview (thumb + title + url), regardless of global "showDetails" */}
+                {linkPreviewEnabled && p.link_url ? (
+                  <div className="mt-3">
+                    <LinkPreview url={p.link_url} size={safeBSize} showDetails={true} />
+                  </div>
+                ) : null}
 
                 <div className="mt-2 flex gap-2">
                   {p.kind === 'blessing' && <Button variant="ghost" onClick={() => setEditBlessing(p)}>ערוך</Button>}
@@ -1068,23 +1061,27 @@ async function loadBlocks() {
 
             <div className="mt-3 grid gap-3">
               {approvedBlessings.map(b => (
-                <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
-                  <p className="text-xs text-zinc-500">{new Date(b.created_at).toLocaleString('he-IL')}</p>
-
-                  <div className="mt-1 flex items-start justify-between gap-3">
-                    <div className="min-w-0 text-right">
-                      {(b.author_name || b.text) && (
-                        <p className="whitespace-pre-wrap text-sm">
-                          {b.author_name ? <span className="font-semibold">{b.author_name}: </span> : null}
-                          {b.text || ''}
-                        </p>
-                      )}
-
-                      {b.link_url && <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />}
-                    </div>
-
-                    <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
+                <div key={b.id} className="rounded-xl border border-zinc-200 p-3" dir="rtl">
+                  <div className="flex items-center justify-between flex-row-reverse">
+                    <p className="font-semibold text-right">{b.author_name || 'אורח/ת'}</p>
+                    <p className="text-xs text-zinc-500" dir="ltr">{new Date(b.created_at).toLocaleString('he-IL')}</p>
                   </div>
+
+                  {/* media centered */}
+                  {(b.media_url || b.video_url) ? (
+                    <div className="mt-3 flex justify-center">
+                      <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
+                    </div>
+                  ) : null}
+
+                  {b.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{b.text}</p>}
+
+                  {/* Approved: show link preview details only when toggle is ON */}
+                  {linkPreviewEnabled && showLinkDetails && b.link_url ? (
+                    <div className="mt-3">
+                      <LinkPreview url={b.link_url} size={safeBSize} showDetails={true} />
+                    </div>
+                  ) : null}
 
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>

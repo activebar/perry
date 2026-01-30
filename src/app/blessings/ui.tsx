@@ -98,6 +98,9 @@ export default function BlessingsClient({
   const [editFile, setEditFile] = useState<File | null>(null)
   const [editRemoveMedia, setEditRemoveMedia] = useState(false)
 
+  // full view for media
+  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
+
   function canEditMine(p: any) {
     return !!p?.can_edit
   }
@@ -329,9 +332,8 @@ async function saveEdit() {
   const blessingTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
   const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
   const mediaSize = Math.max(120, Math.min(520, Number(settings?.blessings_media_size || 320)))
-  const blessingsBlock = (blocks || []).find((b: any) => b?.type === 'blessings')
-  // Link preview is controlled from event_settings (white-label, no hardcoded UI)
-  const linkPreviewEnabled = settings?.link_preview_enabled !== false
+  // Link Preview is controlled globally via event_settings (not per-block config)
+  const linkPreviewEnabled = settings?.link_preview_enabled === true
   const showLinkDetails = settings?.link_preview_show_details === true
 
   return (
@@ -415,11 +417,11 @@ async function saveEdit() {
           {items.map(p => (
             <Card key={p.id}>
               <div className="text-right">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-zinc-500">
+                <div className="flex items-center justify-between flex-row-reverse">
+                  <p className="font-semibold text-right">{p.author_name || 'אורח/ת'}</p>
+                  <p className="text-xs text-zinc-500" dir="ltr">
                     {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
                   </p>
-                  <p className="font-semibold">{p.author_name || 'אורח/ת'}</p>
                 </div>
 
                 {/* media / link preview (centered) */}
@@ -430,16 +432,19 @@ async function saveEdit() {
                     const video = !!p.video_url || isVideo(mediaUrl)
                     return (
                       <div className="mt-3 flex justify-center">
-                        <div
+                        <button
+                          type="button"
                           className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
                           style={{ width: mediaSize, height: mediaSize }}
+                          onClick={() => setLightbox({ url: mediaUrl, isVideo: video })}
+                          aria-label="פתח מדיה"
                         >
                           {video ? (
-                            <video src={mediaUrl} controls className="h-full w-full object-contain" playsInline />
+                            <video src={mediaUrl} className="h-full w-full object-cover" muted playsInline />
                           ) : (
-                            <img src={mediaUrl} alt="" className="h-full w-full object-contain" />
+                            <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
                           )}
-                        </div>
+                        </button>
                       </div>
                     )
                   }
@@ -456,7 +461,9 @@ async function saveEdit() {
                 {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
                 {/* link meta/details (single line, below text) */}
-                {p.link_url && ((linkPreviewEnabled && !canEditMine(p)) || linkPreviewEnabled) && (
+                {/* In Blessings page: when "show details" is ON we hide meta line (per spec).
+                    When it is OFF we show only the domain/title single line. */}
+                {p.link_url && linkPreviewEnabled && !showLinkDetails && (
                   <div className="mt-2">
                     <LinkPreviewMeta url={p.link_url} force={false} />
                   </div>
@@ -496,7 +503,22 @@ async function saveEdit() {
             </Card>
           ))}
         </div>
-      
+
+        {/* LIGHTBOX */}
+        {lightbox && (
+          <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
+            <div className="mx-auto flex h-full max-w-3xl items-center justify-center" onClick={e => e.stopPropagation()}>
+              <div className="w-full overflow-hidden rounded-2xl bg-black">
+                {lightbox.isVideo ? (
+                  <video src={lightbox.url} controls autoPlay playsInline className="max-h-[85vh] w-full object-contain" />
+                ) : (
+                  <img src={lightbox.url} alt="" className="max-h-[85vh] w-full object-contain" />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
 {/* EDIT MODAL */}
 {editOpen && editDraft && (
   <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setEditOpen(false)}>

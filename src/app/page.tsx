@@ -203,9 +203,8 @@ export default function HomePage() {
   const heroSeconds = Number(settings?.hero_rotate_seconds ?? 4)
 
   const mediaSize = Number(settings?.blessings_media_size ?? 140)
-  const blessingsBlock = (blocks || []).find((b: any) => b?.type === 'blessings')
-  // Link preview is controlled from event_settings (white-label, no hardcoded UI)
-  const linkPreviewEnabled = settings?.link_preview_enabled !== false
+  // Link preview is controlled via event_settings (global)
+  const linkPreviewEnabled = settings?.link_preview_enabled === true
   const linkPreviewShowDetails = settings?.link_preview_show_details === true
 
   const heroPre =
@@ -374,8 +373,8 @@ export default function HomePage() {
             <Card dir="rtl">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-right">
-                  <p className="font-semibold">{(settings?.blessings_title || "ברכות") as string}</p>
-                  <p className="text-sm text-zinc-600">{(settings?.blessings_subtitle || "כתבו ברכה, צרפו תמונה/וידאו או קישור.") as string}</p>
+                  <p className="font-semibold">ברכות</p>
+                  <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה/וידאו או קישור.</p>
                 </div>
                 <div className="flex gap-2">
                   {blessingsShowAll && (
@@ -409,7 +408,7 @@ export default function HomePage() {
                             {p.video_url ? (
                               <video
                                 src={p.video_url}
-                                className="h-full w-full object-contain"
+                                className="h-full w-full object-cover"
                                 muted
                                 playsInline
                               />
@@ -417,7 +416,7 @@ export default function HomePage() {
                               <img
                                 src={p.media_url as string}
                                 alt="תמונה"
-                                className="h-full w-full object-contain"
+                                className="h-full w-full object-cover"
                                 loading="lazy"
                               />
                             )}
@@ -432,8 +431,8 @@ export default function HomePage() {
                       )}
 
                       {p.link_url && linkPreviewEnabled && (
-                        <div className="mt-2">
-                            <HomeLinkMeta url={p.link_url} showDetails={linkPreviewShowDetails} />
+                        <div className="mt-2 mx-auto" style={{ width: mediaSize }}>
+                          <HomeLinkMeta url={p.link_url} showDetails={linkPreviewShowDetails} />
                         </div>
                       )}
 
