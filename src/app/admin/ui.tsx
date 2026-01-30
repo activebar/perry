@@ -121,11 +121,7 @@ function LinkPreview({
               {d.url}
             </p>
           </>
-        ) : (
-          <p className="mt-1 truncate text-xs text-zinc-500" dir="ltr" title={d.url}>
-            {d.url}
-          </p>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -1035,7 +1031,7 @@ async function loadBlocks() {
           <div className="mt-3 grid gap-3">
             {pending.map(p => (
               <div key={p.id} className="rounded-xl border border-zinc-200 p-3">
-                <div className="flex items-center justify-between flex-row-reverse">
+                <div className="flex items-center justify-between">
                   <p className="font-semibold text-right">
                     {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונה')}
                   </p>
@@ -1077,7 +1073,7 @@ async function loadBlocks() {
             <div className="mt-3 grid gap-3">
               {approvedBlessings.map(b => (
                 <div key={b.id} className="rounded-xl border border-zinc-200 p-3" dir="rtl">
-                  <div className="flex items-center justify-between flex-row-reverse">
+                  <div className="flex items-center justify-between">
                     <p className="font-semibold text-right">{b.author_name || 'אורח/ת'}</p>
                     <p className="text-xs text-zinc-500" dir="ltr">{new Date(b.created_at).toLocaleString('he-IL')}</p>
                   </div>
@@ -1092,9 +1088,9 @@ async function loadBlocks() {
                   {b.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{b.text}</p>}
 
                   {/* Approved: show link preview details only when toggle is ON */}
-                  {linkPreviewEnabled && showLinkDetails && b.link_url ? (
+                  {linkPreviewEnabled && b.link_url ? (
                     <div className="mt-3">
-                      <LinkPreview url={b.link_url} size={safeBSize} showDetails={true} />
+                      <LinkPreview url={b.link_url} size={safeBSize} showDetails={!showLinkDetails} />
                     </div>
                   ) : null}
 

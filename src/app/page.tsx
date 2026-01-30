@@ -393,8 +393,9 @@ export default function HomePage() {
                         <p className="font-medium">{p.author_name || 'אורח/ת'}</p>
                       </div>
 
-                      <div className="mt-3 flex justify-center">
-                        {(p.video_url || p.media_url) ? (
+                      {/* media (if exists) */}
+                      {(p.video_url || p.media_url) ? (
+                        <div className="mt-3 flex justify-center">
                           <button
                             type="button"
                             className="relative overflow-hidden rounded-2xl bg-zinc-50"
@@ -406,33 +407,28 @@ export default function HomePage() {
                             aria-label="פתח מדיה"
                           >
                             {p.video_url ? (
-                              <video
-                                src={p.video_url}
-                                className="h-full w-full object-cover"
-                                muted
-                                playsInline
-                              />
+                              <video src={p.video_url} className="h-full w-full object-cover" muted playsInline />
                             ) : (
-                              <img
-                                src={p.media_url as string}
-                                alt="תמונה"
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
+                              <img src={p.media_url as string} alt="תמונה" className="h-full w-full object-cover" loading="lazy" />
                             )}
                           </button>
-                        ) : linkPreviewEnabled && p.link_url ? (
+                        </div>
+                      ) : null}
+
+                      {/* link preview thumb (even if media exists) */}
+                      {linkPreviewEnabled && p.link_url ? (
+                        <div className="mt-3 flex justify-center">
                           <HomeLinkThumb url={p.link_url} sizePx={mediaSize} />
-                        ) : null}
-                      </div>
+                        </div>
+                      ) : null}
 
                       {p.text && (
                         <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-800 text-right">{p.text}</p>
                       )}
 
-                      {p.link_url && linkPreviewEnabled && (
+                      {p.link_url && linkPreviewEnabled && !linkPreviewShowDetails && (
                         <div className="mt-2 mx-auto" style={{ width: mediaSize }}>
-                          <HomeLinkMeta url={p.link_url} showDetails={linkPreviewShowDetails} />
+                          <HomeLinkMeta url={p.link_url} showDetails={true} />
                         </div>
                       )}
 

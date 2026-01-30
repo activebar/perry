@@ -432,21 +432,24 @@ async function saveEdit() {
           {items.map(p => (
             <Card key={p.id}>
               <div className="text-right">
-                <div className="flex items-center justify-between flex-row-reverse">
+                <div className="flex items-center justify-between">
                   <p className="font-semibold text-right">{p.author_name || 'אורח/ת'}</p>
                   <p className="text-xs text-zinc-500" dir="ltr">
                     {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
                   </p>
                 </div>
 
-                {/* media / link preview (centered) */}
+                {{/* media / link preview (centered) */}
                 {(() => {
                   const mediaUrl = (p.video_url || p.media_url) as string | null
                   const linkUrl = (p.link_url || '') as string
+                  const out: any[] = []
+
+                  // 1) User uploaded media (image/video) — always first
                   if (mediaUrl) {
                     const video = !!p.video_url || isVideo(mediaUrl)
-                    return (
-                      <div className="mt-3 flex justify-center">
+                    out.push(
+                      <div key="media" className="mt-3 flex justify-center">
                         <button
                           type="button"
                           className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
@@ -463,14 +466,18 @@ async function saveEdit() {
                       </div>
                     )
                   }
+
+                  // 2) Link preview thumb — shown when link exists and link preview enabled (even if media exists)
                   if (linkPreviewEnabled && linkUrl) {
-                    return (
-                      <div className="mt-3 flex justify-center">
+                    out.push(
+                      <div key="linkthumb" className="mt-3 flex justify-center">
                         <LinkPreviewThumb url={linkUrl} size={mediaSize} />
                       </div>
                     )
                   }
-                  return null
+
+                  if (out.length === 0) return null
+                  return <>{out}</>
                 })()}
 
                 {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
@@ -479,8 +486,8 @@ async function saveEdit() {
                 {/* In Blessings page: when "show details" is ON we hide meta line (per spec).
                     When it is OFF we show only the domain/title single line. */}
                 {p.link_url && linkPreviewEnabled && !showLinkDetails && (
-                  <div className="mt-2">
-                    <LinkPreviewMeta url={p.link_url} force={false} />
+                  <div className="mt-2" style={{ width: mediaSize }}>
+                    <LinkPreviewMeta url={p.link_url} force={true} />
                   </div>
                 )}
                 {/* reactions */}
