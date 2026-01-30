@@ -130,10 +130,10 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
           />
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => cameraRef.current?.click()}>
+            <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()}>
               צלם תמונה
             </Button>
-            <Button type="button" variant="outline" onClick={() => videoRef.current?.click()}>
+            <Button type="button" variant="ghost" onClick={() => videoRef.current?.click()}>
               צלם וידאו
             </Button>
             <Button type="button" onClick={uploadAll} disabled={busy || files.length === 0}>
