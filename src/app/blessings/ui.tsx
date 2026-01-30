@@ -101,6 +101,21 @@ export default function BlessingsClient({
   // full view for media
   const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
 
+  function triggerDownload(url: string) {
+    try {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = ''
+      a.target = '_blank'
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
   function canEditMine(p: any) {
     return !!p?.can_edit
   }
@@ -508,7 +523,13 @@ async function saveEdit() {
         {lightbox && (
           <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
             <div className="mx-auto flex h-full max-w-3xl items-center justify-center" onClick={e => e.stopPropagation()}>
-              <div className="w-full overflow-hidden rounded-2xl bg-black">
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+{!lightbox.isVideo && (
+<Button variant="ghost" className="text-white hover:bg-white/10" onClick={() => triggerDownload(lightbox.url)} type="button">הורד תמונה</Button>
+)}
+<Button variant="ghost" className="text-white hover:bg-white/10" onClick={() => setLightbox(null)} type="button">סגור</Button>
+</div>
+<div className="w-full overflow-hidden rounded-2xl bg-black">
                 {lightbox.isVideo ? (
                   <video src={lightbox.url} controls autoPlay playsInline className="max-h-[85vh] w-full object-contain" />
                 ) : (

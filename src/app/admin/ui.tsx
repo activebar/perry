@@ -286,6 +286,21 @@ export default function AdminApp() {
   const [adminMsg, setAdminMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
+  function triggerDownload(url: string) {
+    try {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = ''
+      a.target = '_blank'
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
   // diag
   const [diag, setDiag] = useState<any | null>(null)
 
@@ -1199,15 +1214,17 @@ async function loadBlocks() {
           </div>
 
           {lightbox && (
-            <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
-              <div className="mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
-                <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
-                <div className="mt-3 text-center">
-                  <Button variant="ghost" onClick={() => setLightbox(null)} className="text-white hover:bg-white/10">סגור</Button>
-                </div>
-              </div>
-            </div>
-          )}
+  <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
+    <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+        <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="text-white hover:bg-white/10" type="button">הורד תמונה</Button>
+        <Button variant="ghost" onClick={() => setLightbox(null)} className="text-white hover:bg-white/10" type="button">סגור</Button>
+      </div>
+
+      <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
+    </div>
+  </div>
+)}
 
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {adminGallery.map((p: any) => (
