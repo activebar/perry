@@ -14,16 +14,19 @@ function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/');
 }
 
-function downloadUrl(url: string) {
+async function downloadUrl(url: string) {
   try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const fileName = (url.split('/').pop() || 'media').split('?')[0] || 'media';
     const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    a.target = '_blank';
-    a.rel = 'noopener';
+    a.href = blobUrl;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
   } catch {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
@@ -130,10 +133,10 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
           />
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()}>
+            <Button type="button" variant="outline" onClick={() => cameraRef.current?.click()}>
               צלם תמונה
             </Button>
-            <Button type="button" variant="ghost" onClick={() => videoRef.current?.click()}>
+            <Button type="button" variant="outline" onClick={() => videoRef.current?.click()}>
               צלם וידאו
             </Button>
             <Button type="button" onClick={uploadAll} disabled={busy || files.length === 0}>
@@ -165,14 +168,14 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" dir="rtl">
           <div className="w-full max-w-3xl">
             <div className="flex items-center justify-between mb-3">
-              <Button variant="ghost" onClick={() => setLightbox(null)} className="text-white hover:bg-white/10">
+              <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white">
                 סגור
               </Button>
               {lightbox.type === 'image' && (
                 <Button
                   variant="ghost"
                   onClick={() => downloadUrl(lightbox.url)}
-                  className="text-white hover:bg-white/10"
+                  className="bg-white/90 text-black shadow hover:bg-white"
                 >
                   הורד תמונה
                 </Button>

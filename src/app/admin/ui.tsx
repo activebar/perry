@@ -282,16 +282,20 @@ export default function AdminApp() {
   const [adminMsg, setAdminMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
-  function triggerDownload(url: string) {
+  async function triggerDownload(url: string) {
     try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+
+      const fileName = (url.split('/').pop() || 'image').split('?')[0] || 'image'
       const a = document.createElement('a')
-      a.href = url
-      a.download = ''
-      a.target = '_blank'
-      a.rel = 'noopener'
+      a.href = blobUrl
+      a.download = fileName
       document.body.appendChild(a)
       a.click()
       a.remove()
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500)
     } catch {
       window.open(url, '_blank', 'noopener,noreferrer')
     }
@@ -1090,7 +1094,7 @@ async function loadBlocks() {
                   {/* Approved: show link preview details only when toggle is ON */}
                   {linkPreviewEnabled && b.link_url ? (
                     <div className="mt-3">
-                      <LinkPreview url={b.link_url} size={safeBSize} showDetails={!showLinkDetails} />
+                      <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />
                     </div>
                   ) : null}
 
@@ -1213,8 +1217,8 @@ async function loadBlocks() {
   <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
     <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
       <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-        <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="text-white hover:bg-white/10" type="button">הורד תמונה</Button>
-        <Button variant="ghost" onClick={() => setLightbox(null)} className="text-white hover:bg-white/10" type="button">סגור</Button>
+        <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="bg-white/90 text-black shadow hover:bg-white" type="button">הורד תמונה</Button>
+        <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white" type="button">סגור</Button>
       </div>
 
       <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />

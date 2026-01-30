@@ -101,17 +101,23 @@ export default function BlessingsClient({
   // full view for media
   const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
 
-  function triggerDownload(url: string) {
+  async function triggerDownload(url: string) {
+    // Mobile browsers and cross-origin assets often ignore <a download>. We try a blob download first.
     try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+
+      const fileName = (url.split('/').pop() || 'image').split('?')[0] || 'image'
       const a = document.createElement('a')
-      a.href = url
-      a.download = ''
-      a.target = '_blank'
-      a.rel = 'noopener'
+      a.href = blobUrl
+      a.download = fileName
       document.body.appendChild(a)
       a.click()
       a.remove()
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500)
     } catch {
+      // Fallback: open in a new tab (user can long-press save on mobile)
       window.open(url, '_blank', 'noopener,noreferrer')
     }
   }
@@ -473,9 +479,8 @@ async function saveEdit() {
                 {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
                 {/* link meta/details (single line, below text) */}
-                {/* In Blessings page: when "show details" is ON we hide meta line (per spec).
-                    When it is OFF we show only the domain/title single line. */}
-                {p.link_url && linkPreviewEnabled && !showLinkDetails && (
+                {/* When "show details" is ON we show the meta line (title/domain). */}
+                {p.link_url && linkPreviewEnabled && showLinkDetails && (
                   <div className="mt-2">
                     <LinkPreviewMeta url={p.link_url} force={false} />
                   </div>
@@ -522,9 +527,9 @@ async function saveEdit() {
             <div className="mx-auto flex h-full max-w-3xl items-center justify-center" onClick={e => e.stopPropagation()}>
               <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
 {!lightbox.isVideo && (
-<Button variant="ghost" className="text-white hover:bg-white/10" onClick={() => triggerDownload(lightbox.url)} type="button">הורד תמונה</Button>
+<Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => triggerDownload(lightbox.url)} type="button">הורד תמונה</Button>
 )}
-<Button variant="ghost" className="text-white hover:bg-white/10" onClick={() => setLightbox(null)} type="button">סגור</Button>
+<Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => setLightbox(null)} type="button">סגור</Button>
 </div>
 <div className="w-full overflow-hidden rounded-2xl bg-black">
                 {lightbox.isVideo ? (
