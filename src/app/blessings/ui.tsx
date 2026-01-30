@@ -1,4 +1,4 @@
-'use client';
+'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -352,7 +352,7 @@ async function saveEdit() {
   const showLinkDetails = settings?.link_preview_show_details === true
 
   return (
-    <div dir="rtl" className="text-right">
+    <main dir="rtl" className="text-right">
       <Container>
         {showHeader && (
           <Card>
@@ -432,53 +432,43 @@ async function saveEdit() {
           {items.map(p => (
             <Card key={p.id}>
               <div className="text-right">
-                <div className="flex items-center justify-between">
+                <div className="grid grid-cols-2 items-center gap-2">
                   <p className="font-semibold text-right">{p.author_name || 'אורח/ת'}</p>
-                  <p className="text-xs text-zinc-500" dir="ltr">
+                  <p className="text-xs text-zinc-500 text-left" dir="ltr">
                     {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
                   </p>
                 </div>
 
-                {{/* media / link preview (centered) */}
+                {/* media (centered) */}
                 {(() => {
                   const mediaUrl = (p.video_url || p.media_url) as string | null
-                  const linkUrl = (p.link_url || '') as string
-                  const out: any[] = []
-
-                  // 1) User uploaded media (image/video) — always first
-                  if (mediaUrl) {
-                    const video = !!p.video_url || isVideo(mediaUrl)
-                    out.push(
-                      <div key="media" className="mt-3 flex justify-center">
-                        <button
-                          type="button"
-                          className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
-                          style={{ width: mediaSize, height: mediaSize }}
-                          onClick={() => setLightbox({ url: mediaUrl, isVideo: video })}
-                          aria-label="פתח מדיה"
-                        >
-                          {video ? (
-                            <video src={mediaUrl} className="h-full w-full object-cover" muted playsInline />
-                          ) : (
-                            <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
-                          )}
-                        </button>
-                      </div>
-                    )
-                  }
-
-                  // 2) Link preview thumb — shown when link exists and link preview enabled (even if media exists)
-                  if (linkPreviewEnabled && linkUrl) {
-                    out.push(
-                      <div key="linkthumb" className="mt-3 flex justify-center">
-                        <LinkPreviewThumb url={linkUrl} size={mediaSize} />
-                      </div>
-                    )
-                  }
-
-                  if (out.length === 0) return null
-                  return <>{out}</>
+                  if (!mediaUrl) return null
+                  const video = !!p.video_url || isVideo(mediaUrl)
+                  return (
+                    <div className="mt-3 flex justify-center">
+                      <button
+                        type="button"
+                        className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
+                        style={{ width: mediaSize, height: mediaSize }}
+                        onClick={() => setLightbox({ url: mediaUrl, isVideo: video })}
+                        aria-label="פתח מדיה"
+                      >
+                        {video ? (
+                          <video src={mediaUrl} className="h-full w-full object-cover" muted playsInline />
+                        ) : (
+                          <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
+                        )}
+                      </button>
+                    </div>
+                  )
                 })()}
+
+                {/* link preview thumb (centered) */}
+                {linkPreviewEnabled && p.link_url && (
+                  <div className="mt-3 flex justify-center">
+                    <LinkPreviewThumb url={p.link_url} size={mediaSize} />
+                  </div>
+                )}
 
                 {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
@@ -486,8 +476,8 @@ async function saveEdit() {
                 {/* In Blessings page: when "show details" is ON we hide meta line (per spec).
                     When it is OFF we show only the domain/title single line. */}
                 {p.link_url && linkPreviewEnabled && !showLinkDetails && (
-                  <div className="mt-2" style={{ width: mediaSize }}>
-                    <LinkPreviewMeta url={p.link_url} force={true} />
+                  <div className="mt-2">
+                    <LinkPreviewMeta url={p.link_url} force={false} />
                   </div>
                 )}
                 {/* reactions */}
@@ -611,7 +601,7 @@ async function saveEdit() {
   </div>
 )}
 </Container>
-    </div>
+    </main>
   )
 }
 type UnfurlData = { url: string; title: string; description: string; image: string; site_name: string }
