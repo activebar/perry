@@ -204,8 +204,9 @@ export default function HomePage() {
 
   const mediaSize = Number(settings?.blessings_media_size ?? 140)
   const blessingsBlock = (blocks || []).find((b: any) => b?.type === 'blessings')
-  const linkPreviewEnabled = !!blessingsBlock?.config?.link_preview_enabled
-  const linkPreviewShowDetails = !!blessingsBlock?.config?.link_preview_show_details
+  // Link preview is controlled from event_settings (white-label, no hardcoded UI)
+  const linkPreviewEnabled = settings?.link_preview_enabled !== false
+  const linkPreviewShowDetails = settings?.link_preview_show_details === true
 
   const heroPre =
     settings?.hero_pre_text ||
@@ -373,8 +374,8 @@ export default function HomePage() {
             <Card dir="rtl">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-right">
-                  <p className="font-semibold">ברכות</p>
-                  <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה/וידאו או קישור.</p>
+                  <p className="font-semibold">{(settings?.blessings_title || "ברכות") as string}</p>
+                  <p className="text-sm text-zinc-600">{(settings?.blessings_subtitle || "כתבו ברכה, צרפו תמונה/וידאו או קישור.") as string}</p>
                 </div>
                 <div className="flex gap-2">
                   {blessingsShowAll && (

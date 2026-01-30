@@ -330,8 +330,9 @@ async function saveEdit() {
   const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
   const mediaSize = Math.max(120, Math.min(520, Number(settings?.blessings_media_size || 320)))
   const blessingsBlock = (blocks || []).find((b: any) => b?.type === 'blessings')
-  const linkPreviewEnabled = !!blessingsBlock?.config?.link_preview_enabled
-  const showLinkDetails = !!blessingsBlock?.config?.link_preview_show_details
+  // Link preview is controlled from event_settings (white-label, no hardcoded UI)
+  const linkPreviewEnabled = settings?.link_preview_enabled !== false
+  const showLinkDetails = settings?.link_preview_show_details === true
 
   return (
     <main dir="rtl" className="text-right">

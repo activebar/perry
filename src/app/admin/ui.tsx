@@ -748,6 +748,27 @@ async function loadBlocks() {
 
               <div className="mt-3 rounded-2xl border border-zinc-200 p-3">
                 <p className="font-semibold text-right">ברכות בדף הבית</p>
+<div className="mt-2 grid gap-2">
+  <Input
+    value={settings.blessings_title || ''}
+    onChange={e => setSettings({ ...settings, blessings_title: e.target.value })}
+    placeholder="כותרת בלוק הברכות (למשל: ברכות לעידו)"
+  />
+  <Input
+    value={settings.blessings_subtitle || ''}
+    onChange={e => setSettings({ ...settings, blessings_subtitle: e.target.value })}
+    placeholder='תיאור מתחת לכותרת (למשל: כתבו ברכה, צרפו תמונה, ותנו ריאקשן)'
+  />
+
+  <label className="text-sm flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={settings.link_preview_enabled !== false}
+      onChange={e => setSettings({ ...settings, link_preview_enabled: e.target.checked })}
+    />
+    להציג תצוגה מקדימה לקישורים (Link Preview)
+  </label>
+</div>
                 <div className="mt-2 grid gap-2">
                   <Input
                     value={String(settings.blessings_preview_limit ?? 3)}
