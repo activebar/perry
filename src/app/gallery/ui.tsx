@@ -1,107 +1,101 @@
-'use client'
+'use client';
 
-import { useMemo, useRef, useState } from 'react'
-import { Button, Card } from '@/components/ui'
+import React, { useMemo, useRef, useState } from 'react';
+import { Button, Card } from '@/components/ui';
 
 type Post = {
-  id: string
-  media_url?: string | null
-  video_url?: string | null
-  created_at?: string
-}
+  id: string;
+  media_url?: string | null;
+  video_url?: string | null;
+  created_at?: string;
+};
 
 function isVideoFile(f: File) {
-  return (f.type || '').startsWith('video/')
+  return (f.type || '').startsWith('video/');
+}
+
+function downloadUrl(url: string) {
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 }
 
 export default function GalleryClient({ initialItems }: { initialItems: any[] }) {
-  const [items, setItems] = useState<Post[]>(initialItems || [])
-  const [files, setFiles] = useState<File[]>([])
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<{ url: string; type: 'image' | 'video' } | null>(null)
+  const [items, setItems] = useState<Post[]>(initialItems || []);
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
 
-  function triggerDownload(url: string) {
-    try {
-      const a = document.createElement('a')
-      a.href = url
-      a.download = ''
-      a.target = '_blank'
-      a.rel = 'noopener'
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-    } catch {
-      window.open(url, '_blank', 'noopener,noreferrer')
-    }
-  }
+  const pickerRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLInputElement | null>(null);
 
-  const pickerRef = useRef<HTMLInputElement | null>(null)
-  const cameraRef = useRef<HTMLInputElement | null>(null)
-  const videoRef = useRef<HTMLInputElement | null>(null)
-
-  const feed = useMemo(
-    () => (items || []).filter(i => i.media_url || i.video_url),
-    [items]
-  )
+  const feed = useMemo(() => (items || []).filter(i => i.media_url || i.video_url), [items]);
 
   function addFiles(list: FileList | null) {
-    const next = Array.from(list || [])
-    if (!next.length) return
-    setFiles(prev => [...prev, ...next])
+    const next = Array.from(list || []);
+    if (!next.length) return;
+    setFiles(prev => [...prev, ...next]);
   }
 
   function removeFile(idx: number) {
-    setFiles(prev => prev.filter((_, i) => i !== idx))
+    setFiles(prev => prev.filter((_, i) => i !== idx));
   }
 
   async function uploadAll() {
-    setErr(null)
+    setErr(null);
     if (!files.length) {
-      setErr('בחר תמונות/וידאו')
-      return
+      setErr('בחר תמונות/וידאו');
+      return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
-      // מעלים אחד אחד (יותר יציב במובייל)
       for (const f of files) {
-        const fd = new FormData()
-        fd.set('file', f)
-        fd.set('kind', 'gallery')
+        const fd = new FormData();
+        fd.set('file', f);
+        fd.set('kind', 'gallery');
 
-        const up = await fetch('/api/upload', { method: 'POST', body: fd })
-        const upJson = await up.json().catch(() => ({}))
-        if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+        const up = await fetch('/api/upload', { method: 'POST', body: fd });
+        const upJson = await up.json().catch(() => ({}));
+        if (!up.ok) throw new Error((upJson as any)?.error || 'שגיאה בהעלאה');
 
         const payload: any = {
           kind: 'gallery',
           author_name: null,
           text: null,
-          media_path: upJson.path,
-          media_url: isVideoFile(f) ? null : upJson.publicUrl,
-          video_url: isVideoFile(f) ? upJson.publicUrl : null,
-          link_url: null
-        }
+          media_path: (upJson as any).path,
+          media_url: isVideoFile(f) ? null : (upJson as any).publicUrl,
+          video_url: isVideoFile(f) ? (upJson as any).publicUrl : null,
+          link_url: null,
+        };
 
         const created = await fetch('/api/posts', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        const cJson = await created.json().catch(() => ({}))
-        if (!created.ok) throw new Error(cJson?.error || 'שגיאה ביצירת פוסט')
+          body: JSON.stringify(payload),
+        });
+        const cJson = await created.json().catch(() => ({}));
+        if (!created.ok) throw new Error((cJson as any)?.error || 'שגיאה ביצירת פוסט');
 
-        // אם זה מאושר מיידית — נכניס לרשימה
-        if (cJson?.status === 'approved' && cJson?.post) {
-          setItems(prev => [cJson.post, ...prev])
+        if ((cJson as any)?.status === 'approved' && (cJson as any)?.post) {
+          setItems(prev => [(cJson as any).post, ...prev]);
         }
       }
-
-      setFiles([])
+      setFiles([]);
     } catch (e: any) {
-      setErr(e?.message || 'שגיאה')
+      setErr(e?.message || 'שגיאה');
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -109,7 +103,6 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
     <div className="space-y-4" dir="rtl">
       <Card>
         <div className="flex flex-wrap items-center gap-2 justify-between">
-          {/* בוחר מהמכשיר */}
           <input
             ref={pickerRef}
             type="file"
@@ -118,7 +111,6 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
             onChange={e => addFiles(e.target.files)}
           />
 
-          {/* מצלמה (צילום תמונה) */}
           <input
             ref={cameraRef}
             type="file"
@@ -128,7 +120,6 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
             onChange={e => addFiles(e.target.files)}
           />
 
-          {/* צילום וידאו */}
           <input
             ref={videoRef}
             type="file"
@@ -138,18 +129,20 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
             onChange={e => addFiles(e.target.files)}
           />
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" type="button" onClick={() => cameraRef.current?.click()}>
-              📷 צלם
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" onClick={() => cameraRef.current?.click()}>
+              צלם תמונה
             </Button>
-            <Button variant="ghost" type="button" onClick={() => videoRef.current?.click()}>
-              🎥 וידאו
+            <Button type="button" variant="outline" onClick={() => videoRef.current?.click()}>
+              צלם וידאו
             </Button>
-            <Button onClick={uploadAll} disabled={busy || files.length === 0}>
-              {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
+            <Button type="button" onClick={uploadAll} disabled={busy || files.length === 0}>
+              {busy ? 'מעלה…' : 'העלה'}
             </Button>
           </div>
         </div>
+
+        {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
 
         {files.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -157,45 +150,48 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
               <button
                 key={idx}
                 type="button"
+                className="rounded-xl border px-3 py-1 text-sm"
                 onClick={() => removeFile(idx)}
-                className="rounded-xl border border-zinc-200 px-3 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
                 title="הסר"
               >
-                {isVideoFile(f) ? '🎥' : '🖼️'} {f.name} ✕
+                {f.name}
               </button>
             ))}
           </div>
         )}
-
-        {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
-        <p className="mt-2 text-xs text-zinc-500">טיפ: אם מוגדר אישור מנהל, התוכן יופיע אחרי אישור.</p>
       </Card>
 
       {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
-          <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
-            <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-{lightbox.type === \'image\' && (
-<Button variant="ghost" onClick={() => triggerDownload(lightbox.url)} className="text-white hover:bg-white/10" type="button">הורד תמונה</Button>
-)}
-<Button variant="ghost" onClick={() => setLightbox(null)} className="text-white hover:bg-white/10" type="button">סגור</Button>
-</div>
-{lightbox.type === 'video' ? (
-              <video src={lightbox.url} controls className="w-full rounded-2xl bg-black" playsInline />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" dir="rtl">
+          <div className="w-full max-w-3xl">
+            <div className="flex items-center justify-between mb-3">
+              <Button variant="ghost" onClick={() => setLightbox(null)} className="text-white hover:bg-white/10">
+                סגור
+              </Button>
+              {lightbox.type === 'image' && (
+                <Button
+                  variant="ghost"
+                  onClick={() => downloadUrl(lightbox.url)}
+                  className="text-white hover:bg-white/10"
+                >
+                  הורד תמונה
+                </Button>
+              )}
+            </div>
+
+            {lightbox.type === 'video' ? (
+              <video src={lightbox.url} controls playsInline className="w-full rounded-2xl bg-black" />
             ) : (
               <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
             )}
-            <div className="mt-3 text-center">
-              <Button variant="ghost" onClick={() => setLightbox(null)} className="text-white hover:bg-white/10">סגור</Button>
-            </div>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {feed.map((it) => {
-          const isVideo = !!it.video_url && !it.media_url
-          const url = (it.media_url || it.video_url) as string
+        {feed.map(it => {
+          const isVideo = !!it.video_url && !it.media_url;
+          const url = (it.media_url || it.video_url) as string;
           return (
             <button
               key={it.id}
@@ -211,7 +207,7 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
                 <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />
               )}
             </button>
-          )
+          );
         })}
       </div>
 
@@ -221,5 +217,5 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
         </Card>
       )}
     </div>
-  )
+  );
 }
