@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -352,7 +352,7 @@ async function saveEdit() {
   const showLinkDetails = settings?.link_preview_show_details === true
 
   return (
-    <main dir="rtl" className="text-right">
+    <div dir="rtl" className="text-right">
       <Container>
         {showHeader && (
           <Card>
@@ -611,7 +611,7 @@ async function saveEdit() {
   </div>
 )}
 </Container>
-    </main>
+    </div>
   )
 }
 type UnfurlData = { url: string; title: string; description: string; image: string; site_name: string }
