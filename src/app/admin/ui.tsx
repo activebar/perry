@@ -694,327 +694,6 @@ async function loadBlocks() {
     )
   }
 
-  /* ===== AUTHENTICATED UI ===== */
-  return (
-    <div className="space-y-4" dir="rtl">
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-right">
-            <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
-            <p className="text-xs text-zinc-500">Role: {admin.role}</p>
-
-            {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
-              <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {pendingPhotosCount}</span>
-              </div>
-            )}
-
-            {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {tabs.map(t => (
-              <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
-                {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
-              </Button>
-            ))}
-            <Button variant="ghost" onClick={logout}>יציאה</Button>
-          </div>
-        </div>
-      </Card>
-
-      {/* ===== SETTINGS ===== */}
-      {tab === 'settings' && settings && (
-        <Card>
-          <h3 className="font-semibold">הגדרות</h3>
-
-          <div className="mt-3 grid gap-3">
-            {/* כללי */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">הגדרות כלליות</p>
-
-              <Input
-                value={settings.event_name || ''}
-                onChange={e => setSettings({ ...settings, event_name: e.target.value })}
-                placeholder="שם אירוע"
-              />
-
-              <div className="grid gap-1">
-                <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
-                <input
-                  type="datetime-local"
-                  value={startAtLocal}
-                  onChange={e => setStartAtLocal(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 px-3 py-2"
-                />
-              </div>
-
-              <Input
-                value={settings.location_text || ''}
-                onChange={e => setSettings({ ...settings, location_text: e.target.value })}
-                placeholder="אולם / כתובת"
-              />
-
-              <Input
-                value={settings.waze_url || ''}
-                onChange={e => setSettings({ ...settings, waze_url: e.target.value })}
-                placeholder="קישור Waze"
-                dir="ltr"
-              />
-            </div>
-
-            {/* HERO */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
-
-              <Textarea
-                value={settings.hero_pre_text || ''}
-                onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
-                placeholder="טקסט לפני האירוע (עד 30 דק׳ אחרי start_at)"
-                rows={4}
-              />
-
-              <Textarea
-                value={settings.hero_live_text || ''}
-                onChange={e => setSettings({ ...settings, hero_live_text: e.target.value })}
-                placeholder="טקסט בזמן האירוע (אחרי 30 דק׳ ועד יום אחרי)"
-                rows={3}
-              />
-
-              <Textarea
-                value={settings.hero_post_text || ''}
-                onChange={e => setSettings({ ...settings, hero_post_text: e.target.value })}
-                placeholder="טקסט אחרי האירוע"
-                rows={4}
-              />
-
-              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-                <p className="text-sm font-medium">תמונות מתחלפות</p>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <input type="file" accept="image/*" multiple onChange={e => setHeroFiles(Array.from(e.target.files || []))} />
-                  <Button onClick={uploadHeroImages} disabled={heroBusy || heroFiles.length === 0}>
-                    {heroBusy ? 'מעלה...' : `העלה ${heroFiles.length || ''} תמונות`}
-                  </Button>
-                </div>
-
-                {heroMsg && <p className="text-sm text-zinc-700">{heroMsg}</p>}
-
-                <div className="grid gap-2">
-                  <label className="text-xs text-zinc-500">מהירות החלפה (שניות)</label>
-                  <Input
-                    value={String(settings.hero_rotate_seconds ?? 5)}
-                    onChange={e => setSettings({ ...settings, hero_rotate_seconds: Number(e.target.value) })}
-                    placeholder="למשל 5"
-                  />
-                </div>
-
-                {Array.isArray(settings.hero_images) && settings.hero_images.length > 0 && (
-                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {settings.hero_images.map((u: string) => (
-                      <div key={u} className="overflow-hidden rounded-2xl border border-zinc-200">
-                        <div className="relative aspect-[16/9] bg-zinc-50">
-                          <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                        </div>
-                        <div className="p-2 flex items-center justify-between gap-2">
-                          <Button variant="ghost" onClick={() => removeHeroImage(u)}>הסר</Button>
-                          <a className="text-xs underline" href={u} target="_blank" rel="noreferrer">פתח</a>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {(!Array.isArray(settings.hero_images) || settings.hero_images.length === 0) && (
-                  <p className="text-xs text-zinc-500">אין עדיין תמונות HERO.</p>
-                )}
-              </div>
-            </div>
-
-            {/* גלריות */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">גלריות</p>
-
-              <Input
-                value={settings.guest_gallery_title || ''}
-                onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
-                placeholder="כותרת גלריית אורחים"
-              />
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.guest_gallery_show_all_button !== false}
-                  onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
-                />
-                להציג כפתור “לכל התמונות” בגלריית אורחים
-              </label>
-
-              <Input
-                value={settings.admin_gallery_title || ''}
-                onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
-                placeholder="כותרת גלריית מנהל"
-              />
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.admin_gallery_show_all_button !== false}
-                  onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
-                />
-                להציג כפתור “לכל התמונות” בגלריית מנהל
-              </label>
-            </div>
-
-            {/* ברכות */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
-              <p className="text-sm font-medium text-right">ברכות</p>
-
-              <Input
-                className="text-right"
-                dir="rtl"
-                value={String(settings.blessings_label ?? '')}
-                onChange={e => setSettings({ ...settings, blessings_label: e.target.value })}
-                placeholder="כיתוב בתפריט (אופציונלי)"
-              />
-
-              <Input
-                className="text-right"
-                dir="rtl"
-                value={String(settings.blessings_title ?? '')}
-                onChange={e => setSettings({ ...settings, blessings_title: e.target.value })}
-                placeholder="כותרת בלוק/עמוד (למשל: ברכות / המלצות / חוות דעת)"
-              />
-
-              <Textarea
-                className="text-right"
-                dir="rtl"
-                value={String(settings.blessings_subtitle ?? '')}
-                onChange={e => setSettings({ ...settings, blessings_subtitle: e.target.value })}
-                placeholder="תיאור מתחת לכותרת (מופיע בבית ובדף ברכות)"
-                rows={2}
-              />
-
-              <label className="text-xs text-zinc-500 text-right">כמות ברכות בפריוויו בדף הבית</label>
-
-              <Input
-                className="text-right"
-                dir="rtl"
-                value={String(settings.blessings_preview_limit ?? 3)}
-                onChange={e => setSettings({ ...settings, blessings_preview_limit: Number(e.target.value) })}
-                placeholder="כמה ברכות להציג בפריוויו בדף הבית (למשל 3)"
-              />
-
-              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                <input
-                  type="checkbox"
-                  checked={settings.blessings_show_all_button !== false}
-                  onChange={e => setSettings({ ...settings, blessings_show_all_button: e.target.checked })}
-                />
-                להציג כפתור “שלח ברכה” בדף הבית
-              </label>
-
-              <label className="text-xs text-zinc-500 text-right">גודל תמונה/וידאו/Preview בברכות (px)</label>
-              <Input
-                className="text-right"
-                dir="rtl"
-                value={String(settings.blessings_media_size ?? 96)}
-                onChange={e => setSettings({ ...settings, blessings_media_size: Number(e.target.value) })}
-                placeholder="למשל 96"
-              />
-
-              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                <input
-                  type="checkbox"
-                  checked={settings.link_preview_show_details === true}
-                  onChange={e => setSettings({ ...settings, link_preview_show_details: e.target.checked })}
-                />
-                להציג פרטים בקישור (כותרת/תיאור). אם כבוי — תצוגה נקייה.
-              </label>
-            </div>
-
-            {/* פוטר */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">פוטר</p>
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!!settings.footer_enabled}
-                  onChange={e => setSettings({ ...settings, footer_enabled: e.target.checked })}
-                />
-                להציג פוטר
-              </label>
-
-              <Input
-                value={settings.footer_label || ''}
-                onChange={e => setSettings({ ...settings, footer_label: e.target.value })}
-                placeholder="טקסט פוטר (למשל Active Bar)"
-              />
-
-              <Input
-                value={settings.footer_url || ''}
-                onChange={e => setSettings({ ...settings, footer_url: e.target.value })}
-                placeholder="קישור פוטר"
-                dir="ltr"
-              />
-            </div>
-
-            <Button onClick={() => saveSettings()} disabled={saving}>
-              {saving ? 'שומר...' : 'שמור'}
-            </Button>
-
-            {savedMsg && <p className="text-sm text-green-700">{savedMsg}</p>}
-            {err && <p className="text-sm text-red-600">{err}</p>}
-          </div>
-        </Card>
-      )}
-
-      {/* ===== BLOCKS ===== */}
-      {tab === 'blocks' && (
-        <Card>
-          <h3 className="font-semibold">בלוקים</h3>
-
-          <div className="mt-3 grid gap-3">
-            {blocks.map(b => (
-              <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-right">
-                    <p className="font-medium">{b.type}</p>
-                    <p className="text-xs text-zinc-500">סדר: {b.order_index}</p>
-                  </div>
-                  <label className="text-sm flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={!!b.is_visible}
-                      onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })}
-                    />
-                    מוצג
-                  </label>
-                </div>
-
-                {b.type === 'gift' && (
-                  <div className="mt-2 grid gap-2">
-                    <Input
-                      value={String(b.config?.auto_hide_after_hours ?? '')}
-                      onChange={e => {
-                        const v = e.target.value
-                        updateBlock({ id: b.id, config: { ...(b.config || {}), auto_hide_after_hours: v ? Number(v) : null } })
-                      }}
-                      placeholder="הסתר אחרי X שעות (למשל 24)"
-                    />
-                    <p className="text-xs text-zinc-500">אחרי X שעות מתחילת האירוע — בלוק מתנה נעלם מהדף הראשי.</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {err && <p className="text-sm text-red-600">{err}</p>}
-        </Card>
-      )}
-
       {/* ===== MODERATION ===== */}
       {tab === 'moderation' && (
         <Card dir="rtl">
@@ -1022,10 +701,16 @@ async function loadBlocks() {
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex gap-2">
-              <Button variant={pendingKind === 'blessing' ? 'primary' : 'ghost'} onClick={() => setPendingKind('blessing')}>
+              <Button
+                variant={pendingKind === 'blessing' ? 'primary' : 'ghost'}
+                onClick={() => setPendingKind('blessing')}
+              >
                 ברכות
               </Button>
-              <Button variant={pendingKind === 'gallery' ? 'primary' : 'ghost'} onClick={() => setPendingKind('gallery')}>
+              <Button
+                variant={pendingKind === 'gallery' ? 'primary' : 'ghost'}
+                onClick={() => setPendingKind('gallery')}
+              >
                 תמונות אורחים
               </Button>
             </div>
@@ -1049,9 +734,13 @@ async function loadBlocks() {
               <div key={p.id} className="rounded-xl border border-zinc-200 p-3">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-right">
-                    {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונה')}
+                    {p.kind === 'blessing'
+                      ? (p.author_name || 'אורח/ת')
+                      : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונה')}
                   </p>
-                  <p className="text-xs text-zinc-500" dir="ltr">{new Date(p.created_at).toLocaleString('he-IL')}</p>
+                  <p className="text-xs text-zinc-500" dir="ltr">
+                    {new Date(p.created_at).toLocaleString('he-IL')}
+                  </p>
                 </div>
 
                 {/* media (always centered) */}
@@ -1063,7 +752,7 @@ async function loadBlocks() {
 
                 {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
-                {/* pending blessings: always show link preview (thumb + title + url), regardless of global "showDetails" */}
+                {/* pending blessings: always show link preview (thumb + title + url) */}
                 {linkPreviewEnabled && p.link_url ? (
                   <div className="mt-3">
                     <LinkPreview url={p.link_url} size={safeBSize} showDetails={true} />
@@ -1071,7 +760,11 @@ async function loadBlocks() {
                 ) : null}
 
                 <div className="mt-2 flex gap-2">
-                  {p.kind === 'blessing' && <Button variant="ghost" onClick={() => setEditBlessing(p)}>ערוך</Button>}
+                  {p.kind === 'blessing' && (
+                    <Button variant="ghost" onClick={() => setEditBlessing(p)}>
+                      ערוך
+                    </Button>
+                  )}
                   <Button onClick={() => setPostStatus(p.id, 'approved')}>אשר</Button>
                   <Button variant="ghost" onClick={() => setPostStatus(p.id, 'deleted')}>מחק</Button>
                 </div>
@@ -1080,47 +773,51 @@ async function loadBlocks() {
             {pending.length === 0 && <p className="text-sm text-zinc-600">אין ממתינים.</p>}
           </div>
 
-        {pendingKind === 'blessing' && (
-          <div className="mt-6 border-t border-zinc-200 pt-4">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="font-semibold">ברכות מאושרות</h4>
-              <Button variant="ghost" onClick={loadApprovedBlessings}>רענן</Button>
-            </div>
+          {pendingKind === 'blessing' && (
+            <div className="mt-6 border-t border-zinc-200 pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-semibold">ברכות מאושרות</h4>
+                <Button variant="ghost" onClick={loadApprovedBlessings}>רענן</Button>
+              </div>
 
-            <div className="mt-3 grid gap-3">
-              {approvedBlessings.map(b => (
-                <div key={b.id} className="rounded-xl border border-zinc-200 p-3" dir="rtl">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-right">{b.author_name || 'אורח/ת'}</p>
-                    <p className="text-xs text-zinc-500" dir="ltr">{new Date(b.created_at).toLocaleString('he-IL')}</p>
-                  </div>
-
-                  {/* media centered */}
-                  {(b.media_url || b.video_url) ? (
-                    <div className="mt-3 flex justify-center">
-                      <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
+              <div className="mt-3 grid gap-3">
+                {approvedBlessings.map(b => (
+                  <div key={b.id} className="rounded-xl border border-zinc-200 p-3" dir="rtl">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-right">{b.author_name || 'אורח/ת'}</p>
+                      <p className="text-xs text-zinc-500" dir="ltr">
+                        {new Date(b.created_at).toLocaleString('he-IL')}
+                      </p>
                     </div>
-                  ) : null}
 
-                  {b.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{b.text}</p>}
+                    {(b.media_url || b.video_url) ? (
+                      <div className="mt-3 flex justify-center">
+                        <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
+                      </div>
+                    ) : null}
 
-                  {/* Approved: show link preview details only when toggle is ON */}
-                  {linkPreviewEnabled && b.link_url ? (
-                    <div className="mt-3">
-                      <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />
+                    {b.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{b.text}</p>}
+
+                    {/* Approved: show link preview details only when toggle is ON */}
+                    {linkPreviewEnabled && b.link_url ? (
+                      <div className="mt-3">
+                        <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />
+                      </div>
+                    ) : null}
+
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
+                      <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
                     </div>
-                  ) : null}
-
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
-                    <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
                   </div>
-                </div>
-        )}
-              ))}
-              {approvedBlessings.length === 0 && <p className="text-sm text-zinc-600">אין ברכות מאושרות.</p>}
+                ))}
+
+                {approvedBlessings.length === 0 && (
+                  <p className="text-sm text-zinc-600">אין ברכות מאושרות.</p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {editBlessing && (
             <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setEditBlessing(null)}>
@@ -1128,11 +825,27 @@ async function loadBlocks() {
                 <h3 className="font-semibold">עריכת ברכה</h3>
 
                 <div className="mt-3 grid gap-2">
-                  <Input placeholder="שם" value={editBlessing.author_name || ''} onChange={e => setEditBlessing({ ...editBlessing, author_name: e.target.value })} />
-                  <Textarea placeholder="טקסט" rows={4} value={editBlessing.text || ''} onChange={e => setEditBlessing({ ...editBlessing, text: e.target.value })} />
-                  <Input placeholder="קישור (לא חובה)" value={editBlessing.link_url || ''} onChange={e => setEditBlessing({ ...editBlessing, link_url: e.target.value })} dir="ltr" />
+                  <Input
+                    placeholder="שם"
+                    value={editBlessing.author_name || ''}
+                    onChange={e => setEditBlessing({ ...editBlessing, author_name: e.target.value })}
+                  />
+                  <Textarea
+                    placeholder="טקסט"
+                    rows={4}
+                    value={editBlessing.text || ''}
+                    onChange={e => setEditBlessing({ ...editBlessing, text: e.target.value })}
+                  />
+                  <Input
+                    placeholder="קישור (לא חובה)"
+                    value={editBlessing.link_url || ''}
+                    onChange={e => setEditBlessing({ ...editBlessing, link_url: e.target.value })}
+                    dir="ltr"
+                  />
 
-                  {editBlessing.link_url ? <LinkPreview url={editBlessing.link_url} size={safeBSize} showDetails={showLinkDetails} /> : null}
+                  {editBlessing.link_url ? (
+                    <LinkPreview url={editBlessing.link_url} size={safeBSize} showDetails={showLinkDetails} />
+                  ) : null}
 
                   <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
                     <p className="text-sm font-medium">מדיה</p>
@@ -1140,7 +853,12 @@ async function loadBlocks() {
                     <div className="flex items-center justify-between gap-3">
                       <MediaBox media_url={editBlessing.media_url} video_url={editBlessing.video_url} size={safeBSize} />
                       {(editBlessing.media_url || editBlessing.video_url) && (
-                        <a className="text-sm underline" href={(editBlessing.video_url || editBlessing.media_url) as string} target="_blank" rel="noreferrer">
+                        <a
+                          className="text-sm underline"
+                          href={(editBlessing.video_url || editBlessing.media_url) as string}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
                           פתח מדיה נוכחית
                         </a>
                       )}
@@ -1164,7 +882,9 @@ async function loadBlocks() {
                   </div>
 
                   <div className="flex gap-2">
-                    <Button onClick={saveBlessingEdits} disabled={editBusy}>{editBusy ? 'שומר...' : 'שמור'}</Button>
+                    <Button onClick={saveBlessingEdits} disabled={editBusy}>
+                      {editBusy ? 'שומר...' : 'שמור'}
+                    </Button>
                     <Button variant="ghost" onClick={() => setEditBlessing(null)}>סגור</Button>
                   </div>
                 </div>
