@@ -32,6 +32,8 @@ async function downloadUrl(url: string) {
   }
 
 
+}
+
 async function shareUrl(url: string) {
   const clean = String(url || '').trim();
   if (!clean) return;
@@ -48,7 +50,6 @@ async function shareUrl(url: string) {
   } catch {
     window.open(clean, '_blank', 'noopener,noreferrer');
   }
-}
 }
 
 export default function GalleryClient({ initialItems }: { initialItems: any[] }) {
