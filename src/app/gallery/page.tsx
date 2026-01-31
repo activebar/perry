@@ -34,7 +34,7 @@ export default async function GalleryPage() {
             <div className="flex flex-wrap gap-2">
               <Link href="/"><Button variant="ghost">בית</Button></Link>
               <Link href="/gallery"><Button>גלריה</Button></Link>
-              <Link href="/blessings"><Button variant="ghost">ברכות</Button></Link>
+              <Link href="/blessings"><Button variant="ghost">{blessingsLabel}</Button></Link>
               {settings.gift_enabled && (
                 <Link href="/gift"><Button variant="ghost">מתנה</Button></Link>
               )}

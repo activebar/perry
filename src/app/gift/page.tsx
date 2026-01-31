@@ -37,7 +37,7 @@ export default async function GiftPage() {
             <div className="flex flex-wrap gap-2">
               <Link href="/"><Button variant="ghost">בית</Button></Link>
               <Link href="/gallery"><Button variant="ghost">גלריה</Button></Link>
-              <Link href="/blessings"><Button variant="ghost">ברכות</Button></Link>
+              <Link href="/blessings"><Button variant="ghost">{blessingsLabel}</Button></Link>
               <Link href="/gift"><Button>מתנה</Button></Link>
             </div>
           </div>

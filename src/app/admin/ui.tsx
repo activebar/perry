@@ -1080,6 +1080,7 @@ async function loadBlocks() {
             {pending.length === 0 && <p className="text-sm text-zinc-600">אין ממתינים.</p>}
           </div>
 
+        {pendingKind === 'blessing' && (
           <div className="mt-6 border-t border-zinc-200 pt-4">
             <div className="flex items-center justify-between gap-2">
               <h4 className="font-semibold">ברכות מאושרות</h4>
@@ -1115,6 +1116,7 @@ async function loadBlocks() {
                     <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
                   </div>
                 </div>
+        )}
               ))}
               {approvedBlessings.length === 0 && <p className="text-sm text-zinc-600">אין ברכות מאושרות.</p>}
             </div>
