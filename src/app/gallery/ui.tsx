@@ -30,6 +30,25 @@ async function downloadUrl(url: string) {
   } catch {
     window.open(url, '_blank', 'noopener,noreferrer');
   }
+
+
+async function shareUrl(url: string) {
+  const clean = String(url || '').trim();
+  if (!clean) return;
+  try {
+    // Prefer native share on mobile
+    if ((navigator as any).share) {
+      await (navigator as any).share({ url: clean });
+      return;
+    }
+  } catch {}
+  try {
+    await navigator.clipboard.writeText(clean);
+    alert('הקישור הועתק ✅');
+  } catch {
+    window.open(clean, '_blank', 'noopener,noreferrer');
+  }
+}
 }
 
 export default function GalleryClient({ initialItems }: { initialItems: any[] }) {
@@ -170,6 +189,10 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
             <div className="flex items-center justify-between mb-3">
               <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white">
                 סגור
+              </Button>
+              {/* share */}
+              <Button variant="ghost" onClick={() => shareUrl(lightbox.url)} className="bg-white/90 text-black shadow hover:bg-white">
+                שתף
               </Button>
               {lightbox.type === 'image' && (
                 <Button

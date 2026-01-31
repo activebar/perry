@@ -15,7 +15,10 @@ function isImage(url?: string | null) {
 
 async function resolvePostId(code: string) {
   const srv = supabaseServiceRole()
-  const clean = String(code || '').trim()
+  let clean = String(code || '').trim()
+  // strip trailing punctuation (e.g. WhatsApp adds '.' at end)
+  const m = clean.match(/^[0-9a-fA-F-]+/)
+  clean = (m?.[0] || '').toLowerCase()
   if (!clean) return null
   // If a full UUID was provided, try exact match first.
   if (clean.length >= 32) {

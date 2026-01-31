@@ -541,7 +541,7 @@ async function saveEdit() {
                   </div>
                 )}
                 {/* reactions */}
-                <div className="mt-3 flex flex-wrap items-center gap-2 justify-end">
+                <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto">
                   {EMOJIS.map(emo => {
                     const active = (p.my_reactions || []).includes(emo)
                     const c = (p.reaction_counts || {})[emo] || 0
@@ -549,6 +549,7 @@ async function saveEdit() {
                       <Button
                         key={emo}
                         variant={active ? 'primary' : 'ghost'}
+                        className="shrink-0"
                         onClick={() => toggleReaction(p.id, emo)}
                       >
                         {emo} {c ? c : ''}
@@ -569,7 +570,7 @@ async function saveEdit() {
 
                 {/* edit/delete (mine, within 1h) */}
                 {canEditMine(p) && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2 justify-end">
+                  <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto">
                     <Button variant="ghost" onClick={() => editMine(p.id)}>
                       ערוך (שעה)
                     </Button>

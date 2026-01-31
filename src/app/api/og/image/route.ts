@@ -106,30 +106,31 @@ export async function GET(req: Request) {
       })
     }
 
-    // Nothing found
-    const eventName = String((settings as any)?.event_name || 'Event')
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#111827"/>
-      <stop offset="100%" stop-color="#000000"/>
-    </linearGradient>
-  </defs>
-  <rect width="1200" height="630" fill="url(#g)"/>
-  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle"
-        font-family="Arial, sans-serif" font-size="64" fill="#ffffff">${escapeXml(eventName)}</text>
-  <text x="50%" y="62%" text-anchor="middle" dominant-baseline="middle"
-        font-family="Arial, sans-serif" font-size="36" fill="#e5e7eb">Event gift website powered by Active Bar</text>
-</svg>`
-    return new NextResponse(svg, {
-      headers: {
-        'content-type': 'image/svg+xml; charset=utf-8',
-        'cache-control': 'public, max-age=3600, s-maxage=3600'
-      }
-    })
-  } catch {
-    return NextResponse.json({ error: 'error' }, { status: 500 })
+    // Nothing found — return a PNG fallback (WhatsApp/Facebook often ignore SVG OG images)
+    const fs = await import('fs/promises')
+    try {
+      const buf = await fs.readFile(process.cwd() + '/public/og-fallback.png')
+      return new NextResponse(buf, {
+        headers: {
+          'content-type': 'image/png',
+          'cache-control': 'public, max-age=3600, s-maxage=3600'
+        }
+      })
+    } catch {
+      // last resort: 1x1 transparent png
+      const tiny = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/P4F6xQAAAABJRU5ErkJggg==',
+        'base64'
+      )
+      return new NextResponse(tiny, {
+        headers: {
+          'content-type': 'image/png',
+          'cache-control': 'public, max-age=3600, s-maxage=3600'
+        }
+      })
+    }
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
 }
 
