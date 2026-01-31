@@ -391,8 +391,8 @@ export default function HomePage() {
             <Card dir="rtl">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-right">
-                  <p className="font-semibold">ברכות</p>
-                  <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה/וידאו או קישור.</p>
+                  <p className="font-semibold">{settings?.blessings_title || settings?.blessings_label || 'ברכות'}</p>
+                  <p className="text-sm text-zinc-600 text-right">{settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה/וידאו או קישור.'}</p>
                 </div>
                 <div className="flex gap-2">
                   {blessingsShowAll && (

@@ -772,6 +772,21 @@ async function loadBlocks() {
                 <p className="font-semibold text-right">ברכות בדף הבית</p>
                 <div className="mt-2 grid gap-2">
                   <Input
+                    className="text-right"
+                    dir="rtl"
+                    value={String(settings.blessings_title ?? '')}
+                    onChange={e => setSettings({ ...settings, blessings_title: e.target.value })}
+                    placeholder="כותרת בלוק הברכות (למשל: ברכות / המלצות / חוות דעת)"
+                  />
+                  <Textarea
+                    className="text-right"
+                    dir="rtl"
+                    value={String(settings.blessings_subtitle ?? '')}
+                    onChange={e => setSettings({ ...settings, blessings_subtitle: e.target.value })}
+                    placeholder="תיאור מתחת לכותרת (מופיע בבית ובדף ברכות)"
+                    rows={2}
+                  />
+                  <Input
                     value={String(settings.blessings_preview_limit ?? 3)}
                     onChange={e => setSettings({ ...settings, blessings_preview_limit: Number(e.target.value) })}
                     placeholder="כמה ברכות להציג בפריוויו בדף הבית (למשל 3)"
