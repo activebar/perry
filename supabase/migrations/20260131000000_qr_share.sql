@@ -19,3 +19,9 @@ alter table public.event_settings
   add column if not exists share_modal_title text default 'שיתוף',
   add column if not exists share_no_text_fallback text default 'נשלחה ברכה מהממת 💙',
   add column if not exists share_message_template text default E'🎉 {EVENT_NAME} 🎉\n\n{TEXT}\n\n📌 לצפייה בעוד ברכות ותמונות:\n{LINK}';
+
+
+-- v4 additions
+alter table public.event_settings
+  add column if not exists qr_blessings_cta_label text default 'סרקו / שתפו את עמוד הברכות',
+  add column if not exists og_default_image_url text;

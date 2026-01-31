@@ -14,10 +14,13 @@ export default function BlessingsShareHeader({ settings }: { settings: any }) {
   const enabled = settings?.qr_enabled_blessings !== false
   if (!enabled) return null
 
+  const label = String(settings?.qr_blessings_cta_label || 'סרקו / שתפו את עמוד הברכות')
+
   return (
     <div className="mt-3 flex justify-end" dir="rtl">
-      <Button variant="ghost" onClick={() => setOpen(true)}>
-        סרקו / שתפו את עמוד הברכות
+      <Button variant="secondary" className="gap-2" onClick={() => setOpen(true)}>
+        <span aria-hidden>📱</span>
+        <span>{label}</span>
       </Button>
 
       <QrShareModal

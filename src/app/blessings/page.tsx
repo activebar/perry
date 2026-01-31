@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const title = `${eventName} – ברכות`;
 
   const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : [];
-  const imageUrl = typeof heroImages[0] === "string" ? heroImages[0] : undefined;
+  const imageUrl = (settings as any)?.og_default_image_url || (typeof heroImages[0] === "string" ? heroImages[0] : undefined);
 
   return {
     title,

@@ -368,7 +368,7 @@ async function saveEdit() {
   function buildLinkForPost(postId?: string) {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const base = origin ? `${origin}/blessings` : '/blessings'
-    if (postId && shareUsePermalink) return `${base}#post-${postId}`
+    if (postId && shareUsePermalink) return `${base}/p/${postId}`
     return base
   }
 

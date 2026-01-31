@@ -1002,6 +1002,21 @@ async function loadBlocks() {
                 </label>
               </div>
 
+
+              <div className="grid gap-2 mt-1 rounded-xl border border-zinc-200 p-3">
+                <p className="text-sm font-medium text-right">תמונת תצוגה לקישורים (OpenGraph)</p>
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.og_default_image_url ?? '')}
+                  onChange={e => setSettings({ ...settings, og_default_image_url: e.target.value })}
+                  placeholder="URL לתמונה ברירת מחדל לקישורים (אם ריק — נשתמש בתמונה הראשית הראשונה)"
+                />
+                <p className="text-xs text-zinc-500 text-right">
+                  לקישור ישיר לברכה עם תמונה — השיתוף ישתמש בנתיב /blessings/p/&lt;id&gt;.
+                </p>
+              </div>
+
               <div className="grid gap-2 mt-1">
                 <Input
                   className="text-right"
@@ -1017,6 +1032,15 @@ async function loadBlocks() {
                   value={String(settings.qr_subtitle ?? '')}
                   onChange={e => setSettings({ ...settings, qr_subtitle: e.target.value })}
                   placeholder="תת-כותרת QR (למשל: פותח את עמוד הברכות)"
+                />
+
+
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.qr_blessings_cta_label ?? '')}
+                  onChange={e => setSettings({ ...settings, qr_blessings_cta_label: e.target.value })}
+                  placeholder="טקסט כפתור בדף ברכות (למשל: סרקו / שתפו את עמוד הברכות)"
                 />
 
                 <Input
