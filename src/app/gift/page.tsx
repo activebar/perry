@@ -26,7 +26,7 @@ function CircleImage({ src, size, alt }: { src: string; size: number; alt: strin
 
 export default async function GiftPage() {
   const s: any = await fetchSettings()
-  const blessingsLabel = (String(s?.blessings_label || '').trim() || String(s?.blessings_title || '').trim() || 'ברכות')
+    const blessingsTitle = (String(s?.blessings_title || '').trim() || 'ברכות')
 
   const diameter = Math.max(80, Math.min(320, Number(s.gift_image_diameter || 160)))
 
@@ -39,7 +39,7 @@ export default async function GiftPage() {
             <div className="flex flex-wrap gap-2">
               <Link href="/"><Button variant="ghost">בית</Button></Link>
               <Link href="/gallery"><Button variant="ghost">גלריה</Button></Link>
-              <Link href="/blessings"><Button variant="ghost">{blessingsLabel}</Button></Link>
+              <Link href="/blessings"><Button variant="ghost">{blessingsTitle}</Button></Link>
               <Link href="/gift"><Button>מתנה</Button></Link>
             </div>
           </div>

@@ -23,7 +23,7 @@ async function getImages() {
 export default async function GalleryPage() {
   const [items, settings] = await Promise.all([getImages(), fetchSettings()])
 
-  const blessingsLabel = (String((settings as any)?.blessings_label || '').trim() || String((settings as any)?.blessings_title || '').trim() || 'ברכות')
+    const blessingsTitle = (String((settings as any)?.blessings_title || '').trim() || 'ברכות')
 
 
   return (
@@ -37,7 +37,7 @@ export default async function GalleryPage() {
             <div className="flex flex-wrap gap-2">
               <Link href="/"><Button variant="ghost">בית</Button></Link>
               <Link href="/gallery"><Button>גלריה</Button></Link>
-              <Link href="/blessings"><Button variant="ghost">{blessingsLabel}</Button></Link>
+              <Link href="/blessings"><Button variant="ghost">{blessingsTitle}</Button></Link>
               {settings.gift_enabled && (
                 <Link href="/gift"><Button variant="ghost">מתנה</Button></Link>
               )}
