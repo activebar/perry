@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
+import QrPanel from '@/components/qr/QrPanel'
 
 /* ===================== Link Preview (Unfurl) ===================== */
 
@@ -250,6 +251,13 @@ export default function AdminApp() {
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
+
+  const qrUrl = useMemo(() => {
+    if (!settings) return ''
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const path = String(settings?.qr_target_path || '/blessings')
+    return origin ? `${origin}${path}` : path
+  }, [settings?.qr_target_path, settings])
 
   // HERO upload
   const [heroFiles, setHeroFiles] = useState<File[]>([])
@@ -932,6 +940,169 @@ async function loadBlocks() {
                 />
                 להציג פרטים בקישור (כותרת/תיאור). אם כבוי — תצוגה נקייה.
               </label>
+            </div>
+
+            {/* QR & שיתוף */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+              <p className="text-sm font-medium text-right">QR & שיתוף</p>
+
+              <div className="grid gap-2">
+                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <input
+                    type="checkbox"
+                    checked={settings.qr_enabled_admin !== false}
+                    onChange={e => setSettings({ ...settings, qr_enabled_admin: e.target.checked })}
+                  />
+                  להציג QR בדף מנהל
+                </label>
+
+                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <input
+                    type="checkbox"
+                    checked={settings.qr_enabled_blessings !== false}
+                    onChange={e => setSettings({ ...settings, qr_enabled_blessings: e.target.checked })}
+                  />
+                  להציג QR/שיתוף בדף ברכות (אורחים)
+                </label>
+
+                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <input
+                    type="checkbox"
+                    checked={settings.share_enabled !== false}
+                    onChange={e => setSettings({ ...settings, share_enabled: e.target.checked })}
+                  />
+                  לאפשר שיתוף ברכות
+                </label>
+
+                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <input
+                    type="checkbox"
+                    checked={settings.share_whatsapp_enabled !== false}
+                    onChange={e => setSettings({ ...settings, share_whatsapp_enabled: e.target.checked })}
+                  />
+                  לאפשר שיתוף WhatsApp
+                </label>
+
+                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <input
+                    type="checkbox"
+                    checked={settings.share_webshare_enabled !== false}
+                    onChange={e => setSettings({ ...settings, share_webshare_enabled: e.target.checked })}
+                  />
+                  לאפשר Web Share (מובייל)
+                </label>
+
+                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <input
+                    type="checkbox"
+                    checked={settings.share_use_permalink !== false}
+                    onChange={e => setSettings({ ...settings, share_use_permalink: e.target.checked })}
+                  />
+                  שיתוף לקישור ישיר (Permalink)
+                </label>
+              </div>
+
+              <div className="grid gap-2 mt-1">
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.qr_title ?? '')}
+                  onChange={e => setSettings({ ...settings, qr_title: e.target.value })}
+                  placeholder="כותרת QR (למשל: סרקו והוסיפו ברכה)"
+                />
+
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.qr_subtitle ?? '')}
+                  onChange={e => setSettings({ ...settings, qr_subtitle: e.target.value })}
+                  placeholder="תת-כותרת QR (למשל: פותח את עמוד הברכות)"
+                />
+
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.qr_target_path ?? '/blessings')}
+                  onChange={e => setSettings({ ...settings, qr_target_path: e.target.value })}
+                  placeholder="נתיב יעד ל-QR (ברירת מחדל: /blessings)"
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <Input
+                    className="text-right"
+                    dir="rtl"
+                    value={String(settings.qr_btn_download_label ?? '')}
+                    onChange={e => setSettings({ ...settings, qr_btn_download_label: e.target.value })}
+                    placeholder="תווית כפתור: הורדה"
+                  />
+                  <Input
+                    className="text-right"
+                    dir="rtl"
+                    value={String(settings.qr_btn_copy_label ?? '')}
+                    onChange={e => setSettings({ ...settings, qr_btn_copy_label: e.target.value })}
+                    placeholder="תווית כפתור: העתק"
+                  />
+                  <Input
+                    className="text-right"
+                    dir="rtl"
+                    value={String(settings.qr_btn_whatsapp_label ?? '')}
+                    onChange={e => setSettings({ ...settings, qr_btn_whatsapp_label: e.target.value })}
+                    placeholder="תווית כפתור: וואטסאפ"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2 mt-1">
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.share_button_label ?? '')}
+                  onChange={e => setSettings({ ...settings, share_button_label: e.target.value })}
+                  placeholder="תווית כפתור שיתוף בכרטיס (ברירת מחדל: שתף)"
+                />
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.share_whatsapp_button_label ?? '')}
+                  onChange={e => setSettings({ ...settings, share_whatsapp_button_label: e.target.value })}
+                  placeholder="תווית כפתור WhatsApp (ברירת מחדל: שתף בוואטסאפ)"
+                />
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.share_modal_title ?? '')}
+                  onChange={e => setSettings({ ...settings, share_modal_title: e.target.value })}
+                  placeholder="כותרת מודאל שיתוף (ברירת מחדל: שיתוף)"
+                />
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.share_no_text_fallback ?? '')}
+                  onChange={e => setSettings({ ...settings, share_no_text_fallback: e.target.value })}
+                  placeholder="Fallback אם אין טקסט (למשל: נשלחה ברכה מהממת 💙)"
+                />
+                <Textarea
+                  className="text-right"
+                  dir="rtl"
+                  value={String(settings.share_message_template ?? '')}
+                  onChange={e => setSettings({ ...settings, share_message_template: e.target.value })}
+                  placeholder={`תבנית הודעה לשיתוף\nמשתנים: {EVENT_NAME} {AUTHOR_NAME} {TEXT} {LINK} {DATE}`}
+                  rows={5}
+                />
+              </div>
+
+              {settings.qr_enabled_admin !== false && qrUrl ? (
+                <div className="mt-2">
+                  <QrPanel
+                    url={qrUrl}
+                    title={settings.qr_title || 'סרקו והוסיפו ברכה'}
+                    subtitle={settings.qr_subtitle || 'פותח את עמוד הברכות'}
+                    btnDownloadLabel={settings.qr_btn_download_label || 'הורד כתמונה'}
+                    btnCopyLabel={settings.qr_btn_copy_label || 'העתק קישור'}
+                    btnWhatsappLabel={settings.qr_btn_whatsapp_label || 'שלח בוואטסאפ'}
+                  />
+                </div>
+              ) : null}
             </div>
 
             {/* פוטר */}

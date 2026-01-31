@@ -4,6 +4,7 @@ import { Container, Card, Button } from "@/components/ui";
 import { supabaseServiceRole } from "@/lib/supabase";
 import { fetchBlocks, fetchSettings } from "@/lib/db";
 import BlessingsClient from "./ui";
+import BlessingsShareHeader from "./BlessingsShareHeader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -132,6 +133,7 @@ export default async function BlessingsPage() {
             <div className="text-right">
               <h2 className="text-xl font-bold">{blessingsTitle}</h2>
               <p className="text-sm text-zinc-600">{blessingsSubtitle}</p>
+              <BlessingsShareHeader settings={settings} />
             </div>
           </Card>
         </div>

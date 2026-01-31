@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Button, Card, Container, Input, Textarea } from '@/components/ui'
+import ShareModal from '@/components/share/ShareModal'
+import { buildShareMessage } from '@/lib/share/buildShareMessage'
 
 type Post = {
   id: string
@@ -99,7 +101,11 @@ export default function BlessingsClient({
   const [editRemoveMedia, setEditRemoveMedia] = useState(false)
 
   // full view for media
-  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean; post?: Post } | null>(null)
+
+  // share modal (desktop fallback)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [sharePayload, setSharePayload] = useState<{ message: string; link: string } | null>(null)
 
   async function triggerDownload(url: string) {
     // Mobile browsers and cross-origin assets often ignore <a download>. We try a blob download first.
@@ -353,6 +359,47 @@ async function saveEdit() {
   const blessingTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
   const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
   const mediaSize = Math.max(120, Math.min(520, Number(settings?.blessings_media_size || 320)))
+
+  const shareEnabled = settings?.share_enabled !== false
+  const shareUsePermalink = settings?.share_use_permalink !== false
+  const shareWhatsappEnabled = settings?.share_whatsapp_enabled !== false
+  const shareWebshareEnabled = settings?.share_webshare_enabled !== false
+
+  function buildLinkForPost(postId?: string) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const base = origin ? `${origin}/blessings` : '/blessings'
+    if (postId && shareUsePermalink) return `${base}#post-${postId}`
+    return base
+  }
+
+  async function sharePost(p: Post) {
+    if (!shareEnabled) return
+    const link = buildLinkForPost(p.id)
+    const eventName = String(settings?.event_name || 'Event')
+    const template = settings?.share_message_template || null
+    const noTextFallback = String(settings?.share_no_text_fallback || 'נשלחה ברכה מהממת 💙')
+    const message = buildShareMessage(template, {
+      EVENT_NAME: eventName,
+      AUTHOR_NAME: p.author_name || '',
+      TEXT: p.text || '',
+      LINK: link,
+      DATE: p.created_at || ''
+    }, noTextFallback)
+
+    // Mobile: native share (if enabled)
+    const canNative = shareWebshareEnabled && typeof navigator !== 'undefined' && (navigator as any).share
+    if (canNative) {
+      try {
+        await (navigator as any).share({ title: eventName, text: message, url: link })
+        return
+      } catch {
+        // fall back
+      }
+    }
+
+    setSharePayload({ message, link })
+    setShareOpen(true)
+  }
   // Link Preview is controlled globally via event_settings (not per-block config)
   const linkPreviewEnabled = settings?.link_preview_enabled === true
   const showLinkDetails = settings?.link_preview_show_details === true
@@ -436,13 +483,22 @@ async function saveEdit() {
 
         <div className="space-y-3">
           {items.map(p => (
-            <Card key={p.id}>
+            <Card key={p.id} id={`post-${p.id}`} className="scroll-mt-24">
               <div className="text-right">
                 <div className="grid grid-cols-2 items-center gap-2">
                   <p className="font-semibold text-right">{p.author_name || 'אורח/ת'}</p>
-                  <p className="text-xs text-zinc-500 text-left" dir="ltr">
-                    {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
-                  </p>
+
+                  <div className="flex flex-col items-start">
+                    <p className="text-xs text-zinc-500 text-left" dir="ltr">
+                      {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
+                    </p>
+
+                    {shareEnabled ? (
+                      <Button variant="ghost" onClick={() => sharePost(p)} className="mt-1 px-3 py-1 text-xs">
+                        {String(settings?.share_button_label || 'שתף')}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* media (centered) */}
@@ -456,7 +512,7 @@ async function saveEdit() {
                         type="button"
                         className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
                         style={{ width: mediaSize, height: mediaSize }}
-                        onClick={() => setLightbox({ url: mediaUrl, isVideo: video })}
+                        onClick={() => setLightbox({ url: mediaUrl, isVideo: video, post: p })}
                         aria-label="פתח מדיה"
                       >
                         {video ? (
@@ -525,7 +581,12 @@ async function saveEdit() {
         {lightbox && (
           <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
             <div className="mx-auto flex h-full max-w-3xl items-center justify-center" onClick={e => e.stopPropagation()}>
-              <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-2" dir="rtl">{shareEnabled && lightbox?.post ? (
+  <Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => sharePost(lightbox.post!)} type="button">
+    {String(settings?.share_button_label || 'שתף')}
+  </Button>
+) : null}
+
 {!lightbox.isVideo && (
 <Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => triggerDownload(lightbox.url)} type="button">הורד תמונה</Button>
 )}
@@ -541,6 +602,17 @@ async function saveEdit() {
             </div>
           </div>
         )}
+
+        <ShareModal
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          title={String(settings?.share_modal_title || 'שיתוף')}
+          message={sharePayload?.message || ''}
+          link={sharePayload?.link || buildLinkForPost()}
+          whatsappEnabled={shareWhatsappEnabled}
+          whatsappLabel={String(settings?.share_whatsapp_button_label || 'שתף בוואטסאפ')}
+          copyLabel={String(settings?.qr_btn_copy_label || 'העתק קישור')}
+        />
 
 {/* EDIT MODAL */}
 {editOpen && editDraft && (
