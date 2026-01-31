@@ -15,42 +15,46 @@ function isImage(url?: string | null) {
 
 async function resolvePostId(code: string) {
   const srv = supabaseServiceRole()
-  // WhatsApp sometimes appends punctuation or query params.
-  // Accept either a full UUID or a short prefix (e.g. 8 hex chars).
-  const raw = String(code || '').trim()
-  const withoutQuery = raw.split('?')[0].split('#')[0]
 
-  // Prefer UUID-ish tokens first
-  const uuidish = withoutQuery.match(/^[0-9a-fA-F]{8}-[0-9a-fA-F-]{20,}$/)?.[0]
+  // WhatsApp sometimes appends punctuation (.) or query params (?v=2).
+  // We accept either a full UUID or a short hex prefix (typically first 8 chars).
+  const raw = String(code || '').trim()
+  let clean = raw.split('?')[0].split('#')[0].trim()
+
+  // keep only leading hex/dash run (strip trailing punctuation)
+  const lead = clean.match(/^[0-9a-fA-F-]{4,64}/)?.[0] || ''
+  clean = lead.toLowerCase()
+
+  if (!clean) return null
+
+  // 1) Full UUID
+  const uuidish = clean.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)?.[0]
   if (uuidish) {
-    const id = uuidish.toLowerCase()
-    const { data: exact } = await srv.from('posts').select('id').eq('id', id).limit(1)
+    const { data: exact } = await srv.from('posts').select('id').eq('id', uuidish).limit(1)
     if (exact && exact.length === 1) return exact[0].id as string
   }
 
-  // Otherwise take the first hex run (prefix)
-  const prefix = withoutQuery.match(/^[0-9a-fA-F]{4,32}/)?.[0]?.toLowerCase() || ''
+  // 2) Prefix (usually 8 hex chars – first UUID segment)
+  const prefix = clean.match(/^[0-9a-f]{4,32}/)?.[0] || ''
   if (!prefix) return null
 
-  // Use RPC so we can cast uuid -> text (ILIKE on uuid is unreliable / errors).
+  // Prefer DB RPC if it exists (fast + exact)
   try {
-    const { data: rpcId } = await srv.rpc('post_id_from_prefix', { p_prefix: prefix })
-    if (rpcId) return String(rpcId)
+    const { data: rpcId, error } = await srv.rpc('post_id_from_prefix', { p_prefix: prefix })
+    if (!error && rpcId) return String(rpcId)
   } catch {
-    // ignore
+    // ignore – we'll do a JS fallback below
   }
 
-  // Fallback (best-effort): try client-side cast if PostgREST allows.
-  const { data } = await srv
+  // 3) JS fallback: scan newest N posts and match startsWith(prefix)
+  const { data: list } = await srv
     .from('posts')
-    .select('id')
-    // @ts-ignore - PostgREST doesn't expose explicit casts; RPC above is the real path.
-    .ilike('id', `${prefix}%`)
+    .select('id, created_at')
     .order('created_at', { ascending: false })
-    .limit(1)
+    .limit(2000)
 
-  if (!data || data.length === 0) return null
-  return data[0].id as string
+  const hit = (list || []).find((p: any) => String(p.id).toLowerCase().startsWith(prefix))
+  return hit ? String((hit as any).id) : null
 }
 
 export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
@@ -61,7 +65,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
   if (!postId) {
     const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
     const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
-    const ogDefault = toAbsoluteUrl(`/api/og/image?default=1&fallback=${encodeURIComponent(String(ogDefaultRaw || ''))}`)
+    const ogDefault = toAbsoluteUrl('/og/default')
     return {
       metadataBase: new URL(getSiteUrl()),
       title: eventName,
@@ -95,7 +99,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
 
   const ogImage = toAbsoluteUrl(
-    `/api/og/image?post=${encodeURIComponent(String(postId))}&fallback=${encodeURIComponent(String(ogDefaultRaw || ''))}`
+    `/og/post/${encodeURIComponent(String(postId))}`
   )
 
   const descText = String((post as any)?.text || '').trim()

@@ -22,7 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   // Always use an absolute OG image URL (best effort). If the image is in Supabase private storage,
   // the proxy route will still serve it on our domain.
-  const ogImage = toAbsoluteUrl(`/api/og/image?default=1&fallback=${encodeURIComponent(String(imageUrlRaw || ''))}`);
+  const ogImage = toAbsoluteUrl('/og/default');
 
   return {
     metadataBase: new URL(getSiteUrl()),
