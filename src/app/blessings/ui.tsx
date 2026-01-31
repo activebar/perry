@@ -350,8 +350,8 @@ async function saveEdit() {
       setErr(friendlyError(e?.message || 'שגיאה'))
     }
   }
-  const blessingTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
-  const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
+    const blessingTitle = (settings?.blessings_title || 'ברכות') as string
+    const blessingSubtitle = (settings?.blessings_label || settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
   const mediaSize = Math.max(120, Math.min(520, Number(settings?.blessings_media_size || 320)))
   // Link Preview is controlled globally via event_settings (not per-block config)
   const linkPreviewEnabled = settings?.link_preview_enabled === true
