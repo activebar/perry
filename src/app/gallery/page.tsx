@@ -23,6 +23,9 @@ async function getImages() {
 export default async function GalleryPage() {
   const [items, settings] = await Promise.all([getImages(), fetchSettings()])
 
+  const blessingsLabel = (String((settings as any)?.blessings_label || '').trim() || String((settings as any)?.blessings_title || '').trim() || 'ברכות')
+
+
   return (
     <main>
       <Container>

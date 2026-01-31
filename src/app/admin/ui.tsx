@@ -68,7 +68,7 @@ function useUnfurl(url?: string) {
   return data
 }
 
-/** Preview: תמונה + דומיין, + פרטים אם showDetails=true */
+/** Preview נקי כמו בדף הבית/ברכות: תמונה + דומיין, בלי כותרות/תיאורים אלא אם showDetails=true */
 function LinkPreview({
   url,
   size,
@@ -115,14 +115,8 @@ function LinkPreview({
 
         {showDetails ? (
           <>
-            {d.title ? (
-              <p className="mt-0.5 truncate text-sm font-semibold" title={d.title}>
-                {d.title}
-              </p>
-            ) : null}
-            {d.description ? (
-              <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{d.description}</p>
-            ) : null}
+            {d.title ? <p className="mt-0.5 truncate text-sm font-semibold" title={d.title}>{d.title}</p> : null}
+            {d.description ? <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{d.description}</p> : null}
             <p className="mt-1 truncate text-xs text-zinc-500" dir="ltr" title={d.url}>
               {d.url}
             </p>
@@ -150,6 +144,7 @@ function MediaBox({
 }) {
   const url = (video_url || media_url || '') as string
   if (!url) return null
+
   const isVid = !!video_url || isVideoUrl(url)
 
   return (
@@ -231,6 +226,13 @@ function localInputToIso(v?: string) {
   return d.toISOString()
 }
 
+function parseLinesToArray(s: string) {
+  return (s || '')
+    .split('\n')
+    .map(x => x.trim())
+    .filter(Boolean)
+}
+
 export default function AdminApp() {
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [tab, setTab] = useState<Tab>('login')
@@ -280,9 +282,6 @@ export default function AdminApp() {
   const [adminMsg, setAdminMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
-  // diag
-  const [diag, setDiag] = useState<any | null>(null)
-
   async function triggerDownload(url: string) {
     try {
       const res = await fetch(url)
@@ -301,6 +300,9 @@ export default function AdminApp() {
       window.open(url, '_blank', 'noopener,noreferrer')
     }
   }
+
+  // diag
+  const [diag, setDiag] = useState<any | null>(null)
 
   const bSize = Number(settings?.blessings_media_size ?? 96)
   const safeBSize = Number.isFinite(bSize) ? Math.max(56, Math.min(220, bSize)) : 96
@@ -430,7 +432,8 @@ export default function AdminApp() {
     await saveSettings(patch)
   }
 
-  async function loadBlocks() {
+  
+async function loadBlocks() {
     const res = await jfetch('/api/admin/blocks', { method: 'GET', headers: {} as any })
     setBlocks(res.blocks)
   }
@@ -639,11 +642,11 @@ export default function AdminApp() {
   /* ===== LOGIN UI ===== */
   if (!admin) {
     return (
-      <Card dir="rtl">
-        <h3 className="font-semibold text-right">התחברות</h3>
+      <Card>
+        <h3 className="font-semibold">התחברות</h3>
 
         <div className="mt-3 grid gap-2">
-          <Input placeholder="שם משתמש" value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" className="text-right" />
+          <Input placeholder="שם משתמש" value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" />
 
           <div className="relative">
             <Input
@@ -652,7 +655,7 @@ export default function AdminApp() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               autoComplete="current-password"
-              className="pr-12 text-right"
+              className="pr-12"
               onKeyDown={e => {
                 // @ts-ignore
                 if (typeof e.getModifierState === 'function') setCapsOn(e.getModifierState('CapsLock'))
@@ -679,13 +682,13 @@ export default function AdminApp() {
             </button>
           </div>
 
-          {capsOn && <p className="text-xs text-amber-700 text-right">⚠️ נראה ש־Caps Lock דולק.</p>}
+          {capsOn && <p className="text-xs text-amber-700">⚠️ נראה ש־Caps Lock דולק.</p>}
 
           <Button onClick={login} disabled={busy || !username || !password}>
             {busy ? 'מתחבר...' : 'התחבר'}
           </Button>
 
-          {err && <p className="text-sm text-red-600 text-right">{err}</p>}
+          {err && <p className="text-sm text-red-600">{err}</p>}
         </div>
       </Card>
     )
@@ -724,32 +727,30 @@ export default function AdminApp() {
       {/* ===== SETTINGS ===== */}
       {tab === 'settings' && settings && (
         <Card>
-          <h3 className="font-semibold text-right">הגדרות</h3>
+          <h3 className="font-semibold">הגדרות</h3>
 
           <div className="mt-3 grid gap-3">
             {/* כללי */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium text-right">הגדרות כלליות</p>
+              <p className="text-sm font-medium">הגדרות כלליות</p>
 
               <Input
-                className="text-right"
                 value={settings.event_name || ''}
                 onChange={e => setSettings({ ...settings, event_name: e.target.value })}
                 placeholder="שם אירוע"
               />
 
               <div className="grid gap-1">
-                <label className="text-xs text-zinc-500 text-right">תאריך ושעה (start_at)</label>
+                <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
                 <input
                   type="datetime-local"
                   value={startAtLocal}
                   onChange={e => setStartAtLocal(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-right"
+                  className="w-full rounded-xl border border-zinc-200 px-3 py-2"
                 />
               </div>
 
               <Input
-                className="text-right"
                 value={settings.location_text || ''}
                 onChange={e => setSettings({ ...settings, location_text: e.target.value })}
                 placeholder="אולם / כתובת"
@@ -765,29 +766,23 @@ export default function AdminApp() {
 
             {/* HERO */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium text-right">HERO – טקסטים + תמונות</p>
+              <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
 
               <Textarea
-                className="text-right"
-                dir="rtl"
                 value={settings.hero_pre_text || ''}
                 onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
-                placeholder="טקסט לפני האירוע"
+                placeholder="טקסט לפני האירוע (עד 30 דק׳ אחרי start_at)"
                 rows={4}
               />
 
               <Textarea
-                className="text-right"
-                dir="rtl"
                 value={settings.hero_live_text || ''}
                 onChange={e => setSettings({ ...settings, hero_live_text: e.target.value })}
-                placeholder="טקסט בזמן האירוע"
+                placeholder="טקסט בזמן האירוע (אחרי 30 דק׳ ועד יום אחרי)"
                 rows={3}
               />
 
               <Textarea
-                className="text-right"
-                dir="rtl"
                 value={settings.hero_post_text || ''}
                 onChange={e => setSettings({ ...settings, hero_post_text: e.target.value })}
                 placeholder="טקסט אחרי האירוע"
@@ -795,7 +790,7 @@ export default function AdminApp() {
               />
 
               <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-                <p className="text-sm font-medium text-right">תמונות מתחלפות</p>
+                <p className="text-sm font-medium">תמונות מתחלפות</p>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <input type="file" accept="image/*" multiple onChange={e => setHeroFiles(Array.from(e.target.files || []))} />
@@ -804,12 +799,11 @@ export default function AdminApp() {
                   </Button>
                 </div>
 
-                {heroMsg && <p className="text-sm text-zinc-700 text-right">{heroMsg}</p>}
+                {heroMsg && <p className="text-sm text-zinc-700">{heroMsg}</p>}
 
                 <div className="grid gap-2">
-                  <label className="text-xs text-zinc-500 text-right">מהירות החלפה (שניות)</label>
+                  <label className="text-xs text-zinc-500">מהירות החלפה (שניות)</label>
                   <Input
-                    className="text-right"
                     value={String(settings.hero_rotate_seconds ?? 5)}
                     onChange={e => setSettings({ ...settings, hero_rotate_seconds: Number(e.target.value) })}
                     placeholder="למשל 5"
@@ -833,23 +827,22 @@ export default function AdminApp() {
                 )}
 
                 {(!Array.isArray(settings.hero_images) || settings.hero_images.length === 0) && (
-                  <p className="text-xs text-zinc-500 text-right">אין עדיין תמונות HERO.</p>
+                  <p className="text-xs text-zinc-500">אין עדיין תמונות HERO.</p>
                 )}
               </div>
             </div>
 
             {/* גלריות */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium text-right">גלריות</p>
+              <p className="text-sm font-medium">גלריות</p>
 
               <Input
-                className="text-right"
                 value={settings.guest_gallery_title || ''}
                 onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
                 placeholder="כותרת גלריית אורחים"
               />
 
-              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+              <label className="text-sm flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={settings.guest_gallery_show_all_button !== false}
@@ -859,13 +852,12 @@ export default function AdminApp() {
               </label>
 
               <Input
-                className="text-right"
                 value={settings.admin_gallery_title || ''}
                 onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
                 placeholder="כותרת גלריית מנהל"
               />
 
-              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+              <label className="text-sm flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={settings.admin_gallery_show_all_button !== false}
@@ -911,7 +903,7 @@ export default function AdminApp() {
                 dir="rtl"
                 value={String(settings.blessings_preview_limit ?? 3)}
                 onChange={e => setSettings({ ...settings, blessings_preview_limit: Number(e.target.value) })}
-                placeholder="למשל 3"
+                placeholder="כמה ברכות להציג בפריוויו בדף הבית (למשל 3)"
               />
 
               <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
@@ -944,9 +936,9 @@ export default function AdminApp() {
 
             {/* פוטר */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium text-right">פוטר</p>
+              <p className="text-sm font-medium">פוטר</p>
 
-              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+              <label className="text-sm flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={!!settings.footer_enabled}
@@ -956,7 +948,6 @@ export default function AdminApp() {
               </label>
 
               <Input
-                className="text-right"
                 value={settings.footer_label || ''}
                 onChange={e => setSettings({ ...settings, footer_label: e.target.value })}
                 placeholder="טקסט פוטר (למשל Active Bar)"
@@ -974,16 +965,16 @@ export default function AdminApp() {
               {saving ? 'שומר...' : 'שמור'}
             </Button>
 
-            {savedMsg && <p className="text-sm text-green-700 text-right">{savedMsg}</p>}
-            {err && <p className="text-sm text-red-600 text-right">{err}</p>}
+            {savedMsg && <p className="text-sm text-green-700">{savedMsg}</p>}
+            {err && <p className="text-sm text-red-600">{err}</p>}
           </div>
         </Card>
       )}
 
       {/* ===== BLOCKS ===== */}
       {tab === 'blocks' && (
-        <Card dir="rtl">
-          <h3 className="font-semibold text-right">בלוקים</h3>
+        <Card>
+          <h3 className="font-semibold">בלוקים</h3>
 
           <div className="mt-3 grid gap-3">
             {blocks.map(b => (
@@ -993,7 +984,7 @@ export default function AdminApp() {
                     <p className="font-medium">{b.type}</p>
                     <p className="text-xs text-zinc-500">סדר: {b.order_index}</p>
                   </div>
-                  <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <label className="text-sm flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={!!b.is_visible}
@@ -1006,34 +997,28 @@ export default function AdminApp() {
                 {b.type === 'gift' && (
                   <div className="mt-2 grid gap-2">
                     <Input
-                      className="text-right"
                       value={String(b.config?.auto_hide_after_hours ?? '')}
                       onChange={e => {
                         const v = e.target.value
-                        updateBlock({
-                          id: b.id,
-                          config: { ...(b.config || {}), auto_hide_after_hours: v ? Number(v) : null }
-                        })
+                        updateBlock({ id: b.id, config: { ...(b.config || {}), auto_hide_after_hours: v ? Number(v) : null } })
                       }}
                       placeholder="הסתר אחרי X שעות (למשל 24)"
                     />
-                    <p className="text-xs text-zinc-500 text-right">
-                      אחרי X שעות מתחילת האירוע — בלוק מתנה נעלם מהדף הראשי.
-                    </p>
+                    <p className="text-xs text-zinc-500">אחרי X שעות מתחילת האירוע — בלוק מתנה נעלם מהדף הראשי.</p>
                   </div>
                 )}
               </div>
             ))}
           </div>
 
-          {err && <p className="text-sm text-red-600 text-right">{err}</p>}
+          {err && <p className="text-sm text-red-600">{err}</p>}
         </Card>
       )}
 
       {/* ===== MODERATION ===== */}
       {tab === 'moderation' && (
         <Card dir="rtl">
-          <h3 className="font-semibold text-right">אישור תכנים</h3>
+          <h3 className="font-semibold">אישור תכנים</h3>
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <div className="flex gap-2">
@@ -1066,11 +1051,10 @@ export default function AdminApp() {
                   <p className="font-semibold text-right">
                     {p.kind === 'blessing' ? (p.author_name || 'אורח/ת') : (p.kind === 'gallery' ? 'תמונת אורחים' : 'תמונה')}
                   </p>
-                  <p className="text-xs text-zinc-500" dir="ltr">
-                    {new Date(p.created_at).toLocaleString('he-IL')}
-                  </p>
+                  <p className="text-xs text-zinc-500" dir="ltr">{new Date(p.created_at).toLocaleString('he-IL')}</p>
                 </div>
 
+                {/* media (always centered) */}
                 {(p.media_url || p.video_url) ? (
                   <div className="mt-3 flex justify-center">
                     <MediaBox media_url={p.media_url} video_url={p.video_url} size={safeBSize} />
@@ -1079,6 +1063,7 @@ export default function AdminApp() {
 
                 {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
+                {/* pending blessings: always show link preview (thumb + title + url), regardless of global "showDetails" */}
                 {linkPreviewEnabled && p.link_url ? (
                   <div className="mt-3">
                     <LinkPreview url={p.link_url} size={safeBSize} showDetails={true} />
@@ -1092,66 +1077,63 @@ export default function AdminApp() {
                 </div>
               </div>
             ))}
-            {pending.length === 0 && <p className="text-sm text-zinc-600 text-right">אין ממתינים.</p>}
+            {pending.length === 0 && <p className="text-sm text-zinc-600">אין ממתינים.</p>}
           </div>
 
-          {pendingKind === 'blessing' && (
-            <div className="mt-6 border-t border-zinc-200 pt-4">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="font-semibold text-right">ברכות מאושרות</h4>
-                <Button variant="ghost" onClick={loadApprovedBlessings}>רענן</Button>
-              </div>
-
-              <div className="mt-3 grid gap-3">
-                {approvedBlessings.map(b => (
-                  <div key={b.id} className="rounded-xl border border-zinc-200 p-3" dir="rtl">
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-right">{b.author_name || 'אורח/ת'}</p>
-                      <p className="text-xs text-zinc-500" dir="ltr">
-                        {new Date(b.created_at).toLocaleString('he-IL')}
-                      </p>
-                    </div>
-
-                    {(b.media_url || b.video_url) ? (
-                      <div className="mt-3 flex justify-center">
-                        <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
-                      </div>
-                    ) : null}
-
-                    {b.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{b.text}</p>}
-
-                    {linkPreviewEnabled && b.link_url ? (
-                      <div className="mt-3">
-                        <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />
-                      </div>
-                    ) : null}
-
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
-                      <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
-                    </div>
-                  </div>
-                ))}
-
-                {approvedBlessings.length === 0 && <p className="text-sm text-zinc-600 text-right">אין ברכות מאושרות.</p>}
-              </div>
+          <div className="mt-6 border-t border-zinc-200 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="font-semibold">ברכות מאושרות</h4>
+              <Button variant="ghost" onClick={loadApprovedBlessings}>רענן</Button>
             </div>
-          )}
+
+            <div className="mt-3 grid gap-3">
+              {approvedBlessings.map(b => (
+                <div key={b.id} className="rounded-xl border border-zinc-200 p-3" dir="rtl">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-right">{b.author_name || 'אורח/ת'}</p>
+                    <p className="text-xs text-zinc-500" dir="ltr">{new Date(b.created_at).toLocaleString('he-IL')}</p>
+                  </div>
+
+                  {/* media centered */}
+                  {(b.media_url || b.video_url) ? (
+                    <div className="mt-3 flex justify-center">
+                      <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
+                    </div>
+                  ) : null}
+
+                  {b.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{b.text}</p>}
+
+                  {/* Approved: show link preview details only when toggle is ON */}
+                  {linkPreviewEnabled && b.link_url ? (
+                    <div className="mt-3">
+                      <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />
+                    </div>
+                  ) : null}
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
+                    <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
+                  </div>
+                </div>
+              ))}
+              {approvedBlessings.length === 0 && <p className="text-sm text-zinc-600">אין ברכות מאושרות.</p>}
+            </div>
+          </div>
 
           {editBlessing && (
             <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setEditBlessing(null)}>
               <div className="mx-auto w-full max-w-xl rounded-2xl bg-white p-4" onClick={e => e.stopPropagation()}>
-                <h3 className="font-semibold text-right">עריכת ברכה</h3>
+                <h3 className="font-semibold">עריכת ברכה</h3>
 
                 <div className="mt-3 grid gap-2">
-                  <Input placeholder="שם" value={editBlessing.author_name || ''} onChange={e => setEditBlessing({ ...editBlessing, author_name: e.target.value })} className="text-right" />
-                  <Textarea placeholder="טקסט" rows={4} value={editBlessing.text || ''} onChange={e => setEditBlessing({ ...editBlessing, text: e.target.value })} className="text-right" dir="rtl" />
+                  <Input placeholder="שם" value={editBlessing.author_name || ''} onChange={e => setEditBlessing({ ...editBlessing, author_name: e.target.value })} />
+                  <Textarea placeholder="טקסט" rows={4} value={editBlessing.text || ''} onChange={e => setEditBlessing({ ...editBlessing, text: e.target.value })} />
                   <Input placeholder="קישור (לא חובה)" value={editBlessing.link_url || ''} onChange={e => setEditBlessing({ ...editBlessing, link_url: e.target.value })} dir="ltr" />
 
                   {editBlessing.link_url ? <LinkPreview url={editBlessing.link_url} size={safeBSize} showDetails={showLinkDetails} /> : null}
 
                   <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-                    <p className="text-sm font-medium text-right">מדיה</p>
+                    <p className="text-sm font-medium">מדיה</p>
 
                     <div className="flex items-center justify-between gap-3">
                       <MediaBox media_url={editBlessing.media_url} video_url={editBlessing.video_url} size={safeBSize} />
@@ -1171,7 +1153,10 @@ export default function AdminApp() {
                       }}
                     />
 
-                    <Button variant="ghost" onClick={() => setEditBlessing({ ...editBlessing, media_url: null, media_path: null, video_url: null })}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setEditBlessing({ ...editBlessing, media_url: null, media_path: null, video_url: null })}
+                    >
                       הסר מדיה
                     </Button>
                   </div>
@@ -1180,28 +1165,26 @@ export default function AdminApp() {
                     <Button onClick={saveBlessingEdits} disabled={editBusy}>{editBusy ? 'שומר...' : 'שמור'}</Button>
                     <Button variant="ghost" onClick={() => setEditBlessing(null)}>סגור</Button>
                   </div>
-
-                  {err && <p className="text-sm text-red-600 text-right">{err}</p>}
                 </div>
               </div>
             </div>
           )}
 
-          {err && <p className="text-sm text-red-600 text-right">{err}</p>}
+          {err && <p className="text-sm text-red-600">{err}</p>}
         </Card>
       )}
 
       {/* ===== ADS ===== */}
       {tab === 'ads' && (
-        <Card dir="rtl">
-          <h3 className="font-semibold text-right">פרסומות</h3>
+        <Card>
+          <h3 className="font-semibold">פרסומות</h3>
 
           <div className="mt-3 grid gap-2 rounded-xl border border-zinc-200 p-3">
-            <Input placeholder="כותרת" value={newAd.title} onChange={e => setNewAd({ ...newAd, title: e.target.value })} className="text-right" />
-            <Textarea placeholder="טקסט (לא חובה)" rows={2} value={newAd.body} onChange={e => setNewAd({ ...newAd, body: e.target.value })} className="text-right" dir="rtl" />
+            <Input placeholder="כותרת" value={newAd.title} onChange={e => setNewAd({ ...newAd, title: e.target.value })} />
+            <Textarea placeholder="טקסט (לא חובה)" rows={2} value={newAd.body} onChange={e => setNewAd({ ...newAd, body: e.target.value })} />
             <Input placeholder="image_url (לא חובה)" value={newAd.image_url} onChange={e => setNewAd({ ...newAd, image_url: e.target.value })} dir="ltr" />
             <Input placeholder="link_url (לא חובה)" value={newAd.link_url} onChange={e => setNewAd({ ...newAd, link_url: e.target.value })} dir="ltr" />
-            <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+            <label className="text-sm flex items-center gap-2">
               <input type="checkbox" checked={!!newAd.is_active} onChange={e => setNewAd({ ...newAd, is_active: e.target.checked })} />
               פעיל
             </label>
@@ -1214,60 +1197,46 @@ export default function AdminApp() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-right">
                     <p className="font-medium">{a.title}</p>
-                    {a.link_url && <p className="text-xs text-zinc-500" dir="ltr">{a.link_url}</p>}
+                    {a.link_url && <p className="text-xs text-zinc-500">{a.link_url}</p>}
                   </div>
-                  <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <label className="text-sm flex items-center gap-2">
                     <input type="checkbox" checked={!!a.is_active} onChange={e => toggleAd(a.id, e.target.checked)} />
                     פעיל
                   </label>
                 </div>
-                {a.body && <p className="mt-2 text-sm text-right">{a.body}</p>}
+                {a.body && <p className="mt-2 text-sm">{a.body}</p>}
               </div>
             ))}
-            {ads.length === 0 && <p className="text-sm text-zinc-600 text-right">אין פרסומות.</p>}
+            {ads.length === 0 && <p className="text-sm text-zinc-600">אין פרסומות.</p>}
           </div>
         </Card>
       )}
 
       {/* ===== ADMIN GALLERY ===== */}
       {tab === 'admin_gallery' && (
-        <Card dir="rtl">
-          <h3 className="font-semibold text-right">גלריית מנהל</h3>
+        <Card>
+          <h3 className="font-semibold">גלריית מנהל</h3>
 
           <div className="mt-3 grid gap-2 rounded-xl border border-zinc-200 p-3">
             <input type="file" accept="image/*" multiple onChange={e => setAdminFiles(Array.from(e.target.files || []))} />
             <Button onClick={uploadAdminGalleryFiles} disabled={adminBusy || adminFiles.length === 0}>
               {adminBusy ? 'מעלה...' : `העלה ${adminFiles.length || ''} תמונות`}
             </Button>
-            {adminMsg && <p className="text-sm text-zinc-700 text-right">{adminMsg}</p>}
+            {adminMsg && <p className="text-sm text-zinc-700">{adminMsg}</p>}
           </div>
 
           {lightbox && (
-            <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
-              <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
-                <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    onClick={() => triggerDownload(lightbox)}
-                    className="bg-white/90 text-black shadow hover:bg-white"
-                    type="button"
-                  >
-                    הורד תמונה
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setLightbox(null)}
-                    className="bg-white/90 text-black shadow hover:bg-white"
-                    type="button"
-                  >
-                    סגור
-                  </Button>
-                </div>
+  <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
+    <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+        <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="bg-white/90 text-black shadow hover:bg-white" type="button">הורד תמונה</Button>
+        <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white" type="button">סגור</Button>
+      </div>
 
-                <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
-              </div>
-            </div>
-          )}
+      <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
+    </div>
+  </div>
+)}
 
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {adminGallery.map((p: any) => (
@@ -1277,7 +1246,7 @@ export default function AdminApp() {
                 </button>
 
                 <div className="p-3">
-                  <p className="text-xs text-zinc-500 text-right">{new Date(p.created_at).toLocaleString('he-IL')}</p>
+                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
                   <div className="mt-2 flex gap-2">
                     <Button variant="ghost" onClick={() => deleteAdminImage(p.id)}>מחק</Button>
                     {p.media_url && <a className="text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח</a>}
@@ -1287,14 +1256,14 @@ export default function AdminApp() {
             ))}
           </div>
 
-          {adminGallery.length === 0 && <p className="mt-3 text-sm text-zinc-600 text-right">אין עדיין תמונות בגלריית מנהל.</p>}
+          {adminGallery.length === 0 && <p className="mt-3 text-sm text-zinc-600">אין עדיין תמונות בגלריית מנהל.</p>}
         </Card>
       )}
 
       {/* ===== DIAG ===== */}
       {tab === 'diag' && (
-        <Card dir="rtl">
-          <h3 className="font-semibold text-right">דיאגנוסטיקה</h3>
+        <Card>
+          <h3 className="font-semibold">דיאגנוסטיקה</h3>
 
           <div className="mt-3 grid gap-2">
             <Button variant="ghost" onClick={loadDiag}>רענן דיאגנוסטיקה</Button>
