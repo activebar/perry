@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import { fetchSettings } from '@/lib/db'
+import { getSiteUrl, toAbsoluteUrl } from '@/lib/site-url'
 
 export async function generateMetadata(): Promise<Metadata> {
   try {
@@ -8,13 +9,16 @@ export async function generateMetadata(): Promise<Metadata> {
     const eventName = String((settings as any)?.event_name || 'Event Gift Site')
 
     const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
-    const imageUrl =
+    const imageUrlRaw =
       (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
+    const imageUrl = toAbsoluteUrl(imageUrlRaw)
+
 
     const title = eventName
     const description = String((settings as any)?.meta_description || 'Event gift website powered by Active Bar')
 
     return {
+      metadataBase: new URL(getSiteUrl()),
       title,
       description,
       openGraph: {

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { fetchSettings } from '@/lib/db'
+import { getSiteUrl, toAbsoluteUrl } from '@/lib/site-url'
 import { Card, Container, Button } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -30,12 +31,13 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const ogDefault = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
 
   const mediaUrl = (post as any)?.media_url as string | undefined
-  const ogImage = isImage(mediaUrl) ? mediaUrl : ogDefault
+  const ogImage = toAbsoluteUrl(isImage(mediaUrl) ? mediaUrl : ogDefault)
 
   const descText = String((post as any)?.text || '').trim()
   const description = descText ? descText.slice(0, 180) : `${eventName} – ברכה`
 
   return {
+    metadataBase: new URL(getSiteUrl()),
     title,
     description,
     openGraph: {

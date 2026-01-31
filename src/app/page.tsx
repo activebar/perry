@@ -275,9 +275,13 @@ export default function HomePage() {
 
   function buildLinkForPost(postId?: string) {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const base = origin ? `${origin}/blessings` : '/blessings'
-    if (postId && shareUsePermalink) return `${base}/p/${postId}`
-    return base
+    const base = origin ? `${origin}` : ''
+    const blessings = `${base}/blessings`
+    if (postId && shareUsePermalink) {
+      const code = String(postId).split('-')[0]
+      return `${base}/b/${code}`
+    }
+    return blessings
   }
 
   async function shareBlessing(p: any) {

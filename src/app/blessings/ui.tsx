@@ -367,9 +367,13 @@ async function saveEdit() {
 
   function buildLinkForPost(postId?: string) {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const base = origin ? `${origin}/blessings` : '/blessings'
-    if (postId && shareUsePermalink) return `${base}/p/${postId}`
-    return base
+    const base = origin ? `${origin}` : ''
+    const blessings = `${base}/blessings`
+    if (postId && shareUsePermalink) {
+      const code = String(postId).split('-')[0]
+      return `${base}/b/${code}`
+    }
+    return blessings
   }
 
   async function sharePost(p: Post) {
@@ -494,12 +498,6 @@ async function saveEdit() {
                     <p className="text-xs text-zinc-500 text-left" dir="ltr">
                       {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
                     </p>
-
-                    {shareEnabled ? (
-                      <Button variant="ghost" onClick={() => sharePost(p)} className="mt-1 px-3 py-1 text-xs">
-                        {String(settings?.share_button_label || 'שתף')}
-                      </Button>
-                    ) : null}
                   </div>
                 </div>
 
@@ -545,6 +543,15 @@ async function saveEdit() {
                 )}
                 {/* reactions */}
                 <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                  {shareEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => sharePost(p)}
+                      className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                    >
+                      {String(settings?.share_button_label || 'שתף')}
+                    </button>
+                  ) : null}
                   {EMOJIS.map(emo => {
                     const active = (p.my_reactions || []).includes(emo)
                     const c = (p.reaction_counts || {})[emo] || 0
