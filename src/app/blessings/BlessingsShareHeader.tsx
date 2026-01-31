@@ -18,7 +18,8 @@ export default function BlessingsShareHeader({ settings }: { settings: any }) {
 
   return (
     <div className="mt-3 flex justify-end" dir="rtl">
-      <Button variant="secondary" className="gap-2" onClick={() => setOpen(true)}>
+      {/* NOTE: our custom Button variants are limited (primary/ghost/default). */}
+      <Button variant="default" className="gap-2" onClick={() => setOpen(true)}>
         <span aria-hidden>📱</span>
         <span>{label}</span>
       </Button>
