@@ -217,6 +217,10 @@ export default function HomePage() {
   const blessingsPreviewLimit = Number(settings?.blessings_preview_limit ?? 3)
   const blessingsShowAll = settings?.blessings_show_all_button !== false
 
+  // Blessings labels (dynamic for white-label reuse)
+  const blessingsTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
+  const blessingsSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה/וידאו או קישור.') as string
+
   const heroImages = Array.isArray(settings?.hero_images) ? settings.hero_images : []
   const heroSeconds = Number(settings?.hero_rotate_seconds ?? 4)
 
@@ -288,7 +292,7 @@ export default function HomePage() {
                 <Button variant="ghost">גלריה</Button>
               </Link>
               <Link href="/blessings">
-                <Button variant="ghost">ברכות</Button>
+                <Button variant="ghost">{blessingsTitle}</Button>
               </Link>
               {showGiftBlock && (
                 <Link href="/gift">
@@ -327,7 +331,7 @@ export default function HomePage() {
                   )}
                   {showBlessingsBlock && (
                     <Link href="/blessings">
-                      <Button variant="ghost">ברכות</Button>
+                      <Button variant="ghost">{blessingsTitle}</Button>
                     </Link>
                   )}
                 </div>
@@ -391,8 +395,8 @@ export default function HomePage() {
             <Card dir="rtl">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-right">
-                  <p className="font-semibold">{settings?.blessings_title || settings?.blessings_label || 'ברכות'}</p>
-                  <p className="text-sm text-zinc-600 text-right">{settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה/וידאו או קישור.'}</p>
+                  <p className="font-semibold">{blessingsTitle}</p>
+                  <p className="text-sm text-zinc-600 text-right">{blessingsSubtitle}</p>
                 </div>
                 <div className="flex gap-2">
                   {blessingsShowAll && (
@@ -474,7 +478,7 @@ export default function HomePage() {
                   ))}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-zinc-600 text-right">עדיין אין ברכות. תהיו הראשונים 💌</p>
+                <p className="mt-3 text-sm text-zinc-600 text-right">עדיין אין {blessingsTitle}. תהיו הראשונים 💌</p>
               )}
             </Card>
           )}
