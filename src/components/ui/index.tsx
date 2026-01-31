@@ -8,7 +8,7 @@ export function Card({ className = '', ...props }: React.HTMLAttributes<HTMLDivE
   return <div className={`rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm ${className}`} {...props} />
 }
 
-type ButtonVariant = 'primary' | 'ghost'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost'
 
 export function Button({
   variant = 'primary',
@@ -20,7 +20,9 @@ export function Button({
   const styles =
     variant === 'ghost'
       ? 'border-transparent bg-transparent hover:bg-zinc-100'
-      : 'border-zinc-900 bg-zinc-900 text-white hover:bg-black'
+      : variant === 'secondary'
+        ? 'border-zinc-200 bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
+        : 'border-zinc-900 bg-zinc-900 text-white hover:bg-black'
 
   return <button className={`${base} ${styles} ${className}`} {...props} />
 }
