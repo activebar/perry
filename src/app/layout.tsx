@@ -13,7 +13,9 @@ export async function generateMetadata(): Promise<Metadata> {
       (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
     // Always point OG image to our own domain, so crawlers (WhatsApp/Facebook) can fetch it
     // even when Supabase storage is private.
-    const imageUrl = toAbsoluteUrl('/og/default')
+    // WhatsApp/Facebook are very picky. Use the simplest verified endpoint.
+    // (You already confirmed /api/og/image?default=1 returns an image.)
+    const imageUrl = toAbsoluteUrl('/api/og/image?default=1')
 
 
     const title = eventName

@@ -65,7 +65,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
   if (!postId) {
     const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
     const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
-    const ogDefault = toAbsoluteUrl('/og/default')
+    const ogDefault = toAbsoluteUrl('/api/og/image?default=1')
     return {
       metadataBase: new URL(getSiteUrl()),
       title: eventName,
@@ -98,9 +98,8 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
   const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
 
-  const ogImage = toAbsoluteUrl(
-    `/og/post/${encodeURIComponent(String(postId))}`
-  )
+  // Use the same verified OG endpoint everywhere (WhatsApp is picky)
+  const ogImage = toAbsoluteUrl(`/api/og/image?post=${encodeURIComponent(String(postId))}`)
 
   const descText = String((post as any)?.text || '').trim()
   const description = descText ? descText.slice(0, 180) : `${eventName} – ברכה`
