@@ -92,8 +92,10 @@ export default async function BlessingsPage() {
     fetchBlocks(),
   ]);
 
-  const blessingsLabel = (settings as any)?.blessings_title || 'ברכות';
-  const blessingsSubtitle = (settings as any)?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.';
+  const blessingsTitle = (settings as any)?.blessings_title || 'ברכות';
+  // subtitle in /blessings is controlled by blessings_label (falls back to blessings_subtitle)
+  const blessingsSubtitle = (settings as any)?.blessings_label || (settings as any)?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.';
+
 
   return (
     <main>
