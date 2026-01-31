@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card } from '@/components/ui';
 
 type Post = {
@@ -34,9 +34,15 @@ async function downloadUrl(url: string) {
 
 }
 
-async function shareUrl(url: string) {
-  const clean = String(url || '').trim();
-  if (!clean) return;
+function shortPostLink(postId: string) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const code = String(postId || '').slice(0, 8);
+  return `${origin}/b/${code}`;
+}
+
+async function sharePostLink(postId: string) {
+  const clean = shortPostLink(postId);
+  if (!clean || clean.endsWith('/b/')) return;
   try {
     // Prefer native share on mobile
     if ((navigator as any).share) {
@@ -57,13 +63,27 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
+  const [lightbox, setLightbox] = useState<{ id: string; url: string; type: 'image' | 'video' } | null>(null);
 
   const pickerRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLInputElement | null>(null);
 
   const feed = useMemo(() => (items || []).filter(i => i.media_url || i.video_url), [items]);
+
+  // Auto-open when coming from a shared link: /gallery#post-<uuid>
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const h = String(window.location.hash || '');
+    const m = h.match(/^#post-([0-9a-fA-F-]{8,})$/);
+    if (!m) return;
+    const id = m[1];
+    const it = feed.find(x => x.id === id);
+    if (!it) return;
+    const isVideo = !!it.video_url && !it.media_url;
+    const url = (it.media_url || it.video_url) as string;
+    setLightbox({ id: it.id, url, type: isVideo ? 'video' : 'image' });
+  }, [feed]);
 
   function addFiles(list: FileList | null) {
     const next = Array.from(list || []);
@@ -192,7 +212,11 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
                 סגור
               </Button>
               {/* share */}
-              <Button variant="ghost" onClick={() => shareUrl(lightbox.url)} className="bg-white/90 text-black shadow hover:bg-white">
+              <Button
+                variant="ghost"
+                onClick={() => sharePostLink(lightbox.id)}
+                className="bg-white/90 text-black shadow hover:bg-white"
+              >
                 שתף
               </Button>
               {lightbox.type === 'image' && (
@@ -221,9 +245,10 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
           const url = (it.media_url || it.video_url) as string;
           return (
             <button
+              id={`post-${it.id}`}
               key={it.id}
               className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-50"
-              onClick={() => setLightbox({ url, type: isVideo ? 'video' : 'image' })}
+              onClick={() => setLightbox({ id: it.id, url, type: isVideo ? 'video' : 'image' })}
               type="button"
             >
               {isVideo ? (

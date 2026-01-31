@@ -43,7 +43,17 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     openGraph: {
       title,
       description,
-      images: ogImage ? [{ url: ogImage }] : undefined
+      type: 'article',
+      images: ogImage
+        ? [
+            {
+              url: ogImage,
+              width: 1200,
+              height: 630,
+              alt: title
+            }
+          ]
+        : undefined
     },
     twitter: {
       card: ogImage ? 'summary_large_image' : 'summary',

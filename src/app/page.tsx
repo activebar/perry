@@ -521,12 +521,12 @@ export default function HomePage() {
                               key={e}
                               type="button"
                               onClick={() => react(p.id, e)}
-                              className={
-                                'rounded-full border px-3 py-1 text-sm ' +
-                                (active ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700')
-                              }
+                              className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm ${
+                                active ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700'
+                              }`}
                             >
-                              {e} {count > 0 ? count : ''}
+                              {e}
+                              {count > 0 ? <span className="ms-2">{count}</span> : null}
                             </button>
                           )
                         })}
@@ -534,7 +534,7 @@ export default function HomePage() {
                           <button
                             type="button"
                             onClick={() => shareBlessing(p)}
-                            className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                            className="shrink-0 whitespace-nowrap rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
                             title={String(settings?.share_button_label || 'שתף')}
                           >
                             🔗

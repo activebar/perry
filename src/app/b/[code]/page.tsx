@@ -15,26 +15,41 @@ function isImage(url?: string | null) {
 
 async function resolvePostId(code: string) {
   const srv = supabaseServiceRole()
-  let clean = String(code || '').trim()
-  // strip trailing punctuation (e.g. WhatsApp adds '.' at end)
-  const m = clean.match(/^[0-9a-fA-F-]+/)
-  clean = (m?.[0] || '').toLowerCase()
-  if (!clean) return null
-  // If a full UUID was provided, try exact match first.
-  if (clean.length >= 32) {
-    const { data: exact } = await srv.from('posts').select('id').eq('id', clean).limit(1)
+  // WhatsApp sometimes appends punctuation or query params.
+  // Accept either a full UUID or a short prefix (e.g. 8 hex chars).
+  const raw = String(code || '').trim()
+  const withoutQuery = raw.split('?')[0].split('#')[0]
+
+  // Prefer UUID-ish tokens first
+  const uuidish = withoutQuery.match(/^[0-9a-fA-F]{8}-[0-9a-fA-F-]{20,}$/)?.[0]
+  if (uuidish) {
+    const id = uuidish.toLowerCase()
+    const { data: exact } = await srv.from('posts').select('id').eq('id', id).limit(1)
     if (exact && exact.length === 1) return exact[0].id as string
   }
 
+  // Otherwise take the first hex run (prefix)
+  const prefix = withoutQuery.match(/^[0-9a-fA-F]{4,32}/)?.[0]?.toLowerCase() || ''
+  if (!prefix) return null
+
+  // Use RPC so we can cast uuid -> text (ILIKE on uuid is unreliable / errors).
+  try {
+    const { data: rpcId } = await srv.rpc('post_id_from_prefix', { p_prefix: prefix })
+    if (rpcId) return String(rpcId)
+  } catch {
+    // ignore
+  }
+
+  // Fallback (best-effort): try client-side cast if PostgREST allows.
   const { data } = await srv
     .from('posts')
     .select('id')
-    .ilike('id', `${clean}%`)
+    // @ts-ignore - PostgREST doesn't expose explicit casts; RPC above is the real path.
+    .ilike('id', `${prefix}%`)
     .order('created_at', { ascending: false })
-    .limit(3)
+    .limit(1)
 
   if (!data || data.length === 0) return null
-  // Collisions are extremely unlikely; pick the newest match.
   return data[0].id as string
 }
 
@@ -51,7 +66,16 @@ export async function generateMetadata({ params }: { params: { code: string } })
       metadataBase: new URL(getSiteUrl()),
       title: eventName,
       description: `${eventName} – ברכות`,
-      openGraph: { title: eventName, description: `${eventName} – ברכות`, images: ogDefault ? [{ url: ogDefault }] : undefined },
+      openGraph: {
+        title: eventName,
+        description: `${eventName} – ברכות`,
+        type: 'website',
+        images: ogDefault
+          ? [
+              { url: ogDefault, width: 1200, height: 630, alt: eventName }
+            ]
+          : undefined
+      },
       twitter: { card: ogDefault ? 'summary_large_image' : 'summary', title: eventName, description: `${eventName} – ברכות`, images: ogDefault ? [ogDefault] : undefined }
     }
   }
@@ -84,7 +108,12 @@ export async function generateMetadata({ params }: { params: { code: string } })
     openGraph: {
       title,
       description,
-      images: ogImage ? [{ url: ogImage }] : undefined
+      type: 'article',
+      images: ogImage
+        ? [
+            { url: ogImage, width: 1200, height: 630, alt: title }
+          ]
+        : undefined
     },
     twitter: {
       card: ogImage ? 'summary_large_image' : 'summary',
@@ -116,7 +145,14 @@ export default async function ShortBlessingPage({ params }: { params: { code: st
     )
   }
 
-  const to = `/blessings/p/${postId}`
+  // Decide redirect target by post kind
+  const srv = supabaseServiceRole()
+  const { data: post } = await srv.from('posts').select('id, kind, status').eq('id', postId).maybeSingle()
+
+  let to = `/blessings/p/${postId}`
+  if ((post as any)?.kind === 'gallery') {
+    to = `/gallery#post-${postId}`
+  }
 
   // Client-side redirect keeps OG metadata for crawlers, while sending humans to the full page.
   return (

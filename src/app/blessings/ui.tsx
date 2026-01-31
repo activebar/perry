@@ -546,25 +546,28 @@ async function saveEdit() {
                     const active = (p.my_reactions || []).includes(emo)
                     const c = (p.reaction_counts || {})[emo] || 0
                     return (
-                      <Button
+                      <button
                         key={emo}
-                        variant={active ? 'primary' : 'ghost'}
-                        className="shrink-0"
                         onClick={() => toggleReaction(p.id, emo)}
+                        className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm ${
+                          active ? 'bg-black text-white border-black' : 'bg-white text-zinc-700 border-zinc-200'
+                        }`}
+                        type="button"
                       >
-                        {emo} {c ? c : ''}
-                      </Button>
+                        {emo}
+                        {c ? <span className="ms-2">{c}</span> : null}
+                      </button>
                     )
                   })}
                   {shareEnabled ? (
-                    <Button
-                      variant="ghost"
+                    <button
                       onClick={() => sharePost(p)}
-                      className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                      className="shrink-0 whitespace-nowrap rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
                       title={String(settings?.share_button_label || 'שתף')}
+                      type="button"
                     >
                       🔗
-                    </Button>
+                    </button>
                   ) : null}
                 </div>
 

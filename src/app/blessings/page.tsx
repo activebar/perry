@@ -31,7 +31,17 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title,
       description: `${eventName} – עמוד הברכות`,
-      images: ogImage ? [{ url: ogImage }] : undefined,
+      type: 'website',
+      images: ogImage
+        ? [
+            {
+              url: ogImage,
+              width: 1200,
+              height: 630,
+              alt: title
+            }
+          ]
+        : undefined,
     },
     twitter: {
       card: ogImage ? "summary_large_image" : "summary",
