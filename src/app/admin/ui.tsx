@@ -768,40 +768,6 @@ async function loadBlocks() {
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
 
-              <div className="mt-3 rounded-2xl border border-zinc-200 p-3">
-                <p className="font-semibold text-right">ברכות בדף הבית</p>
-                <div className="mt-2 grid gap-2">
-                  <Input
-                    className="text-right"
-                    dir="rtl"
-                    value={String(settings.blessings_title ?? '')}
-                    onChange={e => setSettings({ ...settings, blessings_title: e.target.value })}
-                    placeholder="כותרת בלוק הברכות (למשל: ברכות / המלצות / חוות דעת)"
-                  />
-                  <Textarea
-                    className="text-right"
-                    dir="rtl"
-                    value={String(settings.blessings_subtitle ?? '')}
-                    onChange={e => setSettings({ ...settings, blessings_subtitle: e.target.value })}
-                    placeholder="תיאור מתחת לכותרת (מופיע בבית ובדף ברכות)"
-                    rows={2}
-                  />
-                  <Input
-                    value={String(settings.blessings_preview_limit ?? 3)}
-                    onChange={e => setSettings({ ...settings, blessings_preview_limit: Number(e.target.value) })}
-                    placeholder="כמה ברכות להציג בפריוויו בדף הבית (למשל 3)"
-                  />
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={settings.blessings_show_all_button !== false}
-                      onChange={e => setSettings({ ...settings, blessings_show_all_button: e.target.checked })}
-                    />
-                    להציג כפתור “לכל הברכות” בדף הבית
-                  </label>
-                </div>
-              </div>
-
               <Textarea
                 value={settings.hero_pre_text || ''}
                 onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
@@ -902,16 +868,45 @@ async function loadBlocks() {
             </div>
 
             {/* ברכות */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">ברכות</p>
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+              <p className="text-sm font-medium text-right">ברכות</p>
 
               <Input
+                className="text-right"
+                dir="rtl"
+                value={String(settings.blessings_label ?? '')}
+                onChange={e => setSettings({ ...settings, blessings_label: e.target.value })}
+                placeholder="כיתוב בתפריט (אופציונלי)"
+              />
+
+              <Input
+                className="text-right"
+                dir="rtl"
+                value={String(settings.blessings_title ?? '')}
+                onChange={e => setSettings({ ...settings, blessings_title: e.target.value })}
+                placeholder="כותרת בלוק/עמוד (למשל: ברכות / המלצות / חוות דעת)"
+              />
+
+              <Textarea
+                className="text-right"
+                dir="rtl"
+                value={String(settings.blessings_subtitle ?? '')}
+                onChange={e => setSettings({ ...settings, blessings_subtitle: e.target.value })}
+                placeholder="תיאור מתחת לכותרת (מופיע בבית ובדף ברכות)"
+                rows={2}
+              />
+
+              <label className="text-xs text-zinc-500 text-right">כמות ברכות בפריוויו בדף הבית</label>
+
+              <Input
+                className="text-right"
+                dir="rtl"
                 value={String(settings.blessings_preview_limit ?? 3)}
                 onChange={e => setSettings({ ...settings, blessings_preview_limit: Number(e.target.value) })}
                 placeholder="כמה ברכות להציג בפריוויו בדף הבית (למשל 3)"
               />
 
-              <label className="text-sm flex items-center gap-2">
+              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
                 <input
                   type="checkbox"
                   checked={settings.blessings_show_all_button !== false}
@@ -920,14 +915,16 @@ async function loadBlocks() {
                 להציג כפתור “שלח ברכה” בדף הבית
               </label>
 
-              <label className="text-xs text-zinc-500">גודל תמונה/וידאו/Preview בברכות (px)</label>
+              <label className="text-xs text-zinc-500 text-right">גודל תמונה/וידאו/Preview בברכות (px)</label>
               <Input
+                className="text-right"
+                dir="rtl"
                 value={String(settings.blessings_media_size ?? 96)}
                 onChange={e => setSettings({ ...settings, blessings_media_size: Number(e.target.value) })}
                 placeholder="למשל 96"
               />
 
-              <label className="text-sm flex items-center gap-2">
+              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
                 <input
                   type="checkbox"
                   checked={settings.link_preview_show_details === true}
