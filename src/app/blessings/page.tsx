@@ -5,9 +5,35 @@ import { supabaseServiceRole } from "@/lib/supabase";
 import { fetchBlocks, fetchSettings } from "@/lib/db";
 import BlessingsClient from "./ui";
 import BlessingsShareHeader from "./BlessingsShareHeader";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await fetchSettings();
+  const eventName = (settings as any)?.event_name || "Event";
+  const title = `${eventName} – ברכות`;
+
+  const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : [];
+  const imageUrl = typeof heroImages[0] === "string" ? heroImages[0] : undefined;
+
+  return {
+    title,
+    description: `${eventName} – עמוד הברכות` ,
+    openGraph: {
+      title,
+      description: `${eventName} – עמוד הברכות`,
+      images: imageUrl ? [{ url: imageUrl }] : undefined,
+    },
+    twitter: {
+      card: imageUrl ? "summary_large_image" : "summary",
+      title,
+      description: `${eventName} – עמוד הברכות`,
+      images: imageUrl ? [imageUrl] : undefined,
+    },
+  };
+}
 
 async function getFeed() {
   const device_id = cookies().get("device_id")?.value || null;

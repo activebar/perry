@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Container, Card, Button } from '@/components/ui'
 import { computeEventPhase } from '@/lib/db'
 import HeroRotator from '@/components/hero-rotator'
+import ShareModal from '@/components/share/ShareModal'
+import { buildShareMessage } from '@/lib/share/buildShareMessage'
 
 type HomePayload = {
   ok: boolean
@@ -262,6 +264,55 @@ export default function HomePage() {
     } catch {}
   }
 
+  // Share (Home blessings preview)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [sharePayload, setSharePayload] = useState<{ message: string; link: string } | null>(null)
+
+  const shareEnabled = settings?.share_enabled !== false
+  const shareUsePermalink = settings?.share_use_permalink !== false
+  const shareWhatsappEnabled = settings?.share_whatsapp_enabled !== false
+  const shareWebshareEnabled = settings?.share_webshare_enabled !== false
+
+  function buildLinkForPost(postId?: string) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const base = origin ? `${origin}/blessings` : '/blessings'
+    if (postId && shareUsePermalink) return `${base}#post-${postId}`
+    return base
+  }
+
+  async function shareBlessing(p: any) {
+    if (!shareEnabled) return
+    const link = buildLinkForPost(p?.id)
+    const eventName = String(settings?.event_name || 'Event')
+    const template = settings?.share_message_template || null
+    const noTextFallback = String(settings?.share_no_text_fallback || 'נשלחה ברכה מהממת 💙')
+    const message = buildShareMessage(
+      template,
+      {
+        EVENT_NAME: eventName,
+        AUTHOR_NAME: p?.author_name || '',
+        TEXT: p?.text || '',
+        LINK: link,
+        DATE: p?.created_at || ''
+      },
+      noTextFallback
+    )
+
+    const canNative = shareWebshareEnabled && typeof navigator !== 'undefined' && (navigator as any).share
+    if (canNative) {
+      try {
+        // Avoid passing `url` to prevent duplicated links in targets like WhatsApp.
+        await (navigator as any).share({ title: eventName, text: message })
+        return
+      } catch {
+        // fall back
+      }
+    }
+
+    setSharePayload({ message, link })
+    setShareOpen(true)
+  }
+
   if (!data) {
     return (
       <main>
@@ -456,6 +507,15 @@ export default function HomePage() {
                       )}
 
                       <div className="mt-2 flex flex-wrap gap-2">
+                        {shareEnabled ? (
+                          <button
+                            type="button"
+                            onClick={() => shareBlessing(p)}
+                            className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                          >
+                            {String(settings?.share_button_label || 'שתף')}
+                          </button>
+                        ) : null}
                         {EMOJIS.map(e => {
                           const count = Number(p.reaction_counts?.[e] || 0)
                           const active = Array.isArray(p.my_reactions) && p.my_reactions.includes(e)
@@ -545,6 +605,19 @@ export default function HomePage() {
       </div>
     </div>
   </div>
+)}
+
+{sharePayload && (
+  <ShareModal
+    open={shareOpen}
+    onClose={() => setShareOpen(false)}
+    title={String(settings?.share_modal_title || 'שיתוף')}
+    message={sharePayload.message}
+    link={sharePayload.link}
+    whatsappEnabled={shareWhatsappEnabled}
+    whatsappLabel={String(settings?.share_whatsapp_button_label || 'שתף בוואטסאפ')}
+    copyLabel={String(settings?.qr_btn_copy_label || 'העתק קישור')}
+  />
 )}
       </Container>
     </main>

@@ -390,7 +390,9 @@ async function saveEdit() {
     const canNative = shareWebshareEnabled && typeof navigator !== 'undefined' && (navigator as any).share
     if (canNative) {
       try {
-        await (navigator as any).share({ title: eventName, text: message, url: link })
+        // NOTE: Many share targets append the URL automatically when provided.
+        // Since our template already includes {LINK}, passing `url` can duplicate the link.
+        await (navigator as any).share({ title: eventName, text: message })
         return
       } catch {
         // fall back
