@@ -30,8 +30,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
   const ogDefault = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
 
-  const mediaUrl = (post as any)?.media_url as string | undefined
-  const ogImage = toAbsoluteUrl(isImage(mediaUrl) ? mediaUrl : ogDefault)
+  // Use our proxy endpoint so crawlers can always fetch the image.
+  const ogImage = toAbsoluteUrl(`/api/og/image?post=${encodeURIComponent(params.id)}&fallback=${encodeURIComponent(String(ogDefault || ''))}`)
 
   const descText = String((post as any)?.text || '').trim()
   const description = descText ? descText.slice(0, 180) : `${eventName} – ברכה`

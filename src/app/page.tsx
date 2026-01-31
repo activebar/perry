@@ -305,8 +305,10 @@ export default function HomePage() {
     const canNative = shareWebshareEnabled && typeof navigator !== 'undefined' && (navigator as any).share
     if (canNative) {
       try {
-        // Avoid passing `url` to prevent duplicated links in targets like WhatsApp.
-        await (navigator as any).share({ title: eventName, text: message })
+        // Pass URL separately so WhatsApp/Facebook can generate a rich preview,
+        // while keeping the text clean (no duplicated links).
+        const textOnly = message.split(link).join('').trim() || message
+        await (navigator as any).share({ title: eventName, text: textOnly, url: link })
         return
       } catch {
         // fall back
@@ -510,16 +512,7 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {shareEnabled ? (
-                          <button
-                            type="button"
-                            onClick={() => shareBlessing(p)}
-                            className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
-                          >
-                            {String(settings?.share_button_label || 'שתף')}
-                          </button>
-                        ) : null}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
                         {EMOJIS.map(e => {
                           const count = Number(p.reaction_counts?.[e] || 0)
                           const active = Array.isArray(p.my_reactions) && p.my_reactions.includes(e)
@@ -537,6 +530,16 @@ export default function HomePage() {
                             </button>
                           )
                         })}
+                        {shareEnabled ? (
+                          <button
+                            type="button"
+                            onClick={() => shareBlessing(p)}
+                            className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                            title={String(settings?.share_button_label || 'שתף')}
+                          >
+                            🔗
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   ))}

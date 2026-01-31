@@ -18,7 +18,7 @@ export function Card({ children, className = '', ...rest }: DivProps) {
   )
 }
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'default'
+type ButtonVariant = 'primary' | 'ghost' | 'default'
 
 export function Button(
   props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }
@@ -29,8 +29,6 @@ export function Button(
   const v =
     variant === 'ghost'
       ? 'bg-transparent text-zinc-900 hover:bg-zinc-100'
-      : variant === 'secondary'
-        ? 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200 border border-zinc-200'
       : 'bg-zinc-900 text-white hover:bg-zinc-800'
   return <button {...rest} className={`${base} ${v} ${className}`} />
 }

@@ -6,6 +6,7 @@ import { fetchBlocks, fetchSettings } from "@/lib/db";
 import BlessingsClient from "./ui";
 import BlessingsShareHeader from "./BlessingsShareHeader";
 import type { Metadata } from "next";
+import { getSiteUrl, toAbsoluteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,21 +17,27 @@ export async function generateMetadata(): Promise<Metadata> {
   const title = `${eventName} – ברכות`;
 
   const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : [];
-  const imageUrl = (settings as any)?.og_default_image_url || (typeof heroImages[0] === "string" ? heroImages[0] : undefined);
+  const imageUrlRaw =
+    (settings as any)?.og_default_image_url || (typeof heroImages[0] === "string" ? heroImages[0] : undefined);
+
+  // Always use an absolute OG image URL (best effort). If the image is in Supabase private storage,
+  // the proxy route will still serve it on our domain.
+  const ogImage = toAbsoluteUrl(`/api/og/image?default=1&fallback=${encodeURIComponent(String(imageUrlRaw || ''))}`);
 
   return {
+    metadataBase: new URL(getSiteUrl()),
     title,
     description: `${eventName} – עמוד הברכות` ,
     openGraph: {
       title,
       description: `${eventName} – עמוד הברכות`,
-      images: imageUrl ? [{ url: imageUrl }] : undefined,
+      images: ogImage ? [{ url: ogImage }] : undefined,
     },
     twitter: {
-      card: imageUrl ? "summary_large_image" : "summary",
+      card: ogImage ? "summary_large_image" : "summary",
       title,
       description: `${eventName} – עמוד הברכות`,
-      images: imageUrl ? [imageUrl] : undefined,
+      images: ogImage ? [ogImage] : undefined,
     },
   };
 }

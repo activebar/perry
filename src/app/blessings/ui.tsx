@@ -394,9 +394,8 @@ async function saveEdit() {
     const canNative = shareWebshareEnabled && typeof navigator !== 'undefined' && (navigator as any).share
     if (canNative) {
       try {
-        // NOTE: Many share targets append the URL automatically when provided.
-        // Since our template already includes {LINK}, passing `url` can duplicate the link.
-        await (navigator as any).share({ title: eventName, text: message })
+        const textOnly = message.split(link).join('').trim() || message
+        await (navigator as any).share({ title: eventName, text: textOnly, url: link })
         return
       } catch {
         // fall back
@@ -542,16 +541,7 @@ async function saveEdit() {
                   </div>
                 )}
                 {/* reactions */}
-                <div className="mt-3 flex flex-wrap gap-2 justify-end">
-                  {shareEnabled ? (
-                    <button
-                      type="button"
-                      onClick={() => sharePost(p)}
-                      className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
-                    >
-                      {String(settings?.share_button_label || 'שתף')}
-                    </button>
-                  ) : null}
+                <div className="mt-3 flex flex-wrap items-center gap-2 justify-end">
                   {EMOJIS.map(emo => {
                     const active = (p.my_reactions || []).includes(emo)
                     const c = (p.reaction_counts || {})[emo] || 0
@@ -565,6 +555,16 @@ async function saveEdit() {
                       </Button>
                     )
                   })}
+                  {shareEnabled ? (
+                    <Button
+                      variant="ghost"
+                      onClick={() => sharePost(p)}
+                      className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                      title={String(settings?.share_button_label || 'שתף')}
+                    >
+                      🔗
+                    </Button>
+                  ) : null}
                 </div>
 
                 {/* edit/delete (mine, within 1h) */}

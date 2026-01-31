@@ -25,8 +25,10 @@ export default function ShareModal({
   const [copied, setCopied] = useState(false)
 
   const waLink = useMemo(() => {
-    return `https://wa.me/?text=${encodeURIComponent(message)}`
-  }, [message])
+    const cleaned = message.split(link).join('').trim()
+    const text = cleaned ? `${link}\n\n${cleaned}` : link
+    return `https://wa.me/?text=${encodeURIComponent(text)}`
+  }, [message, link])
 
   if (!open) return null
 

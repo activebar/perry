@@ -4,6 +4,7 @@ import { supabaseServiceRole } from '@/lib/supabase'
 import { fetchSettings } from '@/lib/db'
 import { getSiteUrl, toAbsoluteUrl } from '@/lib/site-url'
 import { Card, Container, Button } from '@/components/ui'
+import RedirectClient from '@/components/RedirectClient'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -14,13 +15,23 @@ function isImage(url?: string | null) {
 
 async function resolvePostId(code: string) {
   const srv = supabaseServiceRole()
+  const clean = String(code || '').trim()
+  if (!clean) return null
+  // If a full UUID was provided, try exact match first.
+  if (clean.length >= 32) {
+    const { data: exact } = await srv.from('posts').select('id').eq('id', clean).limit(1)
+    if (exact && exact.length === 1) return exact[0].id as string
+  }
+
   const { data } = await srv
     .from('posts')
     .select('id')
-    .ilike('id', `${code}-%`)
-    .limit(2)
+    .ilike('id', `${clean}%`)
+    .order('created_at', { ascending: false })
+    .limit(3)
 
-  if (!data || data.length !== 1) return null
+  if (!data || data.length === 0) return null
+  // Collisions are extremely unlikely; pick the newest match.
   return data[0].id as string
 }
 
@@ -32,7 +43,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
   if (!postId) {
     const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
     const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
-    const ogDefault = toAbsoluteUrl(ogDefaultRaw)
+    const ogDefault = toAbsoluteUrl(`/api/og/image?default=1&fallback=${encodeURIComponent(String(ogDefaultRaw || ''))}`)
     return {
       metadataBase: new URL(getSiteUrl()),
       title: eventName,
@@ -56,8 +67,9 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
   const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
 
-  const mediaUrl = (post as any)?.media_url as string | undefined
-  const ogImage = toAbsoluteUrl(isImage(mediaUrl) ? mediaUrl : ogDefaultRaw)
+  const ogImage = toAbsoluteUrl(
+    `/api/og/image?post=${encodeURIComponent(String(postId))}&fallback=${encodeURIComponent(String(ogDefaultRaw || ''))}`
+  )
 
   const descText = String((post as any)?.text || '').trim()
   const description = descText ? descText.slice(0, 180) : `${eventName} – ברכה`
@@ -101,14 +113,17 @@ export default async function ShortBlessingPage({ params }: { params: { code: st
     )
   }
 
-  // redirect to the canonical permalink page (keeps OG because /b has metadata too)
+  const to = `/blessings/p/${postId}`
+
+  // Client-side redirect keeps OG metadata for crawlers, while sending humans to the full page.
   return (
     <Container className="py-10" dir="rtl">
       <Card className="p-6 text-right">
+        <RedirectClient to={to} />
         <div className="text-2xl font-bold">ברכה לאירוע {eventName}</div>
         <div className="mt-3 text-zinc-600">פותח ברכה…</div>
         <div className="mt-6 flex justify-end">
-          <Link href={`/blessings/p/${postId}`}>
+          <Link href={to}>
             <Button>להמשך</Button>
           </Link>
         </div>
