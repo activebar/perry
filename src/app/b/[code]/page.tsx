@@ -14,6 +14,7 @@ function isImage(url?: string | null) {
 }
 
 async function resolvePostId(code: string) {
+  // Prefer service role if configured; otherwise falls back to anon.
   const srv = supabaseServiceRole()
 
   // WhatsApp sometimes appends punctuation (.) or query params (?v=2).
@@ -38,22 +39,30 @@ async function resolvePostId(code: string) {
   const prefix = clean.match(/^[0-9a-f]{4,32}/)?.[0] || ''
   if (!prefix) return null
 
-  // Prefer DB RPC if it exists (fast + exact)
+  // Prefer DB RPC if it exists (fast + exact). Support both arg names.
   try {
-    const { data: rpcId, error } = await srv.rpc('post_id_from_prefix', { p_prefix: prefix })
-    if (!error && rpcId) return String(rpcId)
-  } catch {
-    // ignore – we'll do a JS fallback below
-  }
+    const r1 = await srv.rpc('post_id_from_prefix', { p_prefix: prefix } as any)
+    if (!r1.error && r1.data) return String(r1.data)
+  } catch {}
+  try {
+    const r2 = await srv.rpc('post_id_from_prefix', { prefix } as any)
+    if (!r2.error && r2.data) return String(r2.data)
+  } catch {}
 
   // 3) JS fallback: scan newest N posts and match startsWith(prefix)
   const { data: list } = await srv
     .from('posts')
-    .select('id, created_at')
+    .select('id, created_at, status')
     .order('created_at', { ascending: false })
     .limit(2000)
 
-  const hit = (list || []).find((p: any) => String(p.id).toLowerCase().startsWith(prefix))
+  const hit = (list || []).find((p: any) => {
+    const id = String(p.id || '').toLowerCase()
+    if (!id.startsWith(prefix)) return false
+    // If we only see approved posts under anon/RLS, status may be missing or always 'approved'.
+    // Keep a soft check here so we don't accidentally match hidden drafts.
+    return !p.status || p.status === 'approved'
+  })
   return hit ? String((hit as any).id) : null
 }
 
@@ -65,7 +74,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
   if (!postId) {
     const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
     const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
-    const ogDefault = toAbsoluteUrl('/api/og/image?default=1')
+    const ogDefault = toAbsoluteUrl('/og/default.jpg')
     return {
       metadataBase: new URL(getSiteUrl()),
       title: eventName,
@@ -98,8 +107,9 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
   const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
 
-  // Use the same verified OG endpoint everywhere (WhatsApp is picky)
-  const ogImage = toAbsoluteUrl(`/api/og/image?post=${encodeURIComponent(String(postId))}`)
+  const ogImage = toAbsoluteUrl(
+    `/og/post-jpg/${encodeURIComponent(String(postId))}`
+  )
 
   const descText = String((post as any)?.text || '').trim()
   const description = descText ? descText.slice(0, 180) : `${eventName} – ברכה`

@@ -541,7 +541,7 @@ async function saveEdit() {
                   </div>
                 )}
                 {/* reactions */}
-                <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto">
+                <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto" dir="rtl">
                   {EMOJIS.map(emo => {
                     const active = (p.my_reactions || []).includes(emo)
                     const c = (p.reaction_counts || {})[emo] || 0
@@ -573,7 +573,7 @@ async function saveEdit() {
 
                 {/* edit/delete (mine, within 1h) */}
                 {canEditMine(p) && (
-                  <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto">
+                  <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto" dir="rtl">
                     <Button variant="ghost" onClick={() => editMine(p.id)}>
                       ערוך (שעה)
                     </Button>

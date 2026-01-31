@@ -512,7 +512,7 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      <div className="mt-2 flex items-center gap-2 flex-nowrap overflow-x-auto">
+                      <div className="mt-2 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto" dir="rtl">
                         {EMOJIS.map(e => {
                           const count = Number(p.reaction_counts?.[e] || 0)
                           const active = Array.isArray(p.my_reactions) && p.my_reactions.includes(e)

@@ -10,12 +10,8 @@ export async function GET(req: Request) {
   // Forward headers (some crawlers rely on UA)
   const forward = new Request(url.toString(), {
     headers: req.headers,
-    method: 'GET'
+    method: 'GET',
   })
 
-  const res = await ogGet(forward)
-  const headers = new Headers(res.headers)
-  if (!headers.get('content-type')) headers.set('content-type', 'image/png')
-  headers.set('cache-control', 'public, max-age=0, s-maxage=86400, stale-while-revalidate=86400')
-  return new Response(res.body, { status: res.status, headers })
+  return ogGet(forward)
 }

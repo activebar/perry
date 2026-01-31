@@ -11,7 +11,8 @@ export function supabaseAnon(): SupabaseClient {
 export function supabaseServiceRole(): SupabaseClient {
   const pub = getPublicEnv()
   const srv = getServerEnv()
-  return createClient(pub.NEXT_PUBLIC_SUPABASE_URL, srv.SUPABASE_SERVICE_ROLE_KEY, {
+  const key = srv.SUPABASE_SERVICE_ROLE_KEY || pub.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  return createClient(pub.NEXT_PUBLIC_SUPABASE_URL, key, {
     auth: { persistSession: false, autoRefreshToken: false }
   })
 }

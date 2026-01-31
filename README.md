@@ -77,4 +77,3 @@ Cron יכבה אותו אחרי X שעות מתחילת האירוע (ואז ה�
 - Lightbox מלא בגלריה
 - ספירת ריאקציות בזמן אמת
 - ניהול עיצוב כפתורים/צבעים ברמת UI מלאה (כפי באפיון) עם editor נוח יותר
-\n\n## V12 Notes\n- OG meta tags are enforced via src/app/head.tsx and use /api/og/image?default=1 (absolute).\n- Added public/og-default.png fallback.\n- Added RPC migration post_id_from_prefix(p_prefix text). Run it once in Supabase.

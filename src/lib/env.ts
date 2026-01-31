@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
 const serverSchema = z.object({
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // Service role is recommended for server-side reads (bypasses RLS),
+  // but keep it optional so the app can still run in environments
+  // where only the anon key is configured.
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   CRON_SECRET: z.string().optional(),
   GDRIVE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   GDRIVE_ROOT_FOLDER_ID: z.string().optional(),
