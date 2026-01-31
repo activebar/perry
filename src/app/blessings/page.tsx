@@ -92,7 +92,7 @@ export default async function BlessingsPage() {
     fetchBlocks(),
   ]);
 
-  const blessingsLabel = (settings as any)?.blessings_label || (settings as any)?.blessings_title || 'ברכות';
+  const blessingsLabel = (settings as any)?.blessings_title || 'ברכות';
   const blessingsSubtitle = (settings as any)?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.';
 
   return (
@@ -113,7 +113,7 @@ export default async function BlessingsPage() {
                 <Button variant="ghost">גלריה</Button>
               </Link>
               <Link href="/blessings">
-                <Button>{blessingsLabel}</Button>
+                <Button>{blessingsTitle}</Button>
               </Link>
               {settings.gift_enabled && (
                 <Link href="/gift">
@@ -128,7 +128,7 @@ export default async function BlessingsPage() {
         <div className="mt-4">
           <Card dir="rtl">
             <div className="text-right">
-              <h2 className="text-xl font-bold">{blessingsLabel}</h2>
+              <h2 className="text-xl font-bold">{blessingsTitle}</h2>
               <p className="text-sm text-zinc-600">{blessingsSubtitle}</p>
             </div>
           </Card>

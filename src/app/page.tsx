@@ -218,8 +218,8 @@ export default function HomePage() {
   const blessingsShowAll = settings?.blessings_show_all_button !== false
 
   // Blessings labels (dynamic for white-label reuse)
-    const blessingsTitle = (settings?.blessings_title || 'ברכות') as string
-    const blessingsSubtitle = (settings?.blessings_label || settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה/וידאו או קישור.') as string
+  const blessingsTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
+  const blessingsSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה/וידאו או קישור.') as string
 
   const heroImages = Array.isArray(settings?.hero_images) ? settings.hero_images : []
   const heroSeconds = Number(settings?.hero_rotate_seconds ?? 4)

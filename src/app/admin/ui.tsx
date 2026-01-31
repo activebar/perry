@@ -646,6 +646,238 @@ async function loadBlocks() {
         <h3 className="font-semibold">התחברות</h3>
 
         <div className="mt-3 grid gap-2">
+          <Input placeholder="שם משתמש" value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" />
+
+          <div className="relative">
+            <Input
+              placeholder="סיסמה"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password"
+              className="pr-12"
+              onKeyDown={e => {
+                // @ts-ignore
+                if (typeof e.getModifierState === 'function') setCapsOn(e.getModifierState('CapsLock'))
+                if (e.key === 'Enter' && username && password && !busy) login()
+              }}
+              onKeyUp={e => {
+                // @ts-ignore
+                if (typeof e.getModifierState === 'function') setCapsOn(e.getModifierState('CapsLock'))
+              }}
+              onFocus={e => {
+                // @ts-ignore
+                if (typeof e.getModifierState === 'function') setCapsOn(e.getModifierState('CapsLock'))
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword(v => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100"
+              aria-label={showPassword ? 'הסתר סיסמה' : 'הצג סיסמה'}
+              title={showPassword ? 'הסתר סיסמה' : 'הצג סיסמה'}
+            >
+              {showPassword ? '🙈' : '👁️'}
+            </button>
+          </div>
+
+          {capsOn && <p className="text-xs text-amber-700">⚠️ נראה ש־Caps Lock דולק.</p>}
+
+          <Button onClick={login} disabled={busy || !username || !password}>
+            {busy ? 'מתחבר...' : 'התחבר'}
+          </Button>
+
+          {err && <p className="text-sm text-red-600">{err}</p>}
+        </div>
+      </Card>
+    )
+  }
+
+  /* ===== AUTHENTICATED UI ===== */
+  return (
+    <div className="space-y-4" dir="rtl">
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-right">
+            <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
+            <p className="text-xs text-zinc-500">Role: {admin.role}</p>
+
+            {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
+              <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {pendingPhotosCount}</span>
+              </div>
+            )}
+
+            {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {tabs.map(t => (
+              <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
+                {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
+              </Button>
+            ))}
+            <Button variant="ghost" onClick={logout}>יציאה</Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* ===== SETTINGS ===== */}
+      {tab === 'settings' && settings && (
+        <Card>
+          <h3 className="font-semibold">הגדרות</h3>
+
+          <div className="mt-3 grid gap-3">
+            {/* כללי */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">הגדרות כלליות</p>
+
+              <Input
+                value={settings.event_name || ''}
+                onChange={e => setSettings({ ...settings, event_name: e.target.value })}
+                placeholder="שם אירוע"
+              />
+
+              <div className="grid gap-1">
+                <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
+                <input
+                  type="datetime-local"
+                  value={startAtLocal}
+                  onChange={e => setStartAtLocal(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 px-3 py-2"
+                />
+              </div>
+
+              <Input
+                value={settings.location_text || ''}
+                onChange={e => setSettings({ ...settings, location_text: e.target.value })}
+                placeholder="אולם / כתובת"
+              />
+
+              <Input
+                value={settings.waze_url || ''}
+                onChange={e => setSettings({ ...settings, waze_url: e.target.value })}
+                placeholder="קישור Waze"
+                dir="ltr"
+              />
+            </div>
+
+            {/* HERO */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
+
+              <Textarea
+                value={settings.hero_pre_text || ''}
+                onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
+                placeholder="טקסט לפני האירוע (עד 30 דק׳ אחרי start_at)"
+                rows={4}
+              />
+
+              <Textarea
+                value={settings.hero_live_text || ''}
+                onChange={e => setSettings({ ...settings, hero_live_text: e.target.value })}
+                placeholder="טקסט בזמן האירוע (אחרי 30 דק׳ ועד יום אחרי)"
+                rows={3}
+              />
+
+              <Textarea
+                value={settings.hero_post_text || ''}
+                onChange={e => setSettings({ ...settings, hero_post_text: e.target.value })}
+                placeholder="טקסט אחרי האירוע"
+                rows={4}
+              />
+
+              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+                <p className="text-sm font-medium">תמונות מתחלפות</p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="file" accept="image/*" multiple onChange={e => setHeroFiles(Array.from(e.target.files || []))} />
+                  <Button onClick={uploadHeroImages} disabled={heroBusy || heroFiles.length === 0}>
+                    {heroBusy ? 'מעלה...' : `העלה ${heroFiles.length || ''} תמונות`}
+                  </Button>
+                </div>
+
+                {heroMsg && <p className="text-sm text-zinc-700">{heroMsg}</p>}
+
+                <div className="grid gap-2">
+                  <label className="text-xs text-zinc-500">מהירות החלפה (שניות)</label>
+                  <Input
+                    value={String(settings.hero_rotate_seconds ?? 5)}
+                    onChange={e => setSettings({ ...settings, hero_rotate_seconds: Number(e.target.value) })}
+                    placeholder="למשל 5"
+                  />
+                </div>
+
+                {Array.isArray(settings.hero_images) && settings.hero_images.length > 0 && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {settings.hero_images.map((u: string) => (
+                      <div key={u} className="overflow-hidden rounded-2xl border border-zinc-200">
+                        <div className="relative aspect-[16/9] bg-zinc-50">
+                          <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                        </div>
+                        <div className="p-2 flex items-center justify-between gap-2">
+                          <Button variant="ghost" onClick={() => removeHeroImage(u)}>הסר</Button>
+                          <a className="text-xs underline" href={u} target="_blank" rel="noreferrer">פתח</a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(!Array.isArray(settings.hero_images) || settings.hero_images.length === 0) && (
+                  <p className="text-xs text-zinc-500">אין עדיין תמונות HERO.</p>
+                )}
+              </div>
+            </div>
+
+            {/* גלריות */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">גלריות</p>
+
+              <Input
+                value={settings.guest_gallery_title || ''}
+                onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
+                placeholder="כותרת גלריית אורחים"
+              />
+
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.guest_gallery_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
+                />
+                להציג כפתור “לכל התמונות” בגלריית אורחים
+              </label>
+
+              <Input
+                value={settings.admin_gallery_title || ''}
+                onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
+                placeholder="כותרת גלריית מנהל"
+              />
+
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.admin_gallery_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
+                />
+                להציג כפתור “לכל התמונות” בגלריית מנהל
+              </label>
+            </div>
+
+            {/* ברכות */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+              <p className="text-sm font-medium text-right">ברכות</p>
+
+              <Input
+                className="text-right"
+                dir="rtl"
+                value={String(settings.blessings_label ?? '')}
+                onChange={e => setSettings({ ...settings, blessings_label: e.target.value })}
+                placeholder="תיאור מתחת לכותרת (מופיע בבית ובדף ברכות)"
+              />
 
               <Input
                 className="text-right"
@@ -658,8 +890,8 @@ async function loadBlocks() {
               <Textarea
                 className="text-right"
                 dir="rtl"
-                value={String(settings.blessings_label ?? '')}
-                onChange={e => setSettings({ ...settings, blessings_label: e.target.value })}
+                value={String(settings.blessings_subtitle ?? '')}
+                onChange={e => setSettings({ ...settings, blessings_subtitle: e.target.value })}
                 placeholder="תיאור מתחת לכותרת (מופיע בבית ובדף ברכות)"
                 rows={2}
               />
