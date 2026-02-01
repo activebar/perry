@@ -19,7 +19,7 @@ export default function ResetClient() {
         const sb = createClient(url, anon)
 
         // Supabase may return either `code` (PKCE) or legacy token params.
-        const code = sp.get('code')
+        const code = sp?.get('code') || null
         if (code) {
           await sb.auth.exchangeCodeForSession(code)
         }
