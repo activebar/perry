@@ -20,7 +20,7 @@ export default function AdminResetPage() {
         const sb = createClient(url, anon)
 
         // Supabase may return either `code` (PKCE) or legacy token params.
-        const code = sp.get('code')
+        const code = sp?.get('code')
         if (code) {
           await sb.auth.exchangeCodeForSession(code)
         }
