@@ -8,7 +8,7 @@ import { Button } from '@/components/ui'
 export default function ResetClient() {
   const router = useRouter()
   const sp = useSearchParams()
-  const token = sp.get('token') || ''
+  const token = sp?.get('token') || ''
 
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
