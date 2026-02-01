@@ -37,17 +37,21 @@ export async function POST(req: Request) {
   if (!targetPath.startsWith('/')) return jsonError('target_path must start with /')
 
   const srv = supabaseServiceRole()
-  const { error } = await srv.from('short_links').upsert(
-    {
-      code,
-      post_id: postId,
-      target_path: targetPath
-    },
+  // Some deployments may have `short_links` without `post_id` column (legacy).
+  // We try to write post_id first, and fallback to writing only target_path.
+  const first = await srv.from('short_links').upsert(
+    { code, post_id: postId, target_path: targetPath } as any,
     { onConflict: 'code' }
   )
 
-  if (error) {
-    return jsonError(error.message || 'Failed to save short link', 500)
+  if (first.error) {
+    const fallback = await srv
+      .from('short_links')
+      .upsert({ code, target_path: targetPath } as any, { onConflict: 'code' })
+
+    if (fallback.error) {
+      return jsonError(first.error.message || fallback.error.message || 'Failed to save short link', 500)
+    }
   }
 
   return NextResponse.json({ ok: true, code, target_path: targetPath })

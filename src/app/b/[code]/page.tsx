@@ -33,11 +33,27 @@ async function resolveShortLink(code: string): Promise<ResolvedShortLink | null>
   if (!clean) return null
 
   // Preferred: lookup from `short_links` (works even when posts.id is UUID)
-  const { data: sl } = await srv
-    .from('short_links')
-    .select('code, post_id, target_path')
-    .eq('code', clean)
-    .limit(1)
+  // NOTE: some deployments may not yet have the `post_id` column (older schema).
+  // In that case Supabase returns an error and `data` will be null. We fall back
+  // to selecting only `code,target_path` and extracting the UUID from the path.
+  let sl: any[] | null = null
+  {
+    const r = await srv
+      .from('short_links')
+      .select('code, post_id, target_path')
+      .eq('code', clean)
+      .limit(1)
+    if (r.error) {
+      const r2 = await srv
+        .from('short_links')
+        .select('code, target_path')
+        .eq('code', clean)
+        .limit(1)
+      sl = (r2.data as any[] | null) ?? null
+    } else {
+      sl = (r.data as any[] | null) ?? null
+    }
+  }
 
   if (sl && sl.length === 1) {
     const row = sl[0] as any
