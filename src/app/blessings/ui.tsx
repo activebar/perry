@@ -541,39 +541,36 @@ async function saveEdit() {
                   </div>
                 )}
                 {/* reactions */}
-                <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto" dir="rtl">
+                <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto">
                   {EMOJIS.map(emo => {
                     const active = (p.my_reactions || []).includes(emo)
                     const c = (p.reaction_counts || {})[emo] || 0
                     return (
-                      <button
+                      <Button
                         key={emo}
+                        variant={active ? 'primary' : 'ghost'}
+                        className="shrink-0"
                         onClick={() => toggleReaction(p.id, emo)}
-                        className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm ${
-                          active ? 'bg-black text-white border-black' : 'bg-white text-zinc-700 border-zinc-200'
-                        }`}
-                        type="button"
                       >
-                        {emo}
-                        {c ? <span className="ms-2">{c}</span> : null}
-                      </button>
+                        {emo} {c ? c : ''}
+                      </Button>
                     )
                   })}
                   {shareEnabled ? (
-                    <button
+                    <Button
+                      variant="ghost"
                       onClick={() => sharePost(p)}
-                      className="shrink-0 whitespace-nowrap rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                      className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
                       title={String(settings?.share_button_label || 'שתף')}
-                      type="button"
                     >
                       🔗
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
 
                 {/* edit/delete (mine, within 1h) */}
                 {canEditMine(p) && (
-                  <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto" dir="rtl">
+                  <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto">
                     <Button variant="ghost" onClick={() => editMine(p.id)}>
                       ערוך (שעה)
                     </Button>

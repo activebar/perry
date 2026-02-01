@@ -14,56 +14,28 @@ function isImage(url?: string | null) {
 }
 
 async function resolvePostId(code: string) {
-  // Prefer service role if configured; otherwise falls back to anon.
   const srv = supabaseServiceRole()
-
-  // WhatsApp sometimes appends punctuation (.) or query params (?v=2).
-  // We accept either a full UUID or a short hex prefix (typically first 8 chars).
-  const raw = String(code || '').trim()
-  let clean = raw.split('?')[0].split('#')[0].trim()
-
-  // keep only leading hex/dash run (strip trailing punctuation)
-  const lead = clean.match(/^[0-9a-fA-F-]{4,64}/)?.[0] || ''
-  clean = lead.toLowerCase()
-
+  let clean = String(code || '').trim()
+  // strip trailing punctuation (e.g. WhatsApp adds '.' at end)
+  const m = clean.match(/^[0-9a-fA-F-]+/)
+  clean = (m?.[0] || '').toLowerCase()
   if (!clean) return null
-
-  // 1) Full UUID
-  const uuidish = clean.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)?.[0]
-  if (uuidish) {
-    const { data: exact } = await srv.from('posts').select('id').eq('id', uuidish).limit(1)
+  // If a full UUID was provided, try exact match first.
+  if (clean.length >= 32) {
+    const { data: exact } = await srv.from('posts').select('id').eq('id', clean).limit(1)
     if (exact && exact.length === 1) return exact[0].id as string
   }
 
-  // 2) Prefix (usually 8 hex chars – first UUID segment)
-  const prefix = clean.match(/^[0-9a-f]{4,32}/)?.[0] || ''
-  if (!prefix) return null
-
-  // Prefer DB RPC if it exists (fast + exact). Support both arg names.
-  try {
-    const r1 = await srv.rpc('post_id_from_prefix', { p_prefix: prefix } as any)
-    if (!r1.error && r1.data) return String(r1.data)
-  } catch {}
-  try {
-    const r2 = await srv.rpc('post_id_from_prefix', { prefix } as any)
-    if (!r2.error && r2.data) return String(r2.data)
-  } catch {}
-
-  // 3) JS fallback: scan newest N posts and match startsWith(prefix)
-  const { data: list } = await srv
+  const { data } = await srv
     .from('posts')
-    .select('id, created_at, status')
+    .select('id')
+    .ilike('id', `${clean}%`)
     .order('created_at', { ascending: false })
-    .limit(2000)
+    .limit(3)
 
-  const hit = (list || []).find((p: any) => {
-    const id = String(p.id || '').toLowerCase()
-    if (!id.startsWith(prefix)) return false
-    // If we only see approved posts under anon/RLS, status may be missing or always 'approved'.
-    // Keep a soft check here so we don't accidentally match hidden drafts.
-    return !p.status || p.status === 'approved'
-  })
-  return hit ? String((hit as any).id) : null
+  if (!data || data.length === 0) return null
+  // Collisions are extremely unlikely; pick the newest match.
+  return data[0].id as string
 }
 
 export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
@@ -74,21 +46,12 @@ export async function generateMetadata({ params }: { params: { code: string } })
   if (!postId) {
     const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
     const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
-    const ogDefault = toAbsoluteUrl('/og/default.jpg')
+    const ogDefault = toAbsoluteUrl(`/api/og/image?default=1&fallback=${encodeURIComponent(String(ogDefaultRaw || ''))}`)
     return {
       metadataBase: new URL(getSiteUrl()),
       title: eventName,
       description: `${eventName} – ברכות`,
-      openGraph: {
-        title: eventName,
-        description: `${eventName} – ברכות`,
-        type: 'website',
-        images: ogDefault
-          ? [
-              { url: ogDefault, width: 1200, height: 630, alt: eventName }
-            ]
-          : undefined
-      },
+      openGraph: { title: eventName, description: `${eventName} – ברכות`, images: ogDefault ? [{ url: ogDefault }] : undefined },
       twitter: { card: ogDefault ? 'summary_large_image' : 'summary', title: eventName, description: `${eventName} – ברכות`, images: ogDefault ? [ogDefault] : undefined }
     }
   }
@@ -108,7 +71,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
 
   const ogImage = toAbsoluteUrl(
-    `/og/post-jpg/${encodeURIComponent(String(postId))}`
+    `/api/og/image?post=${encodeURIComponent(String(postId))}&fallback=${encodeURIComponent(String(ogDefaultRaw || ''))}`
   )
 
   const descText = String((post as any)?.text || '').trim()
@@ -121,12 +84,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
     openGraph: {
       title,
       description,
-      type: 'article',
-      images: ogImage
-        ? [
-            { url: ogImage, width: 1200, height: 630, alt: title }
-          ]
-        : undefined
+      images: ogImage ? [{ url: ogImage }] : undefined
     },
     twitter: {
       card: ogImage ? 'summary_large_image' : 'summary',
@@ -158,14 +116,7 @@ export default async function ShortBlessingPage({ params }: { params: { code: st
     )
   }
 
-  // Decide redirect target by post kind
-  const srv = supabaseServiceRole()
-  const { data: post } = await srv.from('posts').select('id, kind, status').eq('id', postId).maybeSingle()
-
-  let to = `/blessings/p/${postId}`
-  if ((post as any)?.kind === 'gallery') {
-    to = `/gallery#post-${postId}`
-  }
+  const to = `/blessings/p/${postId}`
 
   // Client-side redirect keeps OG metadata for crawlers, while sending humans to the full page.
   return (

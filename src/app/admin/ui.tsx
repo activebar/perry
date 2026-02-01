@@ -4,6 +4,74 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 
+async function fileToImage(file: File): Promise<HTMLImageElement> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = new Image()
+    img.decoding = 'async'
+    img.src = url
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('failed to load image'))
+    })
+    return img
+  } finally {
+    // keep objectURL alive until image loads; safe to revoke here after load
+    URL.revokeObjectURL(url)
+  }
+}
+
+/**
+ * Create a 1200x630 JPEG for OpenGraph.
+ * focusX/focusY are 0..1 representing the desired center point.
+ */
+async function makeOgJpeg(file: File, focusX: number, focusY: number): Promise<Blob> {
+  const img = await fileToImage(file)
+  const srcW = img.naturalWidth || img.width
+  const srcH = img.naturalHeight || img.height
+
+  const targetW = 1200
+  const targetH = 630
+  const targetAspect = targetW / targetH
+  const srcAspect = srcW / srcH
+
+  let cropW = srcW
+  let cropH = srcH
+  if (srcAspect > targetAspect) {
+    // too wide
+    cropH = srcH
+    cropW = Math.round(srcH * targetAspect)
+  } else {
+    // too tall
+    cropW = srcW
+    cropH = Math.round(srcW / targetAspect)
+  }
+
+  const cx = focusX * srcW
+  const cy = focusY * srcH
+  let sx = Math.round(cx - cropW / 2)
+  let sy = Math.round(cy - cropH / 2)
+  sx = Math.max(0, Math.min(sx, srcW - cropW))
+  sy = Math.max(0, Math.min(sy, srcH - cropH))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = targetW
+  canvas.height = targetH
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas not supported')
+
+  ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, targetW, targetH)
+
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      b => (b ? resolve(b) : reject(new Error('failed to encode image'))),
+      'image/jpeg',
+      0.92
+    )
+  })
+  return blob
+}
+
 /* ===================== Link Preview (Unfurl) ===================== */
 
 type UnfurlData = { url: string; title: string; description: string; image: string; site_name: string }
@@ -252,12 +320,30 @@ export default function AdminApp() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
 
+  // OG default image uploader (1200x630)
+  const [ogFile, setOgFile] = useState<File | null>(null)
+  const [ogPreview, setOgPreview] = useState<string>('')
+  const [ogFocus, setOgFocus] = useState({ x: 0.5, y: 0.5 })
+  const [ogUploading, setOgUploading] = useState(false)
+  const [ogMsg, setOgMsg] = useState<string | null>(null)
+
   const qrUrl = useMemo(() => {
     if (!settings) return ''
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const path = String(settings?.qr_target_path || '/blessings')
     return origin ? `${origin}${path}` : path
   }, [settings?.qr_target_path, settings])
+
+  useEffect(() => {
+    if (!ogFile) {
+      setOgPreview('')
+      setOgFocus({ x: 0.5, y: 0.5 })
+      return
+    }
+    const u = URL.createObjectURL(ogFile)
+    setOgPreview(u)
+    return () => URL.revokeObjectURL(u)
+  }, [ogFile])
 
   // HERO upload
   const [heroFiles, setHeroFiles] = useState<File[]>([])
@@ -438,6 +524,31 @@ export default function AdminApp() {
     const patch = { ...settings, hero_images: next }
     setSettings(patch)
     await saveSettings(patch)
+  }
+
+  async function uploadOgDefaultImage() {
+    setOgMsg(null)
+    if (!ogFile) {
+      setOgMsg('בחר תמונה')
+      return
+    }
+    try {
+      setOgUploading(true)
+      const blob = await makeOgJpeg(ogFile, ogFocus.x, ogFocus.y)
+      const fd = new FormData()
+      fd.append('file', new File([blob], 'og-default.jpg', { type: 'image/jpeg' }))
+      const res = await fetch('/api/admin/og-default', { method: 'POST', body: fd })
+      const j = await res.json()
+      if (!res.ok || !j?.ok) throw new Error(j?.error || 'upload failed')
+      const publicUrl = String(j.publicUrl || '')
+      setSettings((prev: any) => (prev ? { ...prev, og_default_image_url: publicUrl } : prev))
+      setOgMsg('✅ נשמרה תמונת תצוגה (1200x630)')
+      setOgFile(null)
+    } catch (e: any) {
+      setOgMsg(friendlyError(e?.message || 'שגיאה'))
+    } finally {
+      setOgUploading(false)
+    }
   }
 
   
@@ -1003,18 +1114,80 @@ async function loadBlocks() {
               </div>
 
 
-              <div className="grid gap-2 mt-1 rounded-xl border border-zinc-200 p-3">
+              <div className="grid gap-2 mt-1 rounded-xl border border-zinc-200 p-3" dir="rtl">
                 <p className="text-sm font-medium text-right">תמונת תצוגה לקישורים (OpenGraph)</p>
-                <Input
-                  className="text-right"
-                  dir="rtl"
-                  value={String(settings.og_default_image_url ?? '')}
-                  onChange={e => setSettings({ ...settings, og_default_image_url: e.target.value })}
-                  placeholder="URL לתמונה ברירת מחדל לקישורים (אם ריק — נשתמש בתמונה הראשית הראשונה)"
-                />
-                <p className="text-xs text-zinc-500 text-right">
-                  לקישור ישיר לברכה עם תמונה — השיתוף ישתמש בנתיב /blessings/p/&lt;id&gt;.
-                </p>
+
+                <div className="grid gap-2">
+                  <p className="text-xs text-zinc-500 text-right">
+                    זו התמונה ש-WhatsApp / Facebook / Telegram מציגים כשהשולחים משתפים קישור.
+                  </p>
+
+                  {/* current */}
+                  {String(settings.og_default_image_url || '').length > 0 && (
+                    <div className="rounded-xl overflow-hidden border border-zinc-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={String(settings.og_default_image_url)} alt="OG" className="w-full" />
+                    </div>
+                  )}
+
+                  <label className="text-sm text-zinc-700 text-right">העלאה (מומלץ):</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => setOgFile((e.target.files || [])[0] || null)}
+                  />
+
+                  {ogPreview && (
+                    <div className="grid gap-2">
+                      <p className="text-xs text-zinc-500 text-right">
+                        בחר מרכז (פוקוס) לתמונה – לחיצה על התמונה.
+                        נחתוך אוטומטית ל־1200×630.
+                      </p>
+                      <div
+                        className="relative rounded-xl overflow-hidden border border-zinc-200 cursor-crosshair"
+                        onClick={e => {
+                          const r = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+                          const x = (e.clientX - r.left) / r.width
+                          const y = (e.clientY - r.top) / r.height
+                          setOgFocus({ x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) })
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={ogPreview} alt="preview" className="w-full block" />
+                        <div
+                          className="absolute -translate-x-1/2 -translate-y-1/2"
+                          style={{ left: `${ogFocus.x * 100}%`, top: `${ogFocus.y * 100}%` }}
+                        >
+                          <div className="h-4 w-4 rounded-full bg-black/70 ring-2 ring-white" />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 justify-end">
+                        <Button onClick={uploadOgDefaultImage} disabled={ogUploading}>
+                          {ogUploading ? 'מעלה…' : 'שמור תמונת תצוגה'}
+                        </Button>
+                        <Button variant="ghost" onClick={() => setOgFile(null)} disabled={ogUploading}>
+                          ביטול
+                        </Button>
+                      </div>
+
+                      {ogMsg && <p className="text-sm text-right">{ogMsg}</p>}
+                    </div>
+                  )}
+
+                  <label className="text-sm text-zinc-700 text-right">או להזין URL ידני:</label>
+                  <Input
+                    className="text-right"
+                    dir="rtl"
+                    value={String(settings.og_default_image_url ?? '')}
+                    onChange={e => setSettings({ ...settings, og_default_image_url: e.target.value })}
+                    placeholder="URL לתמונה ברירת מחדל לקישורים (אם ריק — נשתמש בתמונה הראשית הראשונה)"
+                  />
+
+                  <p className="text-xs text-zinc-500 text-right">
+                    לקישור ישיר לברכה עם תמונה — השיתוף ישתמש בנתיב /blessings/p/&lt;id&gt;.
+                  </p>
+                </div>
               </div>
 
               <div className="grid gap-2 mt-1">

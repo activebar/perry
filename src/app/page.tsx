@@ -512,7 +512,7 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      <div className="mt-2 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto" dir="rtl">
+                      <div className="mt-2 flex items-center gap-2 flex-nowrap overflow-x-auto">
                         {EMOJIS.map(e => {
                           const count = Number(p.reaction_counts?.[e] || 0)
                           const active = Array.isArray(p.my_reactions) && p.my_reactions.includes(e)
@@ -521,12 +521,12 @@ export default function HomePage() {
                               key={e}
                               type="button"
                               onClick={() => react(p.id, e)}
-                              className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm ${
-                                active ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700'
-                              }`}
+                              className={
+                                'rounded-full border px-3 py-1 text-sm ' +
+                                (active ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700')
+                              }
                             >
-                              {e}
-                              {count > 0 ? <span className="ms-2">{count}</span> : null}
+                              {e} {count > 0 ? count : ''}
                             </button>
                           )
                         })}
@@ -534,7 +534,7 @@ export default function HomePage() {
                           <button
                             type="button"
                             onClick={() => shareBlessing(p)}
-                            className="shrink-0 whitespace-nowrap rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                            className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
                             title={String(settings?.share_button_label || 'שתף')}
                           >
                             🔗

@@ -8,12 +8,8 @@ export async function generateMetadata(): Promise<Metadata> {
     const settings = await fetchSettings()
     const eventName = String((settings as any)?.event_name || 'Event Gift Site')
 
-    const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
-    const imageUrlRaw =
-      (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
-    // Always point OG image to our own domain, so crawlers (WhatsApp/Facebook) can fetch it
-    // even when Supabase storage is private.
-    const imageUrl = toAbsoluteUrl('/og/default.jpg')
+    // Use a clean OG endpoint (no query string) – better compatibility with WhatsApp/Facebook.
+    const imageUrl = toAbsoluteUrl('/og/default')
 
 
     const title = eventName
@@ -26,17 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
       openGraph: {
         title,
         description,
-        type: 'website',
-        images: imageUrl
-          ? [
-              {
-                url: imageUrl,
-                width: 1200,
-                height: 630,
-                alt: title
-              }
-            ]
-          : undefined
+        images: imageUrl ? [{ url: imageUrl }] : undefined
       },
       twitter: {
         card: imageUrl ? 'summary_large_image' : 'summary',
