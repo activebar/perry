@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
     const eventName = String((settings as any)?.event_name || 'Event Gift Site')
 
     // Use a clean OG endpoint (no query string) – better compatibility with WhatsApp/Facebook.
-    const imageUrl = toAbsoluteUrl('/og/default')
+    const imageUrl = toAbsoluteUrl('/og/default.jpg')
 
 
     const title = eventName
@@ -22,7 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
       openGraph: {
         title,
         description,
-        images: imageUrl ? [{ url: imageUrl }] : undefined
+        images: imageUrl ? [{ url: imageUrl, width: 1200, height: 630, alt: title, type: 'image/jpeg' }] : undefined
       },
       twitter: {
         card: imageUrl ? 'summary_large_image' : 'summary',
