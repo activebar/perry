@@ -875,6 +875,19 @@ async function loadBlocks() {
                 placeholder="אולם / כתובת"
               />
 
+
+<div className="grid gap-1">
+  <label className="text-xs text-zinc-500">תיאור לשיתוף (meta_description)</label>
+  <textarea
+    rows={3}
+    value={(settings as any).meta_description || ''}
+    onChange={(e) => setSettings({ ...(settings as any), meta_description: e.target.value })}
+    placeholder="מופיע בתצוגה המקדימה בווצאפ/פייסבוק"
+    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+  />
+</div>
+
+
               <Input
                 value={settings.waze_url || ''}
                 onChange={e => setSettings({ ...settings, waze_url: e.target.value })}

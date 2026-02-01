@@ -13,6 +13,14 @@ function newId() {
 }
 
 export function middleware(req: NextRequest) {
+  const ua = (req.headers.get("user-agent") || "").toLowerCase();
+  const isShareBot = /(whatsapp|facebookexternalhit|twitterbot|slackbot|telegrambot|discordbot|linkedinbot|pinterest)/i.test(ua);
+  if (isShareBot && req.nextUrl.pathname === "/") {
+    const u = req.nextUrl.clone();
+    u.pathname = "/s";
+    return NextResponse.rewrite(u);
+  }
+
   const res = NextResponse.next();
   const existing = req.cookies.get("device_id")?.value;
 
