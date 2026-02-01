@@ -378,6 +378,22 @@ async function saveEdit() {
 
   async function sharePost(p: Post) {
     if (!shareEnabled) return
+    const code = (p.id || '').slice(0, 8)
+    // Ensure the short link exists in DB so /b/{code} can always be resolved
+    try {
+      await fetch('/api/short-links', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          postId: p.id,
+          code,
+          targetPath: `/blessings/p/${p.id}`,
+        }),
+      })
+    } catch {
+      // ignore; we can still share the URL
+    }
+
     const link = buildLinkForPost(p.id)
     const eventName = String(settings?.event_name || 'Event')
     const template = settings?.share_message_template || null

@@ -8,8 +8,9 @@ export async function generateMetadata(): Promise<Metadata> {
     const settings = await fetchSettings()
     const eventName = String((settings as any)?.event_name || 'Event Gift Site')
 
-    // Use a clean OG endpoint (no query string) – better compatibility with WhatsApp/Facebook.
-    const imageUrl = toAbsoluteUrl('/og/default.jpg')
+    // OG image: generated server-side (supports admin-selected background image).
+    // WhatsApp/Facebook handle query strings fine, and changing it helps cache-busting.
+    const imageUrl = toAbsoluteUrl('/api/og/image?default=1')
 
 
     const title = eventName
@@ -22,7 +23,9 @@ export async function generateMetadata(): Promise<Metadata> {
       openGraph: {
         title,
         description,
-        images: imageUrl ? [{ url: imageUrl, width: 1200, height: 630, alt: title, type: 'image/jpeg' }] : undefined
+        images: imageUrl
+          ? [{ url: imageUrl, width: 1200, height: 630, alt: title, type: 'image/png' }]
+          : undefined
       },
       twitter: {
         card: imageUrl ? 'summary_large_image' : 'summary',

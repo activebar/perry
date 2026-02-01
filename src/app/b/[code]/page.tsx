@@ -13,36 +13,53 @@ function isImage(url?: string | null) {
   return !!url && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url)
 }
 
-async function resolvePostId(code: string) {
+type ResolvedShortLink = {
+  code: string
+  postId: string | null
+  targetPath: string | null
+}
+
+function extractUuidFromPath(path: string) {
+  const m = path.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+  return m?.[0]?.toLowerCase() || null
+}
+
+async function resolveShortLink(code: string): Promise<ResolvedShortLink | null> {
   const srv = supabaseServiceRole()
   let clean = String(code || '').trim()
   // strip trailing punctuation (e.g. WhatsApp adds '.' at end)
-  const m = clean.match(/^[0-9a-fA-F-]+/)
+  const m = clean.match(/^[0-9a-zA-Z_-]+/)
   clean = (m?.[0] || '').toLowerCase()
   if (!clean) return null
-  // If a full UUID was provided, try exact match first.
-  if (clean.length >= 32) {
-    const { data: exact } = await srv.from('posts').select('id').eq('id', clean).limit(1)
-    if (exact && exact.length === 1) return exact[0].id as string
+
+  // Preferred: lookup from `short_links` (works even when posts.id is UUID)
+  const { data: sl } = await srv
+    .from('short_links')
+    .select('code, post_id, target_path')
+    .eq('code', clean)
+    .limit(1)
+
+  if (sl && sl.length === 1) {
+    const row = sl[0] as any
+    const targetPath = (row.target_path as string | null) ?? null
+    const postId = (row.post_id as string | null) ?? (targetPath ? extractUuidFromPath(targetPath) : null)
+    return { code: clean, postId, targetPath }
   }
 
-  const { data } = await srv
-    .from('posts')
-    .select('id')
-    .ilike('id', `${clean}%`)
-    .order('created_at', { ascending: false })
-    .limit(3)
+  // Backward compatibility: if someone shared a UUID itself, accept it.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+    return { code: clean, postId: clean, targetPath: `/blessings/p/${clean}` }
+  }
 
-  if (!data || data.length === 0) return null
-  // Collisions are extremely unlikely; pick the newest match.
-  return data[0].id as string
+  return null
 }
 
 export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
   const settings = await fetchSettings()
   const eventName = String((settings as any)?.event_name || 'Event')
 
-  const postId = await resolvePostId(params.code)
+  const resolved = await resolveShortLink(params.code)
+  const postId = resolved?.postId
   if (!postId) {
     const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
     const ogDefaultRaw = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
@@ -99,8 +116,11 @@ export default async function ShortBlessingPage({ params }: { params: { code: st
   const settings = await fetchSettings()
   const eventName = String((settings as any)?.event_name || 'Event')
 
-  const postId = await resolvePostId(params.code)
-  if (!postId) {
+  const resolved = await resolveShortLink(params.code)
+  const postId = resolved?.postId
+  const to = resolved?.targetPath || (postId ? `/blessings/p/${postId}` : null)
+
+  if (!to) {
     return (
       <Container className="py-10" dir="rtl">
         <Card className="p-6 text-right">
@@ -115,8 +135,6 @@ export default async function ShortBlessingPage({ params }: { params: { code: st
       </Container>
     )
   }
-
-  const to = `/blessings/p/${postId}`
 
   // Client-side redirect keeps OG metadata for crawlers, while sending humans to the full page.
   return (
