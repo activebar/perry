@@ -1,144 +1,168 @@
 import { NextResponse } from 'next/server'
+import sharp from 'sharp'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { fetchSettings } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-function guessContentType(urlOrPath?: string | null) {
-  const s = String(urlOrPath || '').toLowerCase()
-  if (s.endsWith('.png')) return 'image/png'
-  if (s.endsWith('.webp')) return 'image/webp'
-  if (s.endsWith('.gif')) return 'image/gif'
-  if (s.endsWith('.jpg') || s.endsWith('.jpeg')) return 'image/jpeg'
-  return 'image/jpeg'
-}
+const OG_SIZE = 800
 
 function extractUploadsPathFromPublicUrl(u: string) {
   // https://<project>.supabase.co/storage/v1/object/public/uploads/<path>
-  const m = u.match(/\/storage\/v1\/object\/(public|sign)\/uploads\/(.+)$/i)
-  return m?.[2] ? decodeURIComponent(m[2]) : null
+  const m = u.match(/\/storage\/v1\/object\/public\/uploads\/(.+)$/)
+  return m?.[1] || null
 }
 
-async function downloadFromUploads(path: string) {
-  const sb = supabaseServiceRole()
-  const clean = path.replace(/^\/+/, '')
-  const { data, error } = await sb.storage.from('uploads').download(clean)
-  if (error || !data) throw new Error(error?.message || 'download failed')
-  const buf = Buffer.from(await data.arrayBuffer())
-  return buf
+function safeShortText(s: string, max = 180) {
+  const t = (s || '').replace(/\s+/g, ' ').trim()
+  return t.length > max ? t.slice(0, max - 1) + '…' : t
 }
 
-async function fetchRemote(url: string) {
-  const res = await fetch(url, { redirect: 'follow' })
-  if (!res.ok) throw new Error('fetch failed')
-  const buf = Buffer.from(await res.arrayBuffer())
-  const ct = res.headers.get('content-type') || undefined
-  return { buf, ct }
+async function getFirstApprovedPostByPrefix(prefix: string) {
+  // The DB uses `status` (not `is_approved`).
+  // We purposely keep the select minimal.
+  const { data, error } = await supabaseServiceRole
+    .from('posts')
+    .select('id, author_name, text, media_url, status, kind')
+    .eq('kind', 'blessing')
+    .eq('status', 'approved')
+    .ilike('id', `${prefix}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return data || null
+}
+
+async function getMediaItemByPrefix(prefix: string) {
+  const { data, error } = await supabaseServiceRole
+    .from('media_items')
+    .select('id, url, type')
+    .eq('status', 'approved')
+    .ilike('id', `${prefix}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return data || null
+}
+
+async function fetchImageBuffer(url: string) {
+  const r = await fetch(url, { cache: 'no-store' })
+  if (!r.ok) throw new Error(`Failed to fetch image: ${r.status}`)
+  const ab = await r.arrayBuffer()
+  return Buffer.from(ab)
+}
+
+async function toSquareJpeg(input: Buffer) {
+  return await sharp(input)
+    .rotate() // respect EXIF orientation
+    .resize(OG_SIZE, OG_SIZE, { fit: 'cover', position: 'centre' })
+    .jpeg({ quality: 80, mozjpeg: true })
+    .toBuffer()
 }
 
 export async function GET(req: Request) {
+  const url = new URL(req.url)
+
+  const defaultParam = url.searchParams.get('default')
+  const post = url.searchParams.get('post')
+  const media = url.searchParams.get('media')
+  const fallback = url.searchParams.get('fallback')
+
+  // Optional: cache-busting query params like ?v=123 are ignored by logic.
+
   try {
-    const { searchParams } = new URL(req.url)
-    const postId = searchParams.get('post')
-    const isDefault = searchParams.get('default') === '1'
-    const fallback = searchParams.get('fallback')
+    const settings = await fetchSettings()
 
-    const settings = await fetchSettings().catch(() => null)
+    // 1) Resolve the desired base image URL
+    let imageUrl: string | null = null
 
-    let targetUrl: string | null = null
-    let storagePath: string | null = null
-
-    if (postId) {
-      const sb = supabaseServiceRole()
-      const { data: post } = await sb
-        .from('posts')
-        .select('id, media_path, media_url')
-        .eq('id', postId)
-        .maybeSingle()
-
-      storagePath = (post as any)?.media_path || null
-      targetUrl = (post as any)?.media_url || null
+    // default
+    if (defaultParam) {
+      imageUrl = (settings as any)?.og_default_image_url || null
     }
 
-    if (!postId && isDefault) {
-      const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
-      targetUrl =
-        (settings as any)?.og_default_image_url ||
-        (typeof heroImages[0] === 'string' ? heroImages[0] : null) ||
-        (fallback ? String(fallback) : null)
-      storagePath = null
-    }
+    // blessing post
+    if (!imageUrl && post) {
+      const byUuid = /^[0-9a-f-]{36}$/i.test(post)
+      if (byUuid) {
+        const { data } = await supabaseServiceRole
+          .from('posts')
+          .select('media_url, status, kind')
+          .eq('id', post)
+          .maybeSingle()
 
-    // 1) Prefer storage download when we have a path
-    if (storagePath) {
-      const buf = await downloadFromUploads(storagePath)
-      return new NextResponse(buf, {
-        headers: {
-          'content-type': guessContentType(storagePath),
-          'cache-control': 'public, max-age=3600, s-maxage=3600'
+        if (data?.kind === 'blessing' && data?.status === 'approved') {
+          imageUrl = data.media_url || null
         }
-      })
-    }
-
-    // 2) If URL points to uploads public URL, extract path and download (works even if bucket is private)
-    if (targetUrl && /^https?:\/\//i.test(targetUrl)) {
-      const extracted = extractUploadsPathFromPublicUrl(targetUrl)
-      if (extracted) {
-        const buf = await downloadFromUploads(extracted)
-        return new NextResponse(buf, {
-          headers: {
-            'content-type': guessContentType(extracted),
-            'cache-control': 'public, max-age=3600, s-maxage=3600'
-          }
-        })
+      } else {
+        const p = await getFirstApprovedPostByPrefix(post)
+        imageUrl = p?.media_url || null
       }
     }
 
-    // 3) Remote fetch fallback (only if it's an absolute URL)
-    if (targetUrl && /^https?:\/\//i.test(targetUrl)) {
-      const { buf, ct } = await fetchRemote(targetUrl)
-      return new NextResponse(buf, {
-        headers: {
-          'content-type': ct || guessContentType(targetUrl),
-          'cache-control': 'public, max-age=3600, s-maxage=3600'
-        }
-      })
+    // gallery media item
+    if (!imageUrl && media) {
+      const byUuid = /^[0-9a-f-]{36}$/i.test(media)
+      if (byUuid) {
+        const { data } = await supabaseServiceRole
+          .from('media_items')
+          .select('url, status')
+          .eq('id', media)
+          .maybeSingle()
+
+        if (data?.status === 'approved') imageUrl = data.url || null
+      } else {
+        const m = await getMediaItemByPrefix(media)
+        imageUrl = m?.url || null
+      }
     }
 
-    // Nothing found — return a PNG fallback (WhatsApp/Facebook often ignore SVG OG images)
-    const fs = await import('fs/promises')
-    try {
-      const buf = await fs.readFile(process.cwd() + '/public/og-fallback.png')
-      return new NextResponse(buf, {
-        headers: {
-          'content-type': 'image/png',
-          'cache-control': 'public, max-age=3600, s-maxage=3600'
-        }
-      })
-    } catch {
-      // last resort: 1x1 transparent png
-      const tiny = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/P4F6xQAAAABJRU5ErkJggg==',
-        'base64'
-      )
-      return new NextResponse(tiny, {
-        headers: {
-          'content-type': 'image/png',
-          'cache-control': 'public, max-age=3600, s-maxage=3600'
-        }
-      })
+    // fallback parameter (usually hero image)
+    if (!imageUrl && fallback) {
+      imageUrl = fallback
     }
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
+
+    // final fallback to default og image
+    if (!imageUrl) {
+      imageUrl = (settings as any)?.og_default_image_url || null
+    }
+
+    if (!imageUrl) {
+      return new NextResponse('Missing OG image source', { status: 404 })
+    }
+
+    // 2) If the URL points to Supabase public uploads, try to stream via service-role to avoid edge cases.
+    //    (Either path works, but this makes it consistent.)
+    const uploadsPath = extractUploadsPathFromPublicUrl(imageUrl)
+
+    let buf: Buffer
+    if (uploadsPath) {
+      const { data, error } = await supabaseServiceRole.storage.from('uploads').download(uploadsPath)
+      if (error) throw error
+      buf = Buffer.from(await data.arrayBuffer())
+    } else {
+      buf = await fetchImageBuffer(imageUrl)
+    }
+
+    // 3) Normalize to WhatsApp-friendly square
+    const out = await toSquareJpeg(buf)
+
+    return new NextResponse(out, {
+      status: 200,
+      headers: {
+        'content-type': 'image/jpeg',
+        // allow caching, but not too aggressive (WhatsApp is sticky anyway)
+        'cache-control': 'public, max-age=3600, stale-while-revalidate=86400',
+      },
+    })
+  } catch (err) {
+    // last resort: respond with a tiny error
+    const msg = err instanceof Error ? err.message : 'unknown'
+    return new NextResponse(`OG error: ${msg}`, { status: 500 })
   }
-}
-
-function escapeXml(s: string) {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
 }

@@ -30,7 +30,7 @@ async function makeOgJpeg(file: File, focusX: number, focusY: number): Promise<B
   const srcW = img.naturalWidth || img.width
   const srcH = img.naturalHeight || img.height
 
-  const targetW = 630
+  const targetW = 1200
   const targetH = 630
   const targetAspect = targetW / targetH
   const srcAspect = srcW / srcH
@@ -1154,7 +1154,7 @@ async function loadBlocks() {
                     <div className="grid gap-2">
                       <p className="text-xs text-zinc-500 text-right">
                         בחר מרכז (פוקוס) לתמונה – לחיצה על התמונה.
-                        נחתוך אוטומטית ל־630×630.
+                        נחתוך אוטומטית ל־1200×630.
                       </p>
                       <div
                         className="relative rounded-xl overflow-hidden border border-zinc-200 cursor-crosshair"

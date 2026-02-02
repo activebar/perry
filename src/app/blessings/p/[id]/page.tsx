@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const ogDefault = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : undefined)
 
   // Use our proxy endpoint so crawlers can always fetch the image.
-  const ogImage = toAbsoluteUrl(`/api/og/image?post=${encodeURIComponent(params.id)}&fallback=${encodeURIComponent(String(ogDefault || ''))}`)
+  const ogImage = toAbsoluteUrl(`/api/og/image?post=${encodeURIComponent(params.id)}${ogDefault ? `&fallback=${encodeURIComponent(String(ogDefault))}` : ''}&v=1`)
 
   const descText = String((post as any)?.text || '').trim()
   const description = descText ? descText.slice(0, 180) : `${eventName} – ברכה`
@@ -43,13 +43,13 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     openGraph: {
       title,
       description,
-      images: ogImage ? [{ url: ogImage }] : undefined
+      images: ogImage ? [{ url: ogImage, width: 800, height: 800, alt: title, type: 'image/jpeg' }] : undefined
     },
     twitter: {
       card: ogImage ? 'summary_large_image' : 'summary',
       title,
       description,
-      images: ogImage ? [ogImage] : undefined
+      images: ogImage ? [{ url: ogImage, width: 800, height: 800, alt: title }] : undefined
     }
   }
 }

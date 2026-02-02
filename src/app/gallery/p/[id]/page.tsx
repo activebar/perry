@@ -32,7 +32,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
   const fallback = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : null) || ''
   const fbAbs = fallback ? toAbsoluteUrl(fallback) : undefined
-  const og = `${site}/api/og/image?post=${encodeURIComponent(params.id)}${fbAbs ? `&fallback=${encodeURIComponent(fbAbs)}` : ''}`
+  const og = `${site}/api/og/image?post=${encodeURIComponent(params.id)}${fbAbs ? `&fallback=${encodeURIComponent(fbAbs)}` : ''}&v=1`
 
   return {
     title,
@@ -41,13 +41,13 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
       title,
       description: desc,
       type: 'website',
-      images: [{ url: og }],
+      images: [{ url: og, width: 800, height: 800, alt: title, type: 'image/jpeg' }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description: desc,
-      images: [og],
+      images: [{ url: og, width: 800, height: 800, alt: title }],
     },
   }
 }
