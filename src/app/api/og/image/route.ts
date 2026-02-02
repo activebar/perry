@@ -156,7 +156,9 @@ export async function GET(req: Request) {
     // 3) Normalize to WhatsApp-friendly square
     const out = await toSquareJpeg(buf)
 
-    return new NextResponse(out, {
+    const body = new Uint8Array(out)
+
+    return new NextResponse(body, {
       status: 200,
       headers: {
         'content-type': 'image/jpeg',
