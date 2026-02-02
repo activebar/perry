@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
         title,
         description,
         images: imageUrl
-          ? [{ url: imageUrl, width: 1200, height: 630, alt: title, type: 'image/png' }]
+          ? [{ url: imageUrl, width: 630, height: 630, alt: title, type: 'image/png' }]
           : undefined
       },
       twitter: {
