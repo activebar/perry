@@ -31,7 +31,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const site = getSiteUrl()
   const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
   const fallback = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : null) || ''
-  const og = `${site}/api/og/image?post=${encodeURIComponent(params.id)}${fallback ? `&fallback=${encodeURIComponent(toAbsoluteUrl(fallback))}` : ''}`
+  const fbAbs = fallback ? toAbsoluteUrl(fallback) : undefined
+  const og = `${site}/api/og/image?post=${encodeURIComponent(params.id)}${fbAbs ? `&fallback=${encodeURIComponent(fbAbs)}` : ''}`
 
   return {
     title,
