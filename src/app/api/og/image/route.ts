@@ -8,6 +8,10 @@ export const revalidate = 0
 
 const OG_SIZE = 800
 
+// In this codebase `supabaseServiceRole` is a factory function that returns a Supabase client.
+// Create a client instance for use inside this route module.
+const sb = supabaseServiceRole()
+
 function extractUploadsPathFromPublicUrl(u: string) {
   // https://<project>.supabase.co/storage/v1/object/public/uploads/<path>
   const m = u.match(/\/storage\/v1\/object\/public\/uploads\/(.+)$/)
@@ -22,7 +26,7 @@ function safeShortText(s: string, max = 180) {
 async function getFirstApprovedPostByPrefix(prefix: string) {
   // The DB uses `status` (not `is_approved`).
   // We purposely keep the select minimal.
-  const { data, error } = await supabaseServiceRole
+  const { data, error } = await sb
     .from('posts')
     .select('id, author_name, text, media_url, status, kind')
     .eq('kind', 'blessing')
@@ -37,7 +41,7 @@ async function getFirstApprovedPostByPrefix(prefix: string) {
 }
 
 async function getMediaItemByPrefix(prefix: string) {
-  const { data, error } = await supabaseServiceRole
+  const { data, error } = await sb
     .from('media_items')
     .select('id, url, type')
     .eq('status', 'approved')
@@ -90,7 +94,7 @@ export async function GET(req: Request) {
     if (!imageUrl && post) {
       const byUuid = /^[0-9a-f-]{36}$/i.test(post)
       if (byUuid) {
-        const { data } = await supabaseServiceRole
+        const { data } = await sb
           .from('posts')
           .select('media_url, status, kind')
           .eq('id', post)
@@ -109,7 +113,7 @@ export async function GET(req: Request) {
     if (!imageUrl && media) {
       const byUuid = /^[0-9a-f-]{36}$/i.test(media)
       if (byUuid) {
-        const { data } = await supabaseServiceRole
+        const { data } = await sb
           .from('media_items')
           .select('url, status')
           .eq('id', media)
@@ -142,7 +146,7 @@ export async function GET(req: Request) {
 
     let buf: Buffer
     if (uploadsPath) {
-      const { data, error } = await supabaseServiceRole.storage.from('uploads').download(uploadsPath)
+      const { data, error } = await sb.storage.from('uploads').download(uploadsPath)
       if (error) throw error
       buf = Buffer.from(await data.arrayBuffer())
     } else {
