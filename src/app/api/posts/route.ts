@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     // defaults: 10/hour per device for blessings, 10/hour for gallery
     if (device_id && (kind === 'gallery' || kind === 'blessing')) {
       const { since } = withinOneHour(new Date().toISOString())
-      const limit = 10
+      const limit = 100
       const { count, error: cerr } = await srv
         .from('posts')
         .select('id', { count: 'exact', head: true })
