@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Container, Card, Button } from '@/components/ui'
-import { supabaseAnon } from '@/lib/supabase';
+import { supabaseAnon } from '@/lib/supabase'
 import { fetchSettings } from '@/lib/db'
 import GalleryClient from './ui'
 
