@@ -17,9 +17,10 @@ export async function generateMetadata(): Promise<Metadata> {
           'Event gift website powered by Active Bar'
       )
 
-    // ✅ תמונת OG ברירת מחדל – תמיד קיימת
-    // v=1 מאפשר cache-busting עתידי
-    const ogImage = toAbsoluteUrl('/api/og/image?default=1&v=1')
+    // ✅ הקשחה: תמיד string
+    const ogImage =
+      toAbsoluteUrl('/api/og/image?default=1&v=1') ??
+      `${siteUrl}/api/og/image?default=1&v=1`
 
     return {
       metadataBase: new URL(siteUrl),
@@ -56,15 +57,17 @@ export async function generateMetadata(): Promise<Metadata> {
         ]
       }
     }
-  } catch (err) {
-    // fallback קשיח – שלא יהיה מצב בלי OG
+  } catch {
+    const siteUrl = getSiteUrl()
+    const fallbackImage = `${siteUrl}/api/og/image?default=1`
+
     return {
       title: 'Event Gift Site',
       description: 'Event gift website powered by Active Bar',
       openGraph: {
         images: [
           {
-            url: '/api/og/image?default=1',
+            url: fallbackImage,
             width: 800,
             height: 800
           }
