@@ -8,29 +8,39 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 async function getImages() {
-  const supabase = supabaseAnon();
+  const supabase = supabaseAnon()
 
   // Gallery items are stored in public.media_items (created by /api/upload)
+  // NOTE: media_items schema uses: public_url, storage_path, mime_type, kind, deleted_at, archived_at
   const { data, error } = await supabase
     .from('media_items')
-    .select('id, public_url, created_at, kind')
+    .select('id, public_url, storage_path, mime_type, created_at')
     .eq('kind', 'gallery')
+    .is('deleted_at', null)
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
-    .limit(120);
+    .limit(200)
 
-  if (error) return [];
+  if (error) return []
 
-  // Map to the minimal shape expected by the GalleryGrid UI.
-  return (data || [])
-    .filter((x: any) => x?.id && x?.public_url)
-    .map((x: any) => ({
-      id: x.id,
+  return (data || []).map((row: any) => {
+    const url = String(row.public_url || '')
+    const mime = String(row.mime_type || '')
+    const isVideo = mime.startsWith('video/')
+    return {
+      id: row.id,
+      created_at: row.created_at,
+      // keep UI contract from GalleryClient
+      media_url: isVideo ? null : url,
+      video_url: isVideo ? url : null,
+      media_path: row.storage_path || null,
+      author_name: null,
+      status: null,
       kind: 'gallery',
-      status: 'approved',
-      media_url: x.public_url,
-      created_at: x.created_at,
-    }));
+    }
+  })
 }
+
 
 export default async function GalleryPage() {
   const [items, settings] = await Promise.all([getImages(), fetchSettings()])
