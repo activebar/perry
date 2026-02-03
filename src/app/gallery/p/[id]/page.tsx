@@ -48,7 +48,8 @@ export async function generateMetadata({
       ''
   );
 
-  const og = `${site}/api/og/image?media=${encodeURIComponent(params.id)}&v=1${fallback ? `&fallback=${encodeURIComponent(toAbsoluteUrl(fallback))}` : ''}`;
+  const fallbackAbs = toAbsoluteUrl(fallback);
+  const og = `${site}/api/og/image?media=${encodeURIComponent(params.id)}&v=1${fallbackAbs ? `&fallback=${encodeURIComponent(fallbackAbs)}` : ''}`;
 
   const title = eventName ? `${eventName} – גלריה` : 'גלריה';
   const description = metaDescription || '';
