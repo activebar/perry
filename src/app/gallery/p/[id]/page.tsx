@@ -1,103 +1,121 @@
-import Link from 'next/link'
-import type { Metadata } from 'next'
-import { supabaseServiceRole } from '@/lib/supabase'
-import { fetchSettings } from '@/lib/db'
-import { getSiteUrl, toAbsoluteUrl } from '@/lib/site-url'
-import { Container, Card, Button } from '@/components/ui'
+import Link from "next/link";
+import type { Metadata } from "next";
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+import { Button, Card, Container } from "@/components/ui";
+import { fetchSettings } from "@/lib/db";
+import { supabaseServiceRole } from "@/lib/supabase";
+import { getSiteUrl, toAbsoluteUrl } from "@/lib/site-url";
 
-function isImage(url?: string | null) {
-  return !!url && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url)
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type MediaRow = {
+  id: string;
+  public_url: string | null;
+  mime_type: string | null;
+  kind: string | null;
+};
+
+async function getMediaItem(id: string): Promise<MediaRow | null> {
+  const sb = supabaseServiceRole();
+  const { data, error } = await sb
+    .from('media_items')
+    .select('id, public_url, mime_type, kind')
+    .eq('id', id)
+    .single();
+  if (error || !data) return null;
+  return data as MediaRow;
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const settings = await fetchSettings().catch(() => ({} as any))
-  const eventName = String((settings as any)?.event_name || 'Event')
+export async function generateMetadata({
+  params,
+}: {
+  params: { id: string };
+}): Promise<Metadata> {
+  const settings = await fetchSettings();
+  const site = getSiteUrl();
 
-  const srv = supabaseServiceRole()
-  const { data: post } = await srv
-    .from('posts')
-    .select('id, author_name, text, media_url, video_url, status, kind, created_at')
-    .eq('id', params.id)
-    .maybeSingle()
+  const eventName = String((settings as any)?.event_name || '');
+  const metaDescription = String((settings as any)?.meta_description || '').trim();
 
-  const author = String((post as any)?.author_name || '').trim()
-  const title = author ? `${eventName} – גלריה – ${author}` : `${eventName} – גלריה`
-  const text = String((post as any)?.text || '').trim()
-  const desc = text ? text.replace(/\s+/g, ' ').slice(0, 180) : String((settings as any)?.meta_description || '').trim()
+  const heroImages = Array.isArray((settings as any)?.hero_images)
+    ? (settings as any).hero_images
+    : [];
+  const fallback =
+    (settings as any)?.og_default_image_url ||
+    (typeof heroImages[0] === 'string' ? heroImages[0] : null) ||
+    '';
 
-  const site = getSiteUrl()
-  const heroImages = Array.isArray((settings as any)?.hero_images) ? (settings as any).hero_images : []
-  const fallback = (settings as any)?.og_default_image_url || (typeof heroImages[0] === 'string' ? heroImages[0] : null) || ''
-  const fbAbs = fallback ? toAbsoluteUrl(fallback) : undefined
-  const og = `${site}/api/og/image?post=${encodeURIComponent(params.id)}${fbAbs ? `&fallback=${encodeURIComponent(fbAbs)}` : ''}&v=1`
+  const og = `${site}/api/og/image?media=${encodeURIComponent(params.id)}&v=1${fallback ? `&fallback=${encodeURIComponent(toAbsoluteUrl(fallback))}` : ''}`;
+
+  const title = eventName ? `${eventName} – גלריה` : 'גלריה';
+  const description = metaDescription || '';
 
   return {
     title,
-    description: desc,
+    description,
     openGraph: {
       title,
-      description: desc,
-      type: 'website',
-      images: [{ url: og, width: 800, height: 800, alt: title, type: 'image/jpeg' }],
+      description,
+      images: [
+        {
+          url: og,
+          width: 800,
+          height: 800,
+          type: 'image/jpeg',
+        },
+      ],
     },
     twitter: {
       card: 'summary_large_image',
       title,
-      description: desc,
-      images: [{ url: og, width: 800, height: 800, alt: title }],
+      description,
+      images: [og],
     },
-  }
+  };
 }
 
-export default async function GalleryItemPage({ params }: { params: { id: string } }) {
-  const settings = await fetchSettings().catch(() => ({} as any))
-  const eventName = String((settings as any)?.event_name || 'Event')
+export default async function Page({ params }: { params: { id: string } }) {
+  const settings = await fetchSettings();
+  const item = await getMediaItem(params.id);
 
-  const srv = supabaseServiceRole()
-  const { data: post } = await srv
-    .from('posts')
-    .select('id, author_name, text, media_url, video_url, status, kind, created_at')
-    .eq('id', params.id)
-    .maybeSingle()
-
-  const url = String((post as any)?.media_url || (post as any)?.video_url || '').trim()
-  const isVid = !!(post as any)?.video_url && !(post as any)?.media_url
-
-  return (
-    <Container>
-      <div dir="rtl" className="mx-auto w-full max-w-3xl px-4 py-10">
+  if (!item) {
+    return (
+      <Container>
         <Card className="p-6 text-right">
-          <div className="text-2xl font-bold">גלריה לאירוע {eventName}</div>
-          {String((post as any)?.author_name || '').trim() && (
-            <div className="mt-3 text-sm text-zinc-600">מאת: {String((post as any)?.author_name || '').trim()}</div>
-          )}
-          {String((post as any)?.text || '').trim() && (
-            <div className="mt-4 whitespace-pre-wrap text-base">{String((post as any)?.text || '').trim()}</div>
-          )}
-
-          {!!url && (
-            <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-200">
-              {isVid ? (
-                <video src={url} controls className="w-full h-auto" />
-              ) : isImage(url) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={url} alt="" className="w-full h-auto object-cover" />
-              ) : (
-                <div className="p-4 text-sm text-zinc-600">קובץ מצורף</div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-6 flex justify-end">
+          <div className="text-xl font-semibold">הפריט לא נמצא</div>
+          <div className="mt-4">
             <Link href="/gallery">
               <Button>חזרה לגלריה</Button>
             </Link>
           </div>
         </Card>
-      </div>
+      </Container>
+    );
+  }
+
+  const url = item.public_url || '';
+  const isVid = !!item.mime_type && item.mime_type.startsWith('video/');
+
+  return (
+    <Container>
+      <Card className="p-6 text-right">
+        <div className="text-2xl font-bold">גלריה לאירוע {String((settings as any)?.event_name || '')}</div>
+
+        <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-200">
+          {isVid ? (
+            <video src={url} controls className="w-full h-auto" />
+          ) : (
+            <img src={url} alt="" className="w-full h-auto object-cover" />
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Link href="/gallery">
+            <Button>חזרה לגלריה</Button>
+          </Link>
+        </div>
+      </Card>
     </Container>
-  )
+  );
 }

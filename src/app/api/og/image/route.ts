@@ -30,7 +30,6 @@ async function getFirstApprovedPostByPrefix(prefix: string) {
     .from('posts')
     .select('id, author_name, text, media_url, status, kind')
     .eq('kind', 'blessing')
-    .eq('status', 'approved')
     .ilike('id', `${prefix}%`)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -43,8 +42,7 @@ async function getFirstApprovedPostByPrefix(prefix: string) {
 async function getMediaItemByPrefix(prefix: string) {
   const { data, error } = await sb
     .from('media_items')
-    .select('id, url, type')
-    .eq('status', 'approved')
+    .select('id, public_url, mime_type, kind')
     .ilike('id', `${prefix}%`)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -115,14 +113,14 @@ export async function GET(req: Request) {
       if (byUuid) {
         const { data } = await sb
           .from('media_items')
-          .select('url, status')
+          .select('public_url, mime_type')
           .eq('id', media)
           .maybeSingle()
 
-        if (data?.status === 'approved') imageUrl = data.url || null
+        if (data) imageUrl = (data as any).public_url || null
       } else {
         const m = await getMediaItemByPrefix(media)
-        imageUrl = m?.url || null
+        imageUrl = (m as any)?.public_url || null
       }
     }
 

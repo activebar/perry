@@ -34,7 +34,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const ogImage = toAbsoluteUrl(`/api/og/image?post=${encodeURIComponent(params.id)}${ogDefault ? `&fallback=${encodeURIComponent(String(ogDefault))}` : ''}&v=1`)
 
   const descText = String((post as any)?.text || '').trim()
-  const description = descText ? descText.slice(0, 180) : `${eventName} – ברכה`
+  const metaDesc = safeText((settings as any)?.meta_description || "");
+  const description = metaDesc ? metaDesc.slice(0, 180) : `${eventName} – ברכה`;
 
   return {
     metadataBase: new URL(getSiteUrl()),
