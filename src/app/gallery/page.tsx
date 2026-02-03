@@ -8,16 +8,28 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 async function getImages() {
-  const sb = supabaseAnon()
-  const { data, error } = await sb
-    .from('posts')
-    .select('*')
+  const supabase = supabasePublic();
+
+  // Gallery items are stored in public.media_items (created by /api/upload)
+  const { data, error } = await supabase
+    .from('media_items')
+    .select('id, public_url, created_at, kind')
     .eq('kind', 'gallery')
-    .eq('status', 'approved')
     .order('created_at', { ascending: false })
-    .limit(300)
-  if (error) throw error
-  return data || []
+    .limit(120);
+
+  if (error) return [];
+
+  // Map to the minimal shape expected by the GalleryGrid UI.
+  return (data || [])
+    .filter((x: any) => x?.id && x?.public_url)
+    .map((x: any) => ({
+      id: x.id,
+      kind: 'gallery',
+      status: 'approved',
+      media_url: x.public_url,
+      created_at: x.created_at,
+    }));
 }
 
 export default async function GalleryPage() {
