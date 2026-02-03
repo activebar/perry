@@ -9,6 +9,7 @@ ZIP זה כולל פרויקט Next.js 14 (App Router) + Supabase + Google Drive
 - `/gift` דף תשלום (Bit/PayBox) + תמונה עגולה (קוטר נשלט).
 - `/admin` דף ניהול בסיסי: Settings, Blocks (כולל auto-hide ל־Gift), Moderation (אישור/מחיקה), Ads.
 - API:
+- 
   - `POST /api/upload` (multipart)
   - `POST /api/posts` (ברכה/גלריה)
   - `POST /api/reactions/toggle`
