@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 async function getImages() {
-  const supabase = supabasePublic();
+  const supabase = supabaseAnon();
 
   // Gallery items are stored in public.media_items (created by /api/upload)
   const { data, error } = await supabase

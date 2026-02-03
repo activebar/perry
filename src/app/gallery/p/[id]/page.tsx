@@ -18,13 +18,27 @@ type MediaRow = {
 
 async function getMediaItem(id: string): Promise<MediaRow | null> {
   const sb = supabaseServiceRole();
-  const { data, error } = await sb
+
+  // In some older rows/links, the short code was generated from `post_id` instead of `id`.
+  // So we try both to avoid "item not found" for existing uploads.
+  const byId = await sb
     .from('media_items')
     .select('id, public_url, mime_type, kind')
     .eq('id', id)
-    .single();
-  if (error || !data) return null;
-  return data as MediaRow;
+    .maybeSingle();
+
+  if (byId.data) return byId.data as MediaRow;
+
+  const byPostId = await sb
+    .from('media_items')
+    .select('id, public_url, mime_type, kind')
+    .eq('post_id', id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (byPostId.data) return byPostId.data as MediaRow;
+  return null;
 }
 
 export async function generateMetadata({
