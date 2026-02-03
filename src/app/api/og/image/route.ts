@@ -110,17 +110,31 @@ export async function GET(req: Request) {
     // gallery media item
     if (!imageUrl && media) {
       const byUuid = /^[0-9a-f-]{36}$/i.test(media)
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+      const bucket = 'uploads'
+
+      const toPublic = (storagePath: string) =>
+        supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${storagePath}` : ''
+
       if (byUuid) {
+        // Support both media_items.id (preferred) and legacy links that pass media_items.post_id
         const { data } = await sb
           .from('media_items')
-          .select('public_url, mime_type')
-          .eq('id', media)
+          .select('public_url, storage_path, mime_type, id, post_id')
+          .or(`id.eq.${media},post_id.eq.${media}`)
+          .limit(1)
           .maybeSingle()
 
-        if (data) imageUrl = (data as any).public_url || null
+        if (data) {
+          const pu = (data as any).public_url as string | null | undefined
+          const sp = (data as any).storage_path as string | null | undefined
+          imageUrl = (pu && pu.trim()) ? pu : (sp ? toPublic(sp) : null)
+        }
       } else {
         const m = await getMediaItemByPrefix(media)
-        imageUrl = (m as any)?.public_url || null
+        const pu = (m as any)?.public_url as string | null | undefined
+        const sp = (m as any)?.storage_path as string | null | undefined
+        imageUrl = (pu && pu.trim()) ? pu : (sp ? toPublic(sp) : null)
       }
     }
 
