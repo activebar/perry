@@ -1,34 +1,53 @@
-// src/app/layout.tsx
+import './globals.css'
 import type { Metadata } from 'next'
-
-const SITE_URL = 'https://perry-b.vercel.app'
+import { fetchSettings } from '@/lib/db'
+import { getSiteUrl, toAbsoluteUrl } from '@/lib/site-url'
 
 export async function generateMetadata(): Promise<Metadata> {
-  const title = 'עידו חוגג בר מצווה'
-  const description = 'ואנחנו נרגשים ושמחים להזמין אתכם לחגוג איתנו 🎉'
+  try {
+    const settings = await fetchSettings()
+    const eventName = String((settings as any)?.event_name || 'Event Gift Site')
 
-  const ogImage = `${SITE_URL}/api/og/image?default=1&v=1`
+    // OG image: generated server-side (supports admin-selected background image).
+    // WhatsApp/Facebook handle query strings fine, and changing it helps cache-busting.
+    const imageUrl = toAbsoluteUrl('/api/og/image?default=1&v=1')
 
-  return {
-    title,
-    description,
-    openGraph: {
+
+    const title = eventName
+    const description = String((settings as any)?.meta_description || 'Event gift website powered by Active Bar')
+
+    return {
+      metadataBase: new URL(getSiteUrl()),
       title,
       description,
-      images: [
-        {
-          url: ogImage,
-          width: 800,
-          height: 800,
-          type: 'image/jpeg',
-        },
-      ],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description,
-      images: [ogImage],
-    },
+      openGraph: {
+        title,
+        description,
+        images: imageUrl
+          ? [{ url: imageUrl, width: 800, height: 800, alt: title, type: 'image/jpeg' }]
+          : undefined
+      },
+      twitter: {
+        card: imageUrl ? 'summary_large_image' : 'summary',
+        title,
+        description,
+        images: imageUrl ? [{ url: imageUrl, width: 800, height: 800, alt: title }] : undefined
+      }
+    }
+  } catch {
+    return {
+      title: 'Event Gift Site',
+      description: 'Event gift website powered by Active Bar'
+    }
   }
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="he">
+      <body>
+        <div className="min-h-screen">{children}</div>
+      </body>
+    </html>
+  )
 }
