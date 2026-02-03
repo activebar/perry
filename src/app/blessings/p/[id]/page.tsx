@@ -12,6 +12,12 @@ function isImage(url?: string | null) {
   return !!url && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url)
 }
 
+function safeText(v: unknown) {
+  return String(v ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const settings = await fetchSettings()
   const eventName = String((settings as any)?.event_name || 'Event')
