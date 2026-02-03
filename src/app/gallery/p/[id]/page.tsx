@@ -41,10 +41,12 @@ export async function generateMetadata({
   const heroImages = Array.isArray((settings as any)?.hero_images)
     ? (settings as any).hero_images
     : [];
-  const fallback =
+  // Always keep as a concrete string to avoid `string | undefined` leaking into helpers.
+  const fallback: string = String(
     (settings as any)?.og_default_image_url ||
-    (typeof heroImages[0] === 'string' ? heroImages[0] : null) ||
-    '';
+      (typeof heroImages?.[0] === 'string' ? heroImages[0] : '') ||
+      ''
+  );
 
   const og = `${site}/api/og/image?media=${encodeURIComponent(params.id)}&v=1${fallback ? `&fallback=${encodeURIComponent(toAbsoluteUrl(fallback))}` : ''}`;
 
