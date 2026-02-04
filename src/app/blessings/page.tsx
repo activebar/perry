@@ -22,7 +22,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
   // Always use an absolute OG image URL (best effort). If the image is in Supabase private storage,
   // the proxy route will still serve it on our domain.
-  const ogImage = toAbsoluteUrl(`/api/og/image?default=1&fallback=${encodeURIComponent(String(imageUrlRaw || ''))}`);
+  const v = encodeURIComponent(String((settings as any)?.updated_at || Date.now()));
+  const ogImage = toAbsoluteUrl(`/api/og/image?default=1&fallback=${encodeURIComponent(String(imageUrlRaw || ''))}&v=${v}`);
 
   return {
     metadataBase: new URL(getSiteUrl()),
@@ -31,13 +32,13 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title,
       description: `${eventName} – עמוד הברכות`,
-      images: ogImage ? [{ url: ogImage }] : undefined,
+      images: ogImage ? [{ url: ogImage, width: 800, height: 800, alt: title, type: 'image/jpeg' }] : undefined,
     },
     twitter: {
       card: ogImage ? "summary_large_image" : "summary",
       title,
       description: `${eventName} – עמוד הברכות`,
-      images: ogImage ? [ogImage] : undefined,
+      images: ogImage ? [{ url: ogImage, width: 800, height: 800, alt: title }] : undefined,
     },
   };
 }

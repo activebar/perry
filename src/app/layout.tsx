@@ -6,84 +6,46 @@ import { getSiteUrl, toAbsoluteUrl } from '@/lib/site-url'
 export async function generateMetadata(): Promise<Metadata> {
   try {
     const settings = await fetchSettings()
+    const eventName = String((settings as any)?.event_name || 'Event Gift Site')
 
-    const siteUrl = getSiteUrl()
-    const title =
-      String((settings as any)?.event_name || 'Event Gift Site')
+    // OG image: generated server-side (supports admin-selected background image).
+    // WhatsApp/Facebook handle query strings fine, and changing it helps cache-busting.
+    const v = encodeURIComponent(String((settings as any)?.updated_at || Date.now()))
+    const imageUrl = toAbsoluteUrl(`/api/og/image?default=1&v=${v}`)
 
-    const description =
-      String(
-        (settings as any)?.meta_description ||
-          'Event gift website powered by Active Bar'
-      )
 
-    // ✅ הקשחה: תמיד string
-    const ogImage =
-      toAbsoluteUrl('/api/og/image?default=1&v=1') ??
-      `${siteUrl}/api/og/image?default=1&v=1`
+    const title = eventName
+    const description = String((settings as any)?.meta_description || 'Event gift website powered by Active Bar')
 
     return {
-      metadataBase: new URL(siteUrl),
+      metadataBase: new URL(getSiteUrl()),
       title,
       description,
-
       openGraph: {
-        type: 'website',
-        url: siteUrl,
         title,
         description,
-        images: [
-          {
-            url: ogImage,
-            width: 800,
-            height: 800,
-            alt: title,
-            type: 'image/jpeg'
-          }
-        ]
+        images: imageUrl
+          ? [{ url: imageUrl, width: 800, height: 800, alt: title, type: 'image/jpeg' }]
+          : undefined
       },
-
       twitter: {
-        card: 'summary_large_image',
+        card: imageUrl ? 'summary_large_image' : 'summary',
         title,
         description,
-        images: [
-          {
-            url: ogImage,
-            width: 800,
-            height: 800,
-            alt: title
-          }
-        ]
+        images: imageUrl ? [{ url: imageUrl, width: 800, height: 800, alt: title }] : undefined
       }
     }
   } catch {
-    const siteUrl = getSiteUrl()
-    const fallbackImage = `${siteUrl}/api/og/image?default=1`
-
     return {
       title: 'Event Gift Site',
-      description: 'Event gift website powered by Active Bar',
-      openGraph: {
-        images: [
-          {
-            url: fallbackImage,
-            width: 800,
-            height: 800
-          }
-        ]
-      }
+      description: 'Event gift website powered by Active Bar'
     }
   }
 }
 
-export default function RootLayout({
-  children
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl">
+    <html lang="he">
       <body>
         <div className="min-h-screen">{children}</div>
       </body>

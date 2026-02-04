@@ -28,9 +28,22 @@ export async function POST(req: NextRequest) {
 
     const publicUrl = getPublicUploadUrl(path)
 
-    // Update settings (single-row table) – safest: update all rows
-    const { error: upErr } = await sb.from('event_settings').update({ og_default_image_url: publicUrl })
-    if (upErr) throw upErr
+// Update settings row (PostgREST requires a WHERE clause)
+const { data: settingsRow, error: sErr } = await sb
+  .from('event_settings')
+  .select('id')
+  .limit(1)
+  .maybeSingle()
+
+if (sErr) throw sErr
+if (!settingsRow?.id) throw new Error('Missing event_settings row')
+
+const { error: upErr } = await sb
+  .from('event_settings')
+  .update({ og_default_image_url: publicUrl })
+  .eq('id', settingsRow.id)
+
+if (upErr) throw upErr
 
     return NextResponse.json({ ok: true, publicUrl, path })
   } catch (e: any) {
