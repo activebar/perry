@@ -326,6 +326,8 @@ export default function AdminApp() {
   const [ogFocus, setOgFocus] = useState({ x: 0.5, y: 0.5 })
   const [ogUploading, setOgUploading] = useState(false)
   const [ogMsg, setOgMsg] = useState<string | null>(null)
+  // Cache-buster for admin preview. Supabase public URLs may be cached in the browser.
+  const [ogPreviewKey, setOgPreviewKey] = useState<number>(() => Date.now())
 
   const qrUrl = useMemo(() => {
     if (!settings) return ''
@@ -542,6 +544,8 @@ export default function AdminApp() {
       if (!res.ok || !j?.ok) throw new Error(j?.error || 'upload failed')
       const publicUrl = String(j.publicUrl || '')
       setSettings((prev: any) => (prev ? { ...prev, og_default_image_url: publicUrl } : prev))
+      // bump preview cache-buster so the admin immediately sees the new image
+      setOgPreviewBuster(Date.now())
       setOgMsg('✅ נשמרה תמונת תצוגה (1200x630)')
       setOgFile(null)
     } catch (e: any) {
@@ -1139,7 +1143,15 @@ async function loadBlocks() {
                   {String(settings.og_default_image_url || '').length > 0 && (
                     <div className="rounded-xl overflow-hidden border border-zinc-200">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={String(settings.og_default_image_url)} alt="OG" className="w-full" />
+                      <img
+                        src={(() => {
+                          const u = String(settings.og_default_image_url || '')
+                          const sep = u.includes('?') ? '&' : '?'
+                          return `${u}${sep}v=${ogPreviewBuster}`
+                        })()}
+                        alt="OG"
+                        className="w-full"
+                      />
                     </div>
                   )}
 
@@ -1193,7 +1205,10 @@ async function loadBlocks() {
                     className="text-right"
                     dir="rtl"
                     value={String(settings.og_default_image_url ?? '')}
-                    onChange={e => setSettings({ ...settings, og_default_image_url: e.target.value })}
+                    onChange={e => {
+                      setSettings({ ...settings, og_default_image_url: e.target.value })
+                      setOgPreviewBuster(Date.now())
+                    }}
                     placeholder="URL לתמונה ברירת מחדל לקישורים (אם ריק — נשתמש בתמונה הראשית הראשונה)"
                   />
 
