@@ -1193,7 +1193,7 @@ async function loadBlocks() {
                         </Button>
 
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           onClick={() => {
                             const v = Date.now()
                             setOgPreviewKey(v)
