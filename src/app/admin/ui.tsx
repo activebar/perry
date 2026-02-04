@@ -545,7 +545,7 @@ export default function AdminApp() {
       const publicUrl = String(j.publicUrl || '')
       setSettings((prev: any) => (prev ? { ...prev, og_default_image_url: publicUrl } : prev))
       // bump preview cache-buster so the admin immediately sees the new image
-      setOgPreviewBuster(Date.now())
+      setOgPreviewKey(Date.now())
       setOgMsg('✅ נשמרה תמונת תצוגה (1200x630)')
       setOgFile(null)
     } catch (e: any) {
@@ -1207,7 +1207,7 @@ async function loadBlocks() {
                     value={String(settings.og_default_image_url ?? '')}
                     onChange={e => {
                       setSettings({ ...settings, og_default_image_url: e.target.value })
-                      setOgPreviewBuster(Date.now())
+                      setOgPreviewKey(Date.now())
                     }}
                     placeholder="URL לתמונה ברירת מחדל לקישורים (אם ריק — נשתמש בתמונה הראשית הראשונה)"
                   />
