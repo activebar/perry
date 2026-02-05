@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
-import { getEventId } from '@/lib/event-id'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 const ALLOWED_STATUS = new Set(['pending', 'approved', 'deleted'])
+
+function getEventIdFromEnv() {
+  // Works in both server and edge-like runtimes, no dependency on other helpers
+  return (
+    process.env.NEXT_PUBLIC_EVENT_ID ||
+    process.env.EVENT_ID ||
+    process.env.NEXT_PUBLIC_EVENT_SLUG ||
+    process.env.EVENT_SLUG ||
+    'default'
+  )
+}
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
@@ -14,7 +24,15 @@ export async function GET(req: NextRequest) {
   const status = (req.nextUrl.searchParams.get('status') || '').trim()
 
   const srv = supabaseServiceRole()
-  let q = srv.from('posts').eq('event_id', getEventId()).select('*').order('created_at', { ascending: false }).limit(500)
+  const eventId = getEventIdFromEnv()
+
+  // Important: in supabase-js typings, filters like eq are available after select
+  let q = srv
+    .from('posts')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: false })
+    .limit(500)
 
   if (kind && ALLOWED_KINDS.has(kind)) q = q.eq('kind', kind)
   if (status && ALLOWED_STATUS.has(status)) q = q.eq('status', status)
@@ -47,7 +65,16 @@ export async function PUT(req: NextRequest) {
     }
 
     const srv = supabaseServiceRole()
-    const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
+    const eventId = getEventIdFromEnv()
+
+    const { data, error } = await srv
+      .from('posts')
+      .update(patch)
+      .eq('id', id)
+      .eq('event_id', eventId)
+      .select('*')
+      .single()
+
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true, post: data })
   } catch (e: any) {
