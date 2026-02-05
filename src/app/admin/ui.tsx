@@ -852,6 +852,18 @@ async function loadBlocks() {
         <Card>
           <h3 className="font-semibold">הגדרות</h3>
 
+          <div className="mt-2 grid gap-2" dir="rtl">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-right text-xs text-zinc-600">
+                {savedMsg ? <span className="text-green-700">{savedMsg}</span> : null}
+                {!savedMsg && err ? <span className="text-red-600">{err}</span> : null}
+              </div>
+              <Button onClick={() => saveSettings()} disabled={saving}>
+                {saving ? 'שומר...' : 'שמור'}
+              </Button>
+            </div>
+          </div>
+
           <div className="mt-3 grid gap-3">
             {/* כללי */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
@@ -1071,7 +1083,8 @@ async function loadBlocks() {
 
               {(() => {
                 try {
-                  const lockDays = Number((settings as any).approval_lock_after_days ?? 7)
+                  const lockDaysRaw = Number((settings as any).approval_lock_after_days)
+                  const lockDays = Number.isFinite(lockDaysRaw) ? lockDaysRaw : 7
                   const startAtIso = (settings as any).start_at as string | undefined
                   const openedAtIso = (settings as any).approval_opened_at as string | undefined
                   const startAt = startAtIso ? new Date(startAtIso) : null

@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     // defaults: 10/hour per device for blessings, 10/hour for gallery
     if (device_id && (kind === 'gallery' || kind === 'blessing')) {
       const { since } = withinOneHour(new Date().toISOString())
-      const limit = 20
+      const limit = 10
       const { count, error: cerr } = await srv
         .from('posts')
         .select('id', { count: 'exact', head: true })
@@ -58,19 +58,28 @@ export async function POST(req: Request) {
 
     const settings = await getLatestSettingsRow(srv)
 
-    const lockDays = Number(settings.approval_lock_after_days ?? 7)
+    const lockDaysRaw = Number(settings.approval_lock_after_days)
+    const lockDays = Number.isFinite(lockDaysRaw) ? lockDaysRaw : 7
     const startAt = settings.start_at ? new Date(settings.start_at) : null
     const now = new Date()
 
-    // We treat approval_lock_after_days as calendar days, not exact 24h blocks.
-    // This avoids surprises when the event time is late in the day.
+    // We treat approval_lock_after_days as *calendar days in Israel* (Asia/Jerusalem),
+    // not exact 24h blocks.
+    // This prevents surprises when start_at is stored in UTC or has a late hour.
     // Rule: lock triggers at the start of the day after (lockDays + 1) days.
     // Example: lockDays=2 => open on event day + next 2 days, lock on day 4 00:00.
-    function startOfUtcDay(d: Date) {
-      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
-    }
-    function addDaysUtc(d: Date, days: number) {
-      return new Date(d.getTime() + days * 24 * 60 * 60 * 1000)
+    const TZ = 'Asia/Jerusalem'
+    const tzDayNumber = (d: Date) => {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: TZ,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(d)
+      const y = Number(parts.find(p => p.type === 'year')?.value || '1970')
+      const m = Number(parts.find(p => p.type === 'month')?.value || '01')
+      const day = Number(parts.find(p => p.type === 'day')?.value || '01')
+      return Math.floor(Date.UTC(y, m - 1, day) / (24 * 60 * 60 * 1000))
     }
 
     // approval window anchor
@@ -83,12 +92,15 @@ export async function POST(req: Request) {
       ? startAt
       : (openedAt || startAt)
 
-    const lockAt =
-      anchorAt && Number.isFinite(lockDays) && lockDays >= 0
-        ? addDaysUtc(startOfUtcDay(anchorAt), lockDays + 1)
-        : null
+    // Compare by day number in Asia/Jerusalem.
+    // Lock when nowDay >= anchorDay + lockDays + 1
+    const anchorDay = anchorAt ? tzDayNumber(anchorAt) : null
+    const nowDay = tzDayNumber(now)
+    const lockDay = (anchorDay !== null && Number.isFinite(lockDays) && lockDays >= 0)
+      ? (anchorDay + lockDays + 1)
+      : null
 
-    const isAfterLockWindow = lockAt ? now >= lockAt : false
+    const isAfterLockWindow = lockDay !== null ? nowDay >= lockDay : false
 
     // Manager override:
     // If require_approval is ON, all blessings go to approval, including before the event.
