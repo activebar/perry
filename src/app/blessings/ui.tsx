@@ -47,14 +47,6 @@ function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/')
 }
 
-function countLines(input: string) {
-  const s = String(input || '')
-  const parts = s.split(/\r\n|\r|\n/)
-  // Count non empty lines so trailing newlines do not inflate the number
-  const nonEmpty = parts.filter((p) => p.trim().length > 0)
-  return nonEmpty.length
-}
-
 
 function firstHttpUrl(input: string) {
   const s = String(input || '')
