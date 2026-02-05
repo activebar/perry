@@ -16,8 +16,9 @@ export async function GET() {
     // We select the minimal fields we actually need.
     // NOTE: we DO select device_id to compute can_edit/can_delete, but we do NOT return it to the client.
     const { data: posts, error } = await srv
-      .from('posts').eq('event_id', getEventId())
+      .from('posts')
       .select('id, created_at, author_name, text, media_url, video_url, link_url, status, device_id')
+      .eq('event_id', getEventId())
       .eq('kind', 'blessing')
       .eq('status', 'approved')
       .order('created_at', { ascending: false })
