@@ -28,16 +28,6 @@ export async function GET(req: NextRequest) {
 
   try {
     let row = await getLatestSettingsRow()
-
-    const lockDays = Number((row as any).approval_lock_after_days ?? 7)
-    const startAt = new Date((row as any).start_at)
-    const lockAt = Number.isFinite(lockDays) && lockDays > 0 ? new Date(startAt.getTime() + lockDays * 24 * 60 * 60 * 1000) : null
-    const isLocked = lockAt ? new Date() >= lockAt : false
-
-    if (isLocked && (row as any).require_approval === false) {
-      await supabaseServiceRole().from('event_settings').update({ require_approval: true }).eq('id', (row as any).id)
-      row = await getLatestSettingsRow()
-    }
     return NextResponse.json({ ok: true, settings: row })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
@@ -51,6 +41,16 @@ export async function PUT(req: NextRequest) {
   try {
     const patch = await req.json()
     const row = await getLatestSettingsRow()
+
+    // approval_opened_at should change only when the admin explicitly opens approvals
+    // by switching require_approval from true to false.
+    if ('require_approval' in patch) {
+      const next = Boolean(patch.require_approval)
+      const prev = Boolean(row.require_approval)
+      if (prev === true && next === false) {
+        patch.approval_opened_at = new Date().toISOString()
+      }
+    }
 
     const srv = supabaseServiceRole()
     const { data, error } = await srv

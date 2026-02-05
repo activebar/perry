@@ -14,7 +14,7 @@ function withinOneHour(iso: string) {
 async function getLatestSettingsRow(srv: ReturnType<typeof supabaseServiceRole>) {
   const { data, error } = await srv
     .from('event_settings')
-    .select('id, require_approval, start_at, approval_lock_after_days, max_blessing_lines')
+    .select('id, require_approval, start_at, approval_lock_after_days, max_blessing_lines, approval_opened_at, created_at, updated_at')
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)
@@ -60,16 +60,27 @@ export async function POST(req: Request) {
 
     const lockDays = Number(settings.approval_lock_after_days ?? 7)
     const startAt = settings.start_at ? new Date(settings.start_at) : null
-    const lockAt =
-      startAt && Number.isFinite(lockDays) && lockDays > 0
-        ? new Date(startAt.getTime() + lockDays * 24 * 60 * 60 * 1000)
-        : null
-    const isLocked = lockAt ? new Date() >= lockAt : false
+    const now = new Date()
 
-    if (isLocked && settings.require_approval === false) {
-      await srv.from('event_settings').update({ require_approval: true }).eq('id', settings.id)
-      settings.require_approval = true
-    }
+    // approval window anchor
+    // 1) For the first opening (often before the event), the lock window is counted from the event start time.
+    // 2) If approvals are opened again later (admin turns require_approval off again), the window is counted
+    //    from the moment of that opening (approval_opened_at).
+    // approval_opened_at is set only when the admin explicitly opens approvals.
+    const openedAt = settings.approval_opened_at ? new Date(settings.approval_opened_at) : null
+    const anchorAt = (startAt && openedAt && openedAt < startAt)
+      ? startAt
+      : (openedAt || startAt)
+    const lockAt =
+      anchorAt && Number.isFinite(lockDays) && lockDays > 0
+        ? new Date(anchorAt.getTime() + lockDays * 24 * 60 * 60 * 1000)
+        : null
+    const isAfterLockWindow = lockAt ? now >= lockAt : false
+
+    // Manager override:
+    // If require_approval is ON, all blessings go to approval, including before the event.
+    // If require_approval is OFF, blessings are live only until lockAt, then routed to approval.
+    const requireApprovalEffective = Boolean(settings.require_approval) || isAfterLockWindow
 
     const maxLines = Number(settings.max_blessing_lines ?? 50)
     const textRaw = String(body.text || '')
@@ -83,12 +94,12 @@ export async function POST(req: Request) {
     let pending_reason: string | null = null
     if (forcePendingByLines) pending_reason = 'lines'
     else if (forcePendingByModeration) pending_reason = 'moderation'
-    else if (settings.require_approval) pending_reason = isLocked ? 'approval_lock' : 'require_approval'
+    else if (requireApprovalEffective) pending_reason = isAfterLockWindow ? 'approval_lock' : 'require_approval'
 
     const status =
       kind === 'gallery_admin'
         ? 'approved'
-        : ((settings.require_approval || forcePendingByLines || forcePendingByModeration) ? 'pending' : 'approved')
+        : ((requireApprovalEffective || forcePendingByLines || forcePendingByModeration) ? 'pending' : 'approved')
 
     const insert = {
       kind,

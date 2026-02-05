@@ -1060,6 +1060,20 @@ async function loadBlocks() {
                 placeholder="למשל 96"
               />
 
+              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                <input
+                  type="checkbox"
+                  checked={Boolean((settings as any).require_approval)}
+                  onChange={e => setSettings({ ...(settings as any), require_approval: e.target.checked })}
+                />
+                כל ברכה דורשת אישור מנהל גם לפני האירוע (require_approval)
+              </label>
+
+              <p className="text-xs text-zinc-500 text-right">
+                כשמכבים את האפשרות הזו, הברכות מתפרסמות אוטומטית עד שיחלפו הימים שמוגדרים בשדה למטה.
+                ספירת הימים מתחילה מיום האירוע. אם פותחים שוב, הספירה מתחילה מרגע הפתיחה.
+              </p>
+
               <label className="text-xs text-zinc-500 text-right">אישור מנהל אוטומטי אחרי כמה ימים מיום האירוע (approval_lock_after_days)</label>
               <Input
                 className="text-right"
