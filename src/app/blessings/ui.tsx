@@ -550,7 +550,7 @@ async function saveEdit() {
 
                 {file && <p className="text-xs text-zinc-600">נבחר: {file.name}</p>}
               </div>
-              <Button disabled={busy || (!text && !file && !linkUrl)} onClick={submitBlessing}>
+              <Button disabled={busy || (!text && !file && !linkUrl)} onClick={() => submitBlessing()}>
                 {busy ? 'שולח...' : 'שלח ברכה'}
               </Button>
             </div>
