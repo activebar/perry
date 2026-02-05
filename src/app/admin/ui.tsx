@@ -1069,6 +1069,45 @@ async function loadBlocks() {
                 כל ברכה דורשת אישור מנהל גם לפני האירוע (require_approval)
               </label>
 
+              {(() => {
+                try {
+                  const lockDays = Number((settings as any).approval_lock_after_days ?? 7)
+                  const startAtIso = (settings as any).start_at as string | undefined
+                  const openedAtIso = (settings as any).approval_opened_at as string | undefined
+                  const startAt = startAtIso ? new Date(startAtIso) : null
+                  const openedAt = openedAtIso ? new Date(openedAtIso) : null
+                  const now = new Date()
+
+                  const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
+                  const addDaysUtc = (d: Date, days: number) => new Date(d.getTime() + days * 24 * 60 * 60 * 1000)
+
+                  const anchorAt = (startAt && openedAt && openedAt < startAt) ? startAt : (openedAt || startAt)
+                  const lockAt =
+                    anchorAt && Number.isFinite(lockDays) && lockDays >= 0
+                      ? addDaysUtc(startOfUtcDay(anchorAt), lockDays + 1)
+                      : null
+
+                  const isAfterLockWindow = lockAt ? now >= lockAt : false
+                  const effectiveApproval = Boolean((settings as any).require_approval) || isAfterLockWindow
+
+                  return (
+                    <div className="mt-1 grid gap-1" dir="rtl">
+                      <label className="text-xs flex items-center gap-2 flex-row-reverse justify-end text-right text-zinc-600">
+                        <input type="checkbox" checked={effectiveApproval} readOnly />
+                        מצב אישור בפועל כרגע
+                      </label>
+                      {lockAt && (
+                        <p className="text-xs text-zinc-500 text-right">
+                          נעילה אוטומטית לפי approval_lock_after_days ב {lockAt.toLocaleString('he-IL')}
+                        </p>
+                      )}
+                    </div>
+                  )
+                } catch {
+                  return null
+                }
+              })()}
+
               <p className="text-xs text-zinc-500 text-right">
                 כשמכבים את האפשרות הזו, הברכות מתפרסמות אוטומטית עד שיחלפו הימים שמוגדרים בשדה למטה.
                 ספירת הימים מתחילה מיום האירוע. אם פותחים שוב, הספירה מתחילה מרגע הפתיחה.

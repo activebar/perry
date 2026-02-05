@@ -62,6 +62,17 @@ export async function POST(req: Request) {
     const startAt = settings.start_at ? new Date(settings.start_at) : null
     const now = new Date()
 
+    // We treat approval_lock_after_days as calendar days, not exact 24h blocks.
+    // This avoids surprises when the event time is late in the day.
+    // Rule: lock triggers at the start of the day after (lockDays + 1) days.
+    // Example: lockDays=2 => open on event day + next 2 days, lock on day 4 00:00.
+    function startOfUtcDay(d: Date) {
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
+    }
+    function addDaysUtc(d: Date, days: number) {
+      return new Date(d.getTime() + days * 24 * 60 * 60 * 1000)
+    }
+
     // approval window anchor
     // 1) For the first opening (often before the event), the lock window is counted from the event start time.
     // 2) If approvals are opened again later (admin turns require_approval off again), the window is counted
@@ -71,10 +82,12 @@ export async function POST(req: Request) {
     const anchorAt = (startAt && openedAt && openedAt < startAt)
       ? startAt
       : (openedAt || startAt)
+
     const lockAt =
-      anchorAt && Number.isFinite(lockDays) && lockDays > 0
-        ? new Date(anchorAt.getTime() + lockDays * 24 * 60 * 60 * 1000)
+      anchorAt && Number.isFinite(lockDays) && lockDays >= 0
+        ? addDaysUtc(startOfUtcDay(anchorAt), lockDays + 1)
         : null
+
     const isAfterLockWindow = lockAt ? now >= lockAt : false
 
     // Manager override:
