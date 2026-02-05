@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { moderateText } from '@/lib/moderation'
+import { getEventId } from '@/lib/event-id'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 
@@ -110,6 +111,7 @@ const isAfterLockWindow = lockAt ? now >= lockAt : false
         : ((requireApprovalEffective || forcePendingByLines || forcePendingByModeration) ? 'pending' : 'approved')
 
     const insert = {
+      event_id: getEventId(),
       kind,
       author_name: body.author_name || null,
       text: body.text || null,

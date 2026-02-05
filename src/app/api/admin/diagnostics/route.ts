@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getPublicEnv, getServerEnv } from '@/lib/env'
+import { getEventId } from '@/lib/event-id'
 
 export const dynamic = 'force-dynamic'
 

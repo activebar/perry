@@ -1,8 +1,10 @@
 import { supabaseAnon } from './supabase'
+import { getEventId } from './event-id'
 import { unstable_noStore as noStore } from 'next/cache'
 
 export type EventSettings = {
   id?: string
+  event_id?: string
   event_name: string
   start_at: string
   location_text: string | null
@@ -74,6 +76,7 @@ export async function fetchSettings(): Promise<EventSettings> {
   const { data, error } = await sb
     .from('event_settings')
     .select('*')
+    .eq('event_id', getEventId())
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)

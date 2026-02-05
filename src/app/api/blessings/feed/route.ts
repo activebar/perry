@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getEventId } from '@/lib/event-id'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -15,7 +16,7 @@ export async function GET() {
     // We select the minimal fields we actually need.
     // NOTE: we DO select device_id to compute can_edit/can_delete, but we do NOT return it to the client.
     const { data: posts, error } = await srv
-      .from('posts')
+      .from('posts').eq('event_id', getEventId())
       .select('id, created_at, author_name, text, media_url, video_url, link_url, status, device_id')
       .eq('kind', 'blessing')
       .eq('status', 'approved')

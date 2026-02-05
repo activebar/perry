@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertCronAuth } from '@/lib/cronAuth'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getEventId } from '@/lib/event-id'
 
 export const dynamic = 'force-dynamic'
 

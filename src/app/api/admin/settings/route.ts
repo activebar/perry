@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getEventId } from '@/lib/event-id'
 
 /**
  * NOTE:
@@ -11,12 +12,20 @@ import { supabaseServiceRole } from '@/lib/supabase'
 async function getLatestSettingsRow() {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
-    .from('event_settings')
-    .select('*')
-    .order('updated_at', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+    .from('event_settings').select('*').eq('event_id', getEventId()).order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(1).single()
+if (error) {
+      // If there is no settings row yet for this event_id, create one with defaults.
+      // Supabase returns PGRST116 for "No rows" in many cases.
+      const noRows = (error as any)?.code === 'PGRST116' || /No rows/i.test((error as any)?.message || '')
+      if (noRows) {
+        const created = await srv.from('event_settings').insert({ event_id: getEventId() }).select('*').single()
+        if (created.error) {
+          return NextResponse.json({ error: created.error.message }, { status: 500 })
+        }
+        return NextResponse.json({ ok: true, settings: created.data })
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
   if (error) throw error
   return data as any
