@@ -47,6 +47,14 @@ function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/')
 }
 
+function countLines(input: string) {
+  const s = String(input || '')
+  const parts = s.split(/\r\n|\r|\n/)
+  // Count non empty lines so trailing newlines do not inflate the number
+  const nonEmpty = parts.filter((p) => p.trim().length > 0)
+  return nonEmpty.length
+}
+
 
 function firstHttpUrl(input: string) {
   const s = String(input || '')
@@ -160,6 +168,7 @@ export default function BlessingsClient({
 
 
   const [busy, setBusy] = useState(false)
+  const [lineGate, setLineGate] = useState<{ current: number; max: number } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -188,22 +197,18 @@ export default function BlessingsClient({
     }
   }, [])
 
-  async function submitBlessing() {
+  async function submitBlessing(opts?: { skipLineCheck?: boolean }) {
     setErr(null)
     setMsg(null)
     setBusy(true)
     try {
-const maxLines = Number((settings as any)?.max_blessing_lines ?? 50)
-const currentLines = countLines(text || '')
-if (Number.isFinite(maxLines) && maxLines > 0 && currentLines > maxLines) {
-  const ok = window.confirm(
-    `הברכה כוללת ${currentLines} שורות, והמקסימום הוא ${maxLines}.\nאישור ישלח את הברכה לאישור מנהל.\nביטול יאפשר לערוך ולקצר לפני השליחה.`
-  )
-  if (!ok) {
-    setBusy(false)
-    return
-  }
-}
+      const maxLines = Number((settings as any)?.max_blessing_lines ?? 50)
+      const currentLines = countLines(text || '')
+      if (!opts?.skipLineCheck && Number.isFinite(maxLines) && maxLines > 0 && currentLines > maxLines) {
+        setLineGate({ current: currentLines, max: maxLines })
+        setBusy(false)
+        return
+      }
 
 
       let media_path: string | null = null
@@ -454,7 +459,33 @@ async function saveEdit() {
 
   return (
     <main dir="rtl" className="text-right">
-      <Container>
+      {lineGate ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-lg">
+            <div className="text-base font-semibold">הברכה ארוכה מהמותר</div>
+            <div className="mt-2 text-sm text-zinc-700">
+              הברכה כוללת {lineGate.current} שורות, והמקסימום הוא {lineGate.max}. אפשר לערוך ולקצר, או לשלוח לאישור מנהל.
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setLineGate(null)}>
+                ערוך
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  const lg = lineGate
+                  setLineGate(null)
+                  if (!lg) return
+                  void submitBlessing({ skipLineCheck: true })
+                }}
+              >
+                שלח לאישור
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+<Container>
         {showHeader && (
           <Card>
             <div className="flex items-center justify-between gap-2">
