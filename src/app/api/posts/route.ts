@@ -24,6 +24,12 @@ async function getLatestSettingsRow(srv: ReturnType<typeof supabaseServiceRole>)
   return data as any
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function startOfDayUtc(d: Date) {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+}
+
 function countLines(text: string) {
   if (!text) return 0
   const parts = String(text).split(/\r?\n/)
@@ -58,29 +64,9 @@ export async function POST(req: Request) {
 
     const settings = await getLatestSettingsRow(srv)
 
-    const lockDaysRaw = Number(settings.approval_lock_after_days)
-    const lockDays = Number.isFinite(lockDaysRaw) ? lockDaysRaw : 7
+    const lockDays = Number(settings.approval_lock_after_days ?? 7)
     const startAt = settings.start_at ? new Date(settings.start_at) : null
     const now = new Date()
-
-    // We treat approval_lock_after_days as *calendar days in Israel* (Asia/Jerusalem),
-    // not exact 24h blocks.
-    // This prevents surprises when start_at is stored in UTC or has a late hour.
-    // Rule: lock triggers at the start of the day after (lockDays + 1) days.
-    // Example: lockDays=2 => open on event day + next 2 days, lock on day 4 00:00.
-    const TZ = 'Asia/Jerusalem'
-    const tzDayNumber = (d: Date) => {
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: TZ,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(d)
-      const y = Number(parts.find(p => p.type === 'year')?.value || '1970')
-      const m = Number(parts.find(p => p.type === 'month')?.value || '01')
-      const day = Number(parts.find(p => p.type === 'day')?.value || '01')
-      return Math.floor(Date.UTC(y, m - 1, day) / (24 * 60 * 60 * 1000))
-    }
 
     // approval window anchor
     // 1) For the first opening (often before the event), the lock window is counted from the event start time.
@@ -88,19 +74,16 @@ export async function POST(req: Request) {
     //    from the moment of that opening (approval_opened_at).
     // approval_opened_at is set only when the admin explicitly opens approvals.
     const openedAt = settings.approval_opened_at ? new Date(settings.approval_opened_at) : null
-    const anchorAt = (startAt && openedAt && openedAt < startAt)
-      ? startAt
-      : (openedAt || startAt)
+const anchorAt = (startAt && openedAt && openedAt < startAt) ? startAt : (openedAt || startAt)
 
-    // Compare by day number in Asia/Jerusalem.
-    // Lock when nowDay >= anchorDay + lockDays + 1
-    const anchorDay = anchorAt ? tzDayNumber(anchorAt) : null
-    const nowDay = tzDayNumber(now)
-    const lockDay = (anchorDay !== null && Number.isFinite(lockDays) && lockDays >= 0)
-      ? (anchorDay + lockDays + 1)
-      : null
-
-    const isAfterLockWindow = lockDay !== null ? nowDay >= lockDay : false
+// Lock window is calculated in calendar days, not exact hours.
+// Example: if approval_lock_after_days is 2, then submissions are auto-published on:
+// event day, plus the next 2 calendar days, and lock starts at 00:00 of the following day.
+const lockAt =
+  anchorAt && Number.isFinite(lockDays) && lockDays >= 0
+    ? new Date(startOfDayUtc(anchorAt).getTime() + (lockDays + 1) * DAY_MS)
+    : null
+const isAfterLockWindow = lockAt ? now >= lockAt : false
 
     // Manager override:
     // If require_approval is ON, all blessings go to approval, including before the event.

@@ -193,6 +193,19 @@ export default function BlessingsClient({
     setMsg(null)
     setBusy(true)
     try {
+const maxLines = Number((settings as any)?.max_blessing_lines ?? 50)
+const currentLines = countLines(text || '')
+if (Number.isFinite(maxLines) && maxLines > 0 && currentLines > maxLines) {
+  const ok = window.confirm(
+    `הברכה כוללת ${currentLines} שורות, והמקסימום הוא ${maxLines}.\nאישור ישלח את הברכה לאישור מנהל.\nביטול יאפשר לערוך ולקצר לפני השליחה.`
+  )
+  if (!ok) {
+    setBusy(false)
+    return
+  }
+}
+
+
       let media_path: string | null = null
       let media_url: string | null = null
       let video_url: string | null = null
@@ -226,13 +239,16 @@ export default function BlessingsClient({
           video_url
         })
       })
+// If the blessing goes to approval, keep the form fields so the user can edit and resubmit.
+if (res.status !== 'pending') {
+  setItems(prev => [res.post as Post, ...prev])
+  setAuthor('')
+  setText('')
+  setLinkUrl('')
+  setLinkTouched(false)
+  setFile(null)
+}
 
-      setItems(prev => [res.post as Post, ...prev])
-      setAuthor('')
-      setText('')
-      setLinkUrl('')
-      setLinkTouched(false)
-      setFile(null)
 
       if (res.status === 'pending') {
         const reason = String(res.pending_reason || '')
