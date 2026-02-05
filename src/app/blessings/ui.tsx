@@ -234,7 +234,18 @@ export default function BlessingsClient({
       setLinkTouched(false)
       setFile(null)
 
-      setMsg(res.status === 'pending' ? '✅ נשלח לאישור מנהל' : '✅ נשמר!')
+      if (res.status === 'pending') {
+        const reason = String(res.pending_reason || '')
+        if (reason === 'moderation') {
+          setMsg('הברכה נשמרה וממתינה לאישור מנהל. ניתן לערוך ולנסות שוב')
+        } else if (reason === 'lines') {
+          setMsg('הברכה ארוכה מהאורך המותר ונשלחה לאישור מנהל. ניתן לערוך ולקצר')
+        } else {
+          setMsg('✅ נשלח לאישור מנהל')
+        }
+      } else {
+        setMsg('✅ נשמר!')
+      }
     } catch (e: any) {
       setErr(friendlyError(e?.message || 'שגיאה'))
     } finally {

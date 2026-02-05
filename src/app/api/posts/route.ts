@@ -1,12 +1,33 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { moderateText } from '@/lib/moderation'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 
 function withinOneHour(iso: string) {
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString()
   return { since }
+}
+
+
+async function getLatestSettingsRow(srv: ReturnType<typeof supabaseServiceRole>) {
+  const { data, error } = await srv
+    .from('event_settings')
+    .select('id, require_approval, start_at, approval_lock_after_days, max_blessing_lines')
+    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error) throw error
+  return data as any
+}
+
+function countLines(text: string) {
+  if (!text) return 0
+  const parts = String(text).split(/\r?\n/)
+  return parts.length
 }
 
 export async function POST(req: Request) {
@@ -35,15 +56,39 @@ export async function POST(req: Request) {
       }
     }
 
-    const { data: settings, error: serr } = await srv
-      .from('event_settings')
-      .select('require_approval')
-      .limit(1)
-      .single()
-    if (serr) throw serr
+    const settings = await getLatestSettingsRow(srv)
+
+    const lockDays = Number(settings.approval_lock_after_days ?? 7)
+    const startAt = settings.start_at ? new Date(settings.start_at) : null
+    const lockAt =
+      startAt && Number.isFinite(lockDays) && lockDays > 0
+        ? new Date(startAt.getTime() + lockDays * 24 * 60 * 60 * 1000)
+        : null
+    const isLocked = lockAt ? new Date() >= lockAt : false
+
+    if (isLocked && settings.require_approval === false) {
+      await srv.from('event_settings').update({ require_approval: true }).eq('id', settings.id)
+      settings.require_approval = true
+    }
+
+    const maxLines = Number(settings.max_blessing_lines ?? 50)
+    const textRaw = String(body.text || '')
+    const textLines = kind === 'blessing' ? countLines(textRaw) : 0
+    const forcePendingByLines = kind === 'blessing' && Number.isFinite(maxLines) && maxLines > 0 && textLines > maxLines
+
+    // Soft moderation: always check blessings. If flagged, route to pending approval (do not hard block the guest).
+    const moderation = kind === 'blessing' ? await moderateText(textRaw) : null
+    const forcePendingByModeration = kind === 'blessing' && !!moderation?.ok && !!moderation?.flagged
+
+    let pending_reason: string | null = null
+    if (forcePendingByLines) pending_reason = 'lines'
+    else if (forcePendingByModeration) pending_reason = 'moderation'
+    else if (settings.require_approval) pending_reason = isLocked ? 'approval_lock' : 'require_approval'
 
     const status =
-      kind === 'gallery_admin' ? 'approved' : (settings.require_approval ? 'pending' : 'approved')
+      kind === 'gallery_admin'
+        ? 'approved'
+        : ((settings.require_approval || forcePendingByLines || forcePendingByModeration) ? 'pending' : 'approved')
 
     const insert = {
       kind,
@@ -54,6 +99,10 @@ export async function POST(req: Request) {
       video_url: body.video_url || null,
       link_url: body.link_url || null,
       status,
+      moderation_flagged: forcePendingByModeration ? true : false,
+      moderation_provider: moderation?.provider || null,
+      moderation_raw: moderation?.raw || null,
+      pending_reason,
       device_id
     }
 
@@ -69,7 +118,14 @@ export async function POST(req: Request) {
     }
 
     const post = { ...data, reaction_counts: { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }, my_reactions: [] }
-    return NextResponse.json({ ok: true, status, post })
+    return NextResponse.json({
+      ok: true,
+      status,
+      pending_reason: pending_reason || undefined,
+      post,
+      too_many_lines: forcePendingByLines ? true : undefined,
+      flagged: forcePendingByModeration ? true : undefined
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
@@ -106,6 +162,31 @@ export async function PUT(req: Request) {
     if ('media_url' in body) patch.media_url = body.media_url || null
     if ('media_path' in body) patch.media_path = body.media_path || null
     if ('video_url' in body) patch.video_url = body.video_url || null
+
+    // If editing a blessing text, re-validate: max lines + soft moderation.
+    if (post.kind === 'blessing' && 'text' in patch) {
+      const settings = await getLatestSettingsRow(srv)
+      const maxLines = Number(settings.max_blessing_lines ?? 50)
+      const textRaw = String(patch.text || '')
+      const textLines = countLines(textRaw)
+      const tooManyLines = Number.isFinite(maxLines) && maxLines > 0 && textLines > maxLines
+
+      const moderation = await moderateText(textRaw)
+      const flagged = !!moderation?.ok && !!moderation?.flagged
+
+      // Never hard-block the guest: route to pending.
+      if (tooManyLines) {
+        patch.status = 'pending'
+        patch.pending_reason = 'lines'
+      } else if (flagged) {
+        patch.status = 'pending'
+        patch.pending_reason = 'moderation'
+      }
+
+      patch.moderation_flagged = flagged ? true : false
+      patch.moderation_provider = moderation?.provider || null
+      patch.moderation_raw = moderation?.raw || null
+    }
 
     const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
     if (error) throw error

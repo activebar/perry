@@ -1060,6 +1060,25 @@ async function loadBlocks() {
                 placeholder="למשל 96"
               />
 
+              <label className="text-xs text-zinc-500 text-right">אישור מנהל אוטומטי אחרי כמה ימים מיום האירוע (approval_lock_after_days)</label>
+              <Input
+                className="text-right"
+                dir="rtl"
+                value={String((settings as any).approval_lock_after_days ?? 7)}
+                onChange={e => setSettings({ ...(settings as any), approval_lock_after_days: Number(e.target.value) })}
+                placeholder="למשל 2 לבר מצווה, 7 לחתונה"
+              />
+
+              <label className="text-xs text-zinc-500 text-right">מקסימום שורות לברכה לפני שליחה לאישור מנהל (max_blessing_lines)</label>
+              <Input
+                className="text-right"
+                dir="rtl"
+                value={String((settings as any).max_blessing_lines ?? 50)}
+                onChange={e => setSettings({ ...(settings as any), max_blessing_lines: Number(e.target.value) })}
+                placeholder="למשל 50"
+              />
+
+
               <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
                 <input
                   type="checkbox"

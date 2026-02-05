@@ -49,6 +49,7 @@ export type EventSettings = {
   blessings_show_all_button?: boolean | null
 
   approval_lock_after_days?: number | null
+  max_blessing_lines?: number | null
 
   created_at?: string
   updated_at?: string
