@@ -355,6 +355,11 @@ export default function AdminApp() {
   // blocks
   const [blocks, setBlocks] = useState<any[]>([])
 
+  // content rules (allow/block)
+  const [contentRules, setContentRules] = useState<any[]>([])
+  const [rulesMsg, setRulesMsg] = useState<string | null>(null)
+  const [newRule, setNewRule] = useState<any>({ rule_type: 'block', scope: 'event', match_type: 'contains', expression: '', note: '', is_active: true })
+
   // moderation
   const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>('blessing')
   const [pending, setPending] = useState<any[]>([])
@@ -461,6 +466,54 @@ export default function AdminApp() {
     const s = await jfetch('/api/admin/settings', { method: 'GET', headers: {} as any })
     setSettings(s.settings)
     setStartAtLocal(isoToLocalInput(s.settings?.start_at))
+  }
+
+  async function loadContentRules() {
+    const r = await jfetch('/api/admin/content-rules', { method: 'GET', headers: {} as any })
+    setContentRules(Array.isArray(r.rules) ? r.rules : [])
+  }
+
+  async function createContentRule() {
+    setRulesMsg(null)
+    try {
+      const payload = { ...newRule, expression: String(newRule.expression || '').trim() }
+      if (!payload.expression) {
+        setRulesMsg('הוסף מילה/ביטוי')
+        return
+      }
+      const res = await jfetch('/api/admin/content-rules', { method: 'POST', body: JSON.stringify(payload) })
+      setContentRules(prev => [res.rule, ...prev])
+      setNewRule({ ...newRule, expression: '', note: '' })
+      setRulesMsg('✅ נוסף')
+      setTimeout(() => setRulesMsg(null), 2000)
+    } catch (e: any) {
+      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
+    }
+  }
+
+  async function updateContentRule(patch: any) {
+    setRulesMsg(null)
+    try {
+      const res = await jfetch('/api/admin/content-rules', { method: 'PUT', body: JSON.stringify(patch) })
+      setContentRules(prev => prev.map(r => (r.id === res.rule.id ? res.rule : r)))
+      setRulesMsg('✅ עודכן')
+      setTimeout(() => setRulesMsg(null), 1500)
+    } catch (e: any) {
+      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
+    }
+  }
+
+  async function deleteContentRule(id: number) {
+    if (!confirm('למחוק את החוק?')) return
+    setRulesMsg(null)
+    try {
+      await jfetch(`/api/admin/content-rules?id=${id}`, { method: 'DELETE', headers: {} as any })
+      setContentRules(prev => prev.filter(r => r.id !== id))
+      setRulesMsg('✅ נמחק')
+      setTimeout(() => setRulesMsg(null), 1500)
+    } catch (e: any) {
+      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
+    }
   }
 
   async function saveSettings(patch?: any) {
@@ -750,7 +803,10 @@ async function loadBlocks() {
 
   useEffect(() => {
     if (!admin) return
-    if (tab === 'settings') loadSettings()
+    if (tab === 'settings') {
+      loadSettings()
+      loadContentRules()
+    }
     if (tab === 'blocks') loadBlocks()
     if (tab === 'moderation') {
       loadPending()
@@ -1426,6 +1482,100 @@ async function loadBlocks() {
                   />
                 </div>
               ) : null}
+            </div>
+
+            {/* ניהול תוכן (חסימות/חריגים) */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+              <p className="text-sm font-medium text-right">ניהול תוכן – חסימות וחריגים</p>
+              <p className="text-xs text-zinc-500 text-right">
+                החוקים חלים על טקסט הברכה, שם הכותב, קישור ומדיה. חסימה תמיד תשלח לאישור מנהל. חריג יכול למנוע חסימת־שווא במודרציה.
+              </p>
+
+              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <select
+                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                    value={newRule.rule_type}
+                    onChange={e => setNewRule({ ...newRule, rule_type: e.target.value })}
+                  >
+                    <option value="block">חסימה</option>
+                    <option value="allow">חריג</option>
+                  </select>
+
+                  <select
+                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                    value={newRule.match_type}
+                    onChange={e => setNewRule({ ...newRule, match_type: e.target.value })}
+                  >
+                    <option value="contains">מכיל</option>
+                    <option value="exact">בדיוק</option>
+                  </select>
+
+                  <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                    <input
+                      type="checkbox"
+                      checked={newRule.is_active !== false}
+                      onChange={e => setNewRule({ ...newRule, is_active: e.target.checked })}
+                    />
+                    פעיל
+                  </label>
+                </div>
+
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(newRule.expression ?? '')}
+                  onChange={e => setNewRule({ ...newRule, expression: e.target.value })}
+                  placeholder="מילה/ביטוי (למשל: למות עליך)"
+                />
+
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(newRule.note ?? '')}
+                  onChange={e => setNewRule({ ...newRule, note: e.target.value })}
+                  placeholder="הערה (אופציונלי)"
+                />
+
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-right text-xs text-zinc-600">{rulesMsg ? rulesMsg : null}</div>
+                  <Button onClick={createContentRule}>
+                    הוסף
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                {contentRules.length === 0 ? (
+                  <p className="text-xs text-zinc-500 text-right">אין חוקים עדיין.</p>
+                ) : (
+                  contentRules.map(r => (
+                    <div key={r.id} className="rounded-xl border border-zinc-200 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-right">
+                          <p className="text-sm font-medium">
+                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : 'מכיל'}
+                          </p>
+                          <p className="text-sm" dir="rtl">{r.expression}</p>
+                          {r.note ? <p className="text-xs text-zinc-500">{r.note}</p> : null}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                            <input
+                              type="checkbox"
+                              checked={r.is_active !== false}
+                              onChange={e => updateContentRule({ ...r, is_active: e.target.checked })}
+                            />
+                            פעיל
+                          </label>
+                          <Button variant="ghost" onClick={() => deleteContentRule(Number(r.id))}>מחק</Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* פוטר */}

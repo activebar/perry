@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { moderateText } from '@/lib/moderation'
-import { getEventId } from '@/lib/event-id'
+import { matchContentRules } from '@/lib/contentRules'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 
@@ -96,22 +96,37 @@ const isAfterLockWindow = lockAt ? now >= lockAt : false
     const textLines = kind === 'blessing' ? countLines(textRaw) : 0
     const forcePendingByLines = kind === 'blessing' && Number.isFinite(maxLines) && maxLines > 0 && textLines > maxLines
 
-    // Soft moderation: always check blessings. If flagged, route to pending approval (do not hard block the guest).
+    // Manager-controlled rules apply to blessings and cover text + meta.
+    const ruleMatch = kind === 'blessing'
+      ? await matchContentRules({
+          author_name: body.author_name || null,
+          text: body.text || null,
+          link_url: body.link_url || null,
+          media_url: body.media_url || null,
+          video_url: body.video_url || null
+        })
+      : { matched: false } as any
+
+    const forcePendingByRule = kind === 'blessing' && ruleMatch?.matched && ruleMatch?.rule?.rule_type === 'block'
+
+    // Soft moderation: if flagged, route to pending approval (do not hard block the guest).
+    // If an allow-rule matches, we treat it as a whitelist hint and do not force pending by moderation alone.
     const moderation = kind === 'blessing' ? await moderateText(textRaw) : null
-    const forcePendingByModeration = kind === 'blessing' && !!moderation?.ok && !!moderation?.flagged
+    const allowByRule = kind === 'blessing' && ruleMatch?.matched && ruleMatch?.rule?.rule_type === 'allow'
+    const forcePendingByModeration = kind === 'blessing' && !!moderation?.ok && !!moderation?.flagged && !allowByRule
 
     let pending_reason: string | null = null
     if (forcePendingByLines) pending_reason = 'lines'
+    else if (forcePendingByRule) pending_reason = 'blocked_rule'
     else if (forcePendingByModeration) pending_reason = 'moderation'
     else if (requireApprovalEffective) pending_reason = isAfterLockWindow ? 'approval_lock' : 'require_approval'
 
     const status =
       kind === 'gallery_admin'
         ? 'approved'
-        : ((requireApprovalEffective || forcePendingByLines || forcePendingByModeration) ? 'pending' : 'approved')
+        : ((requireApprovalEffective || forcePendingByLines || forcePendingByRule || forcePendingByModeration) ? 'pending' : 'approved')
 
     const insert = {
-      event_id: getEventId(),
       kind,
       author_name: body.author_name || null,
       text: body.text || null,
@@ -124,6 +139,12 @@ const isAfterLockWindow = lockAt ? now >= lockAt : false
       moderation_provider: moderation?.provider || null,
       moderation_raw: moderation?.raw || null,
       pending_reason,
+      content_rule_hit: forcePendingByRule ? {
+        id: ruleMatch?.rule?.id,
+        match_type: ruleMatch?.rule?.match_type,
+        expression: ruleMatch?.rule?.expression,
+        matched_on: ruleMatch?.matched_on
+      } : null,
       device_id
     }
 
@@ -185,24 +206,46 @@ export async function PUT(req: Request) {
     if ('video_url' in body) patch.video_url = body.video_url || null
 
     // If editing a blessing text, re-validate: max lines + soft moderation.
-    if (post.kind === 'blessing' && 'text' in patch) {
+    if (post.kind === 'blessing' && ('text' in patch || 'author_name' in patch || 'link_url' in patch || 'media_url' in patch || 'video_url' in patch)) {
       const settings = await getLatestSettingsRow(srv)
       const maxLines = Number(settings.max_blessing_lines ?? 50)
-      const textRaw = String(patch.text || '')
+      const nextText = ('text' in patch) ? (patch.text || '') : (post.text || '')
+      const textRaw = String(nextText || '')
       const textLines = countLines(textRaw)
       const tooManyLines = Number.isFinite(maxLines) && maxLines > 0 && textLines > maxLines
 
+      const ruleMatch = await matchContentRules({
+        author_name: ('author_name' in patch) ? (patch.author_name || null) : (post.author_name || null),
+        text: nextText || null,
+        link_url: ('link_url' in patch) ? (patch.link_url || null) : (post.link_url || null),
+        media_url: ('media_url' in patch) ? (patch.media_url || null) : (post.media_url || null),
+        video_url: ('video_url' in patch) ? (patch.video_url || null) : (post.video_url || null)
+      })
+
+      const blockedByRule = ruleMatch?.matched && ruleMatch?.rule?.rule_type === 'block'
+      const allowedByRule = ruleMatch?.matched && ruleMatch?.rule?.rule_type === 'allow'
+
       const moderation = await moderateText(textRaw)
-      const flagged = !!moderation?.ok && !!moderation?.flagged
+      const flagged = !!moderation?.ok && !!moderation?.flagged && !allowedByRule
 
       // Never hard-block the guest: route to pending.
       if (tooManyLines) {
         patch.status = 'pending'
         patch.pending_reason = 'lines'
+      } else if (blockedByRule) {
+        patch.status = 'pending'
+        patch.pending_reason = 'blocked_rule'
       } else if (flagged) {
         patch.status = 'pending'
         patch.pending_reason = 'moderation'
       }
+
+      patch.content_rule_hit = blockedByRule ? {
+        id: ruleMatch?.rule?.id,
+        match_type: ruleMatch?.rule?.match_type,
+        expression: ruleMatch?.rule?.expression,
+        matched_on: ruleMatch?.matched_on
+      } : null
 
       patch.moderation_flagged = flagged ? true : false
       patch.moderation_provider = moderation?.provider || null
