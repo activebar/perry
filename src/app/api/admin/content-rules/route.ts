@@ -5,7 +5,7 @@ import { supabaseServiceRole } from '@/lib/supabase'
 function pickRule(body: any) {
   const rule_type = (body?.rule_type === 'allow' ? 'allow' : 'block') as 'allow' | 'block'
   const scope = (body?.scope === 'global' ? 'global' : 'event') as 'global' | 'event'
-  const match_type = (body?.match_type === 'exact' ? 'exact' : 'contains') as 'exact' | 'contains'
+  const match_type = (body?.match_type === 'exact' ? 'exact' : body?.match_type === 'word' ? 'word' : 'contains') as 'exact' | 'contains' | 'word'
   const expression = String(body?.expression || '').trim()
   const note = body?.note ? String(body.note) : null
   const is_active = body?.is_active === false ? false : true

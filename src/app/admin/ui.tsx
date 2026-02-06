@@ -718,11 +718,6 @@ async function loadBlocks() {
   async function setPostStatus(id: string, status: string) {
     const res = await jfetch('/api/admin/posts', { method: 'PUT', body: JSON.stringify({ id, status }) })
     setPending(prev => prev.filter(p => p.id !== res.post.id))
-    // update counters immediately
-    setPendingCount(prev => Math.max(0, prev - 1))
-    // refresh top counts + current list to avoid stale UI
-    try { await fetchTopCounts() } catch {}
-    try { await loadPending() } catch {}
   }
 
   async function loadAds() {
@@ -1514,6 +1509,7 @@ async function loadBlocks() {
                   >
                     <option value="contains">מכיל</option>
                     <option value="exact">בדיוק</option>
+                    <option value="word">מילה שלמה</option>
                   </select>
 
                   <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">

@@ -1,11 +1,12 @@
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getEventId } from '@/lib/event-id'
 
 export type ContentRule = {
   id: number
   rule_type: 'block' | 'allow'
   scope: 'event' | 'global'
   event_id: string | null
-  match_type: 'exact' | 'contains'
+  match_type: 'exact' | 'contains' | 'word'
   expression: string
   is_active: boolean
   note: string | null
@@ -18,6 +19,26 @@ export type ContentRuleMatch = {
   matched_value?: string
 }
 
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Whole word match for Hebrew and mixed text.
+// We consider "word boundaries" as start/end OR whitespace OR common punctuation.
+function includesWholeWord(haystack: string, needle: string) {
+  const h = norm(haystack)
+  const n = norm(needle)
+  if (!h || !n) return false
+  const pat = `(^|[\s\u00A0\t\n\r\.,!\?;:"'()\[\]{}<>/\\|+=~` + '`' + `@#\$%\^&\*-])${escapeRegExp(n)}($|[\s\u00A0\t\n\r\.,!\?;:"'()\[\]{}<>/\\|+=~` + '`' + `@#\$%\^&\*-])`
+  try {
+    const re = new RegExp(pat, 'i')
+    return re.test(h)
+  } catch {
+    // fallback
+    return h.split(/\s+/).includes(n)
+  }
+}
+
 function norm(s: unknown) {
   return String(s ?? '').trim().toLowerCase()
 }
@@ -27,6 +48,7 @@ function ruleMatches(rule: ContentRule, value: string) {
   const v = norm(value)
   if (!expr || !v) return false
   if (rule.match_type === 'exact') return v === expr
+  if (rule.match_type === 'word') return includesWholeWord(v, expr)
   return v.includes(expr)
 }
 
@@ -49,7 +71,9 @@ export async function matchContentRules(input: {
   media_url?: string | null
   video_url?: string | null
 }) {
-  const rules = await fetchActiveContentRules()
+  const rulesAll = await fetchActiveContentRules()
+  const eventId = getEventId()
+  const rules = rulesAll.filter(r => r.scope === 'global' || (r.scope === 'event' && (r.event_id || '') === eventId))
 
   const fields: Array<[ContentRuleMatch['matched_on'], string]> = [
     ['author_name', input.author_name || ''],
