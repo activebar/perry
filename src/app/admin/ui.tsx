@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 
+const ACTIVE_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
+
 async function fileToImage(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file)
   try {
@@ -164,6 +166,29 @@ function LinkPreview({
 
   return (
     <div className="mt-2">
+
+<div className="mx-auto w-full max-w-5xl px-4 pt-2" dir="rtl">
+  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-sm shadow-sm">
+    <div className="text-zinc-700">
+      Event ID פעיל: <span className="font-semibold text-zinc-900">{ACTIVE_EVENT_ID}</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        className="rounded-lg border border-zinc-200 bg-white px-3 py-1 text-xs hover:bg-zinc-50"
+        onClick={() => {
+          // switch to moderation tab & refresh
+          setTab('moderation' as any)
+          loadPending()
+        }}
+      >
+        הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : ''}
+      </button>
+      <span className="text-xs text-zinc-500">שינוי אירוע נעשה ב Vercel דרך NEXT_PUBLIC_EVENT_ID</span>
+    </div>
+  </div>
+</div>
+
       <div className="flex justify-center">
         <a
           href={d.url}
@@ -1510,6 +1535,7 @@ async function loadBlocks() {
                     <option value="contains">מכיל</option>
                     <option value="exact">בדיוק</option>
                     <option value="word">מילה שלמה</option>
+                    <option value="word">מילה שלמה</option>
                   </select>
 
                   <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
@@ -1555,7 +1581,7 @@ async function loadBlocks() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="text-right">
                           <p className="text-sm font-medium">
-                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : 'מכיל'}
+                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : r.match_type === 'word' ? 'מילה שלמה' : 'מכיל'}
                           </p>
                           <p className="text-sm" dir="rtl">{r.expression}</p>
                           {r.note ? <p className="text-xs text-zinc-500">{r.note}</p> : null}
