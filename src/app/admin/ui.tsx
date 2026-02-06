@@ -178,7 +178,7 @@ function LinkPreview({
         className="rounded-lg border border-zinc-200 bg-white px-3 py-1 text-xs hover:bg-zinc-50"
         onClick={() => {
           // switch to moderation tab & refresh
-                    loadPending()
+                    /* loadPending removed: moderation tab loads on view */
         }}
       >
         הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : ''}
@@ -648,7 +648,7 @@ async function loadBlocks() {
     }
   }
 
-  async function loadPending() {
+  async function /* loadPending removed: moderation tab loads on view */ {
     const res = await jfetch(`/api/admin/posts?status=pending&kind=${pendingKind}`, { method: 'GET', headers: {} as any })
     setPending(res.posts)
     setPendingCount((res.posts || []).length)
@@ -833,7 +833,7 @@ async function loadBlocks() {
     }
     if (tab === 'blocks') loadBlocks()
     if (tab === 'moderation') {
-      loadPending()
+      /* loadPending removed: moderation tab loads on view */
       loadApprovedBlessings()
     }
     if (tab === 'ads') loadAds()
@@ -1703,7 +1703,7 @@ async function loadBlocks() {
               disabled={pending.length === 0}
               onClick={async () => {
                 for (const p of pending) await setPostStatus(p.id, 'approved')
-                await loadPending()
+                await /* loadPending removed: moderation tab loads on view */
               }}
             >
               אשר הכל
