@@ -35,8 +35,8 @@ function includesWholeWord(haystack: string, needle: string) {
   if (!h || !n) return false
 
   // Word boundary characters: whitespace + common punctuation (works well for Hebrew/mixed text)
-  const boundary = "[\s\u00A0\t\n\r\.,!\?;:\\"'\(\)\[\]{}<>/\\|+=~`@#\$%\^&\*-]"
-  const pat = `(^|${boundary})${escapeRegExp(n)}($|${boundary})`
+  const boundaryClass = "[\s\u00A0\t\n\r\.,!\?;:\\"'\(\)\[\]{}<>/\\|+=~`@#\$%\^&\*-]"
+  const pat = `(^|${boundaryClass})${escapeRegExp(n)}($|${boundaryClass})`
 
   try {
     return new RegExp(pat, 'i').test(h)
