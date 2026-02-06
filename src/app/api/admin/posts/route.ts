@@ -4,19 +4,28 @@ import { supabaseServiceRole } from '@/lib/supabase'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 
-function normalizeStatusFilter(statusRaw: string) {
-  const s = (statusRaw || '').trim().toLowerCase()
-  if (!s) return null
-  if (s === 'pending') return { op: 'in', values: ['pending', 'pending_approval', 'awaiting_approval'] }
-  if (s === 'approved') return { op: 'in', values: ['approved'] }
-  if (s === 'rejected') return { op: 'in', values: ['rejected', 'denied'] }
-  if (s === 'deleted') return { op: 'in', values: ['deleted'] }
-  return null
-}
-
 function getEventIdFromEnv() {
   const v = (process.env.EVENT_ID || process.env.NEXT_PUBLIC_EVENT_ID || '').trim()
   return v || 'IDO'
+}
+
+function applyStatusFilter(q: any, statusRaw: string) {
+  const s = (statusRaw || '').trim().toLowerCase()
+  if (!s) return q
+
+  if (s === 'pending') {
+    return q.or('status.ilike.pending%,status.ilike.awaiting%')
+  }
+  if (s === 'approved') {
+    return q.ilike('status', 'approved')
+  }
+  if (s === 'rejected') {
+    return q.or('status.ilike.rejected%,status.ilike.denied%')
+  }
+  if (s === 'deleted') {
+    return q.ilike('status', 'deleted')
+  }
+  return q
 }
 
 export async function GET(req: NextRequest) {
@@ -29,7 +38,7 @@ export async function GET(req: NextRequest) {
   const event_id = getEventIdFromEnv()
   const srv = supabaseServiceRole()
 
-  let q = srv
+  let q: any = srv
     .from('posts')
     .select('*')
     .eq('event_id', event_id)
@@ -37,9 +46,7 @@ export async function GET(req: NextRequest) {
     .limit(500)
 
   if (kind && ALLOWED_KINDS.has(kind)) q = q.eq('kind', kind)
-
-  const st = normalizeStatusFilter(statusRaw)
-  if (st?.op === 'in') q = q.in('status', st.values)
+  q = applyStatusFilter(q, statusRaw)
 
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -57,7 +64,9 @@ export async function PUT(req: NextRequest) {
 
     const patch: any = {}
 
-    if (typeof body.status === 'string' && body.status.trim()) patch.status = body.status.trim()
+    if (typeof body.status === 'string' && body.status.trim()) {
+      patch.status = body.status.trim().toLowerCase()
+    }
 
     const editableFields = ['author_name', 'text', 'link_url', 'media_url', 'media_path', 'video_url']
     for (const k of editableFields) {
