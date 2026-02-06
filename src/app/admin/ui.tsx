@@ -167,27 +167,6 @@ function LinkPreview({
   return (
     <div className="mt-2">
 
-<div className="mx-auto w-full max-w-5xl px-4 pt-2" dir="rtl">
-  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-sm shadow-sm">
-    <div className="text-zinc-700">
-      Event ID פעיל: <span className="font-semibold text-zinc-900">{ACTIVE_EVENT_ID}</span>
-    </div>
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        className="rounded-lg border border-zinc-200 bg-white px-3 py-1 text-xs hover:bg-zinc-50"
-        onClick={() => {
-          // switch to moderation tab & refresh
-          setTab('moderation' as any)
-          loadPending()
-        }}
-      >
-        הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : ''}
-      </button>
-      <span className="text-xs text-zinc-500">שינוי אירוע נעשה ב Vercel דרך NEXT_PUBLIC_EVENT_ID</span>
-    </div>
-  </div>
-</div>
 
       <div className="flex justify-center">
         <a
@@ -907,7 +886,9 @@ async function loadBlocks() {
             <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
 
-            {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
+            
+            <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || 'IDO'}</span></p>
+{(pendingBlessingsCount + pendingPhotosCount) > 0 && (
               <div className="mt-1 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {pendingPhotosCount}</span>
@@ -918,6 +899,15 @@ async function loadBlocks() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setTab('moderation' as any)
+                loadPending()
+              }}
+            >
+              הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : '' }
+            </Button>
             {tabs.map(t => (
               <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
                 {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
