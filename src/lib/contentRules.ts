@@ -34,14 +34,23 @@ function includesWholeWord(haystack: string, needle: string) {
   const n = norm(needle)
   if (!h || !n) return false
 
-  // Word boundary characters: whitespace + common punctuation (works well for Hebrew/mixed text)
-  const boundaryClass = "[\s\u00A0\t\n\r\.,!\?;:\\"'\(\)\[\]{}<>/\\|+=~`@#\$%\^&\*-]"
-  const pat = `(^|${boundaryClass})${escapeRegExp(n)}($|${boundaryClass})`
+  // Boundary characters: whitespace + common punctuation (regex literal avoids string escaping issues)
+  const boundaryRe = /[\s\u00A0\t\n\r\.,!\?;:\"'\(\)\[\]{}<>\/\\|+=~`@#\$%\^&\*-]/
 
-  try {
-    return new RegExp(pat, 'i').test(h)
-  } catch {
-    return h.split(/\s+/).includes(n)
+  let idx = 0
+  while (true) {
+    const at = h.indexOf(n, idx)
+    if (at === -1) return false
+
+    const before = at === 0 ? '' : h[at - 1]
+    const afterPos = at + n.length
+    const after = afterPos >= h.length ? '' : h[afterPos]
+
+    const beforeOk = !before || boundaryRe.test(before)
+    const afterOk = !after || boundaryRe.test(after)
+
+    if (beforeOk && afterOk) return true
+    idx = at + 1
   }
 }
 
