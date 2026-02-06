@@ -2,15 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 
+function getEventIdFromEnv() {
+  const v = (process.env.EVENT_ID || process.env.NEXT_PUBLIC_EVENT_ID || '').trim()
+  return v || 'IDO'
+}
+
 function pickRule(body: any) {
   const rule_type = (body?.rule_type === 'allow' ? 'allow' : 'block') as 'allow' | 'block'
   const scope = (body?.scope === 'global' ? 'global' : 'event') as 'global' | 'event'
-  const match_type = (body?.match_type === 'exact' ? 'exact' : body?.match_type === 'word' ? 'word' : 'contains') as 'exact' | 'contains' | 'word'
+  const match_type = (body?.match_type === 'exact' ? 'exact' : body?.match_type === 'word' ? 'word' : 'contains') as
+    | 'exact'
+    | 'contains'
+    | 'word'
   const expression = String(body?.expression || '').trim()
   const note = body?.note ? String(body.note) : null
   const is_active = body?.is_active === false ? false : true
 
-  return { rule_type, scope, match_type, expression, note, is_active }
+  // IMPORTANT: for scope=event we must persist event_id, otherwise rules won't match anything.
+  const event_id = scope === 'event' ? getEventIdFromEnv() : null
+
+  return { rule_type, scope, event_id, match_type, expression, note, is_active }
 }
 
 export async function GET(req: NextRequest) {
