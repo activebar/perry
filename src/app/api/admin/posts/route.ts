@@ -3,11 +3,19 @@ import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
-const ALLOWED_STATUS = new Set(['pending', 'approved', 'deleted'])
+
+function normalizeStatusFilter(statusRaw: string) {
+  const s = (statusRaw || '').trim().toLowerCase()
+  if (!s) return null
+  if (s === 'pending') return { op: 'in', values: ['pending', 'pending_approval', 'awaiting_approval'] }
+  if (s === 'approved') return { op: 'in', values: ['approved'] }
+  if (s === 'rejected') return { op: 'in', values: ['rejected', 'denied'] }
+  if (s === 'deleted') return { op: 'in', values: ['deleted'] }
+  return null
+}
 
 function getEventIdFromEnv() {
-  const v =
-    (process.env.EVENT_ID || process.env.NEXT_PUBLIC_EVENT_ID || '').trim()
+  const v = (process.env.EVENT_ID || process.env.NEXT_PUBLIC_EVENT_ID || '').trim()
   return v || 'IDO'
 }
 
@@ -16,7 +24,7 @@ export async function GET(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const kind = (req.nextUrl.searchParams.get('kind') || '').trim()
-  const status = (req.nextUrl.searchParams.get('status') || '').trim()
+  const statusRaw = (req.nextUrl.searchParams.get('status') || '').trim()
 
   const event_id = getEventIdFromEnv()
   const srv = supabaseServiceRole()
@@ -29,7 +37,9 @@ export async function GET(req: NextRequest) {
     .limit(500)
 
   if (kind && ALLOWED_KINDS.has(kind)) q = q.eq('kind', kind)
-  if (status && ALLOWED_STATUS.has(status)) q = q.eq('status', status)
+
+  const st = normalizeStatusFilter(statusRaw)
+  if (st?.op === 'in') q = q.in('status', st.values)
 
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -46,7 +56,8 @@ export async function PUT(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
 
     const patch: any = {}
-    if (typeof body.status === 'string' && ALLOWED_STATUS.has(body.status)) patch.status = body.status
+
+    if (typeof body.status === 'string' && body.status.trim()) patch.status = body.status.trim()
 
     const editableFields = ['author_name', 'text', 'link_url', 'media_url', 'media_path', 'video_url']
     for (const k of editableFields) {
