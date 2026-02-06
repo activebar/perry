@@ -1,3 +1,9 @@
+
+function getEventIdFromEnv() {
+  const v = (process.env.EVENT_ID || process.env.NEXT_PUBLIC_EVENT_ID || '').trim()
+  return v || 'IDO'
+}
+
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
@@ -127,6 +133,7 @@ const isAfterLockWindow = lockAt ? now >= lockAt : false
         : ((requireApprovalEffective || forcePendingByLines || forcePendingByRule || forcePendingByModeration) ? 'pending' : 'approved')
 
     const insert = {
+      event_id: getEventIdFromEnv(),
       kind,
       author_name: body.author_name || null,
       text: body.text || null,

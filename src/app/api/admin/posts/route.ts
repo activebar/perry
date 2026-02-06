@@ -6,14 +6,9 @@ const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 const ALLOWED_STATUS = new Set(['pending', 'approved', 'deleted'])
 
 function getEventIdFromEnv() {
-  // Works in both server and edge-like runtimes, no dependency on other helpers
-  return (
-    process.env.NEXT_PUBLIC_EVENT_ID ||
-    process.env.EVENT_ID ||
-    process.env.NEXT_PUBLIC_EVENT_SLUG ||
-    process.env.EVENT_SLUG ||
-    'default'
-  )
+  const v =
+    (process.env.EVENT_ID || process.env.NEXT_PUBLIC_EVENT_ID || '').trim()
+  return v || 'IDO'
 }
 
 export async function GET(req: NextRequest) {
@@ -23,14 +18,13 @@ export async function GET(req: NextRequest) {
   const kind = (req.nextUrl.searchParams.get('kind') || '').trim()
   const status = (req.nextUrl.searchParams.get('status') || '').trim()
 
+  const event_id = getEventIdFromEnv()
   const srv = supabaseServiceRole()
-  const eventId = getEventIdFromEnv()
 
-  // Important: in supabase-js typings, filters like eq are available after select
   let q = srv
     .from('posts')
     .select('*')
-    .eq('event_id', eventId)
+    .eq('event_id', event_id)
     .order('created_at', { ascending: false })
     .limit(500)
 
@@ -51,7 +45,6 @@ export async function PUT(req: NextRequest) {
     const id = String(body.id || '')
     if (!id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
 
-    // allow: status update + editing fields for content moderation
     const patch: any = {}
     if (typeof body.status === 'string' && ALLOWED_STATUS.has(body.status)) patch.status = body.status
 
@@ -64,14 +57,14 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
     }
 
+    const event_id = getEventIdFromEnv()
     const srv = supabaseServiceRole()
-    const eventId = getEventIdFromEnv()
 
     const { data, error } = await srv
       .from('posts')
       .update(patch)
       .eq('id', id)
-      .eq('event_id', eventId)
+      .eq('event_id', event_id)
       .select('*')
       .single()
 
