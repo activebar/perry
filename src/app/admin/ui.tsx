@@ -648,7 +648,7 @@ async function loadBlocks() {
     }
   }
 
-  async function /* loadPending removed: moderation tab loads on view */ {
+  async function loadPending() {
     const res = await jfetch(`/api/admin/posts?status=pending&kind=${pendingKind}`, { method: 'GET', headers: {} as any })
     setPending(res.posts)
     setPendingCount((res.posts || []).length)
