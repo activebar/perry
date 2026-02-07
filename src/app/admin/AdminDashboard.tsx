@@ -67,7 +67,6 @@ export default function AdminDashboard({ tab }: { tab: AdminMainTab }) {
         ))}
       </div>
 
-      {
       {/* דף המנהל המלא (הקיים) עם אתחול לפי הטאב העליון */}
       <div className="mt-4">
         <AdminApp
