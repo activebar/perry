@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 
-const ACTIVE_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
-
 async function fileToImage(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file)
   try {
@@ -166,28 +164,6 @@ function LinkPreview({
 
   return (
     <div className="mt-2">
-
-<div className="mx-auto w-full max-w-5xl px-4 pt-2" dir="rtl">
-  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-sm shadow-sm">
-    <div className="text-zinc-700">
-      Event ID פעיל: <span className="font-semibold text-zinc-900">{ACTIVE_EVENT_ID}</span>
-    </div>
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        className="rounded-lg border border-zinc-200 bg-white px-3 py-1 text-xs hover:bg-zinc-50"
-        onClick={() => {
-          // switch to moderation tab & refresh
-                    /* loadPending removed: moderation tab loads on view */
-        }}
-      >
-        הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : ''}
-      </button>
-      <span className="text-xs text-zinc-500">שינוי אירוע נעשה ב Vercel דרך NEXT_PUBLIC_EVENT_ID</span>
-    </div>
-  </div>
-</div>
-
       <div className="flex justify-center">
         <a
           href={d.url}
@@ -261,10 +237,9 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string }
-type Tab = 'login' | 'settings' | 'content' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag'
 
 const TAB_LABEL: Record<string, string> = {
-  content: 'ניהול תוכן',
   settings: 'הגדרות',
   blocks: 'בלוקים',
   moderation: 'אישור תכנים',
@@ -380,12 +355,6 @@ export default function AdminApp() {
   // blocks
   const [blocks, setBlocks] = useState<any[]>([])
 
-  // content rules (allow/block)
-  const [contentRules, setContentRules] = useState<any[]>([])
-  const [rulesMsg, setRulesMsg] = useState<string | null>(null)
-  const [newRule, setNewRule] = useState<any>({ rule_type: 'block', scope: 'event', match_type: 'contains', expression: '', note: '', is_active: true })
-  const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
-
   // moderation
   const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>('blessing')
   const [pending, setPending] = useState<any[]>([])
@@ -461,7 +430,7 @@ export default function AdminApp() {
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    return ['settings', 'content', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag'] as Tab[]
+    return ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag'] as Tab[]
   }, [admin])
 
   async function login() {
@@ -492,75 +461,6 @@ export default function AdminApp() {
     const s = await jfetch('/api/admin/settings', { method: 'GET', headers: {} as any })
     setSettings(s.settings)
     setStartAtLocal(isoToLocalInput(s.settings?.start_at))
-  }
-
-  async function loadContentRules() {
-    const r = await jfetch('/api/admin/content-rules', { method: 'GET', headers: {} as any })
-    setContentRules(Array.isArray(r.rules) ? r.rules : [])
-  }
-
-  async function loadPending() {
-    const res = await jfetch(`/api/admin/posts?status=pending&kind=${pendingKind}`, { method: 'GET', headers: {} as any })
-    const arr = Array.isArray(res.posts) ? res.posts : []
-    setPending(arr)
-    setPendingCount(arr.length)
-  }
-
-  async function createContentRule() {
-    setRulesMsg(null)
-    try {
-      const payload = { ...newRule, expression: String(newRule.expression || '').trim() }
-      if (!payload.expression) {
-        setRulesMsg('הוסף מילה/ביטוי')
-        return
-      }
-
-      if (editingRuleId != null) {
-        const res = await jfetch('/api/admin/content-rules', {
-          method: 'PUT',
-          body: JSON.stringify({ id: editingRuleId, ...payload })
-        })
-        setContentRules(prev => prev.map(r => (r.id === res.rule.id ? res.rule : r)))
-        setEditingRuleId(null)
-        setNewRule({ rule_type: 'block', scope: 'event', match_type: 'contains', expression: '', note: '', is_active: true })
-        setRulesMsg('✅ עודכן')
-        setTimeout(() => setRulesMsg(null), 2000)
-        return
-      }
-
-      const res = await jfetch('/api/admin/content-rules', { method: 'POST', body: JSON.stringify(payload) })
-      setContentRules(prev => [res.rule, ...prev])
-      setNewRule({ ...newRule, expression: '', note: '' })
-      setRulesMsg('✅ נוסף')
-      setTimeout(() => setRulesMsg(null), 2000)
-    } catch (e: any) {
-      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
-    }
-  }
-
-  async function updateContentRule(patch: any) {
-    setRulesMsg(null)
-    try {
-      const res = await jfetch('/api/admin/content-rules', { method: 'PUT', body: JSON.stringify(patch) })
-      setContentRules(prev => prev.map(r => (r.id === res.rule.id ? res.rule : r)))
-      setRulesMsg('✅ עודכן')
-      setTimeout(() => setRulesMsg(null), 1500)
-    } catch (e: any) {
-      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
-    }
-  }
-
-  async function deleteContentRule(id: number) {
-    if (!confirm('למחוק את החוק?')) return
-    setRulesMsg(null)
-    try {
-      await jfetch(`/api/admin/content-rules?id=${id}`, { method: 'DELETE', headers: {} as any })
-      setContentRules(prev => prev.filter(r => r.id !== id))
-      setRulesMsg('✅ נמחק')
-      setTimeout(() => setRulesMsg(null), 1500)
-    } catch (e: any) {
-      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
-    }
   }
 
   async function saveSettings(patch?: any) {
@@ -671,7 +571,7 @@ async function loadBlocks() {
     }
   }
 
-  async function loadPendingDup() {
+  async function loadPending() {
     const res = await jfetch(`/api/admin/posts?status=pending&kind=${pendingKind}`, { method: 'GET', headers: {} as any })
     setPending(res.posts)
     setPendingCount((res.posts || []).length)
@@ -850,12 +750,7 @@ async function loadBlocks() {
 
   useEffect(() => {
     if (!admin) return
-    if (tab === 'settings') {
-      loadSettings()
-    }
-    if (tab === 'content') {
-      loadContentRules()
-    }
+    if (tab === 'settings') loadSettings()
     if (tab === 'blocks') loadBlocks()
     if (tab === 'moderation') {
       loadPending()
@@ -956,18 +851,6 @@ async function loadBlocks() {
       {tab === 'settings' && settings && (
         <Card>
           <h3 className="font-semibold">הגדרות</h3>
-
-          <div className="mt-2 grid gap-2" dir="rtl">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-right text-xs text-zinc-600">
-                {savedMsg ? <span className="text-green-700">{savedMsg}</span> : null}
-                {!savedMsg && err ? <span className="text-red-600">{err}</span> : null}
-              </div>
-              <Button onClick={() => saveSettings()} disabled={saving}>
-                {saving ? 'שומר...' : 'שמור'}
-              </Button>
-            </div>
-          </div>
 
           <div className="mt-3 grid gap-3">
             {/* כללי */}
@@ -1176,79 +1059,6 @@ async function loadBlocks() {
                 onChange={e => setSettings({ ...settings, blessings_media_size: Number(e.target.value) })}
                 placeholder="למשל 96"
               />
-
-              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                <input
-                  type="checkbox"
-                  checked={Boolean((settings as any).require_approval)}
-                  onChange={e => setSettings({ ...(settings as any), require_approval: e.target.checked })}
-                />
-                כל ברכה דורשת אישור מנהל גם לפני האירוע (require_approval)
-              </label>
-
-              {(() => {
-                try {
-                  const lockDaysRaw = Number((settings as any).approval_lock_after_days)
-                  const lockDays = Number.isFinite(lockDaysRaw) ? lockDaysRaw : 7
-                  const startAtIso = (settings as any).start_at as string | undefined
-                  const openedAtIso = (settings as any).approval_opened_at as string | undefined
-                  const startAt = startAtIso ? new Date(startAtIso) : null
-                  const openedAt = openedAtIso ? new Date(openedAtIso) : null
-                  const now = new Date()
-
-                  const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
-                  const addDaysUtc = (d: Date, days: number) => new Date(d.getTime() + days * 24 * 60 * 60 * 1000)
-
-                  const anchorAt = (startAt && openedAt && openedAt < startAt) ? startAt : (openedAt || startAt)
-                  const lockAt =
-                    anchorAt && Number.isFinite(lockDays) && lockDays >= 0
-                      ? addDaysUtc(startOfUtcDay(anchorAt), lockDays + 1)
-                      : null
-
-                  const isAfterLockWindow = lockAt ? now >= lockAt : false
-                  const effectiveApproval = Boolean((settings as any).require_approval) || isAfterLockWindow
-
-                  return (
-                    <div className="mt-1 grid gap-1" dir="rtl">
-                      <label className="text-xs flex items-center gap-2 flex-row-reverse justify-end text-right text-zinc-600">
-                        <input type="checkbox" checked={effectiveApproval} readOnly />
-                        מצב אישור בפועל כרגע
-                      </label>
-                      {lockAt && (
-                        <p className="text-xs text-zinc-500 text-right">
-                          נעילה אוטומטית לפי approval_lock_after_days ב {lockAt.toLocaleString('he-IL')}
-                        </p>
-                      )}
-                    </div>
-                  )
-                } catch {
-                  return null
-                }
-              })()}
-
-              <p className="text-xs text-zinc-500 text-right">
-                כשמכבים את האפשרות הזו, הברכות מתפרסמות אוטומטית עד שיחלפו הימים שמוגדרים בשדה למטה.
-                ספירת הימים מתחילה מיום האירוע. אם פותחים שוב, הספירה מתחילה מרגע הפתיחה.
-              </p>
-
-              <label className="text-xs text-zinc-500 text-right">אישור מנהל אוטומטי אחרי כמה ימים מיום האירוע (approval_lock_after_days)</label>
-              <Input
-                className="text-right"
-                dir="rtl"
-                value={String((settings as any).approval_lock_after_days ?? 7)}
-                onChange={e => setSettings({ ...(settings as any), approval_lock_after_days: Number(e.target.value) })}
-                placeholder="למשל 2 לבר מצווה, 7 לחתונה"
-              />
-
-              <label className="text-xs text-zinc-500 text-right">מקסימום שורות לברכה לפני שליחה לאישור מנהל (max_blessing_lines)</label>
-              <Input
-                className="text-right"
-                dir="rtl"
-                value={String((settings as any).max_blessing_lines ?? 50)}
-                onChange={e => setSettings({ ...(settings as any), max_blessing_lines: Number(e.target.value) })}
-                placeholder="למשל 50"
-              />
-
 
               <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
                 <input
@@ -1533,100 +1343,6 @@ async function loadBlocks() {
               ) : null}
             </div>
 
-            {/* ניהול תוכן (חסימות/חריגים) */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
-              <p className="text-sm font-medium text-right">ניהול תוכן – חסימות וחריגים</p>
-              <p className="text-xs text-zinc-500 text-right">
-                החוקים חלים על טקסט הברכה, שם הכותב, קישור ומדיה. חסימה תמיד תשלח לאישור מנהל. חריג יכול למנוע חסימת־שווא במודרציה.
-              </p>
-
-              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <select
-                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                    value={newRule.rule_type}
-                    onChange={e => setNewRule({ ...newRule, rule_type: e.target.value })}
-                  >
-                    <option value="block">חסימה</option>
-                    <option value="allow">חריג</option>
-                  </select>
-
-                  <select
-                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                    value={newRule.match_type}
-                    onChange={e => setNewRule({ ...newRule, match_type: e.target.value })}
-                  >
-                    <option value="contains">מכיל</option>
-                    <option value="exact">בדיוק</option><option value="word">מילה שלמה</option>
-                  </select>
-
-                  <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                    <input
-                      type="checkbox"
-                      checked={newRule.is_active !== false}
-                      onChange={e => setNewRule({ ...newRule, is_active: e.target.checked })}
-                    />
-                    פעיל
-                  </label>
-                </div>
-
-                <Input
-                  className="text-right"
-                  dir="rtl"
-                  value={String(newRule.expression ?? '')}
-                  onChange={e => setNewRule({ ...newRule, expression: e.target.value })}
-                  placeholder="מילה/ביטוי (למשל: למות עליך)"
-                />
-
-                <Input
-                  className="text-right"
-                  dir="rtl"
-                  value={String(newRule.note ?? '')}
-                  onChange={e => setNewRule({ ...newRule, note: e.target.value })}
-                  placeholder="הערה (אופציונלי)"
-                />
-
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-right text-xs text-zinc-600">{rulesMsg ? rulesMsg : null}</div>
-                  <Button onClick={createContentRule}>
-                    הוסף
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-2">
-                {contentRules.length === 0 ? (
-                  <p className="text-xs text-zinc-500 text-right">אין חוקים עדיין.</p>
-                ) : (
-                  contentRules.map(r => (
-                    <div key={r.id} className="rounded-xl border border-zinc-200 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="text-right">
-                          <p className="text-sm font-medium">
-                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : r.match_type === 'word' ? 'מילה שלמה' : 'מכיל'}
-                          </p>
-                          <p className="text-sm" dir="rtl">{r.expression}</p>
-                          {r.note ? <p className="text-xs text-zinc-500">{r.note}</p> : null}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                            <input
-                              type="checkbox"
-                              checked={r.is_active !== false}
-                              onChange={e => updateContentRule({ ...r, is_active: e.target.checked })}
-                            />
-                            פעיל
-                          </label>
-                          <Button variant="ghost" onClick={() => deleteContentRule(Number(r.id))}>מחק</Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
             {/* פוטר */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">פוטר</p>
@@ -1660,135 +1376,6 @@ async function loadBlocks() {
 
             {savedMsg && <p className="text-sm text-green-700">{savedMsg}</p>}
             {err && <p className="text-sm text-red-600">{err}</p>}
-          </div>
-        </Card>
-      )}
-
-
-      {/* ===== CONTENT RULES ===== */}
-      {tab === 'content' && (
-        <Card dir="rtl">
-          <h3 className="font-semibold">ניהול תוכן – חסימות וחריגים</h3>
-          <p className="mt-1 text-xs text-zinc-500 text-right">
-            החוקים חלים על טקסט הברכה, שם הכותב, קישור ומדיה. חסימה תמיד תשלח לאישור מנהל. חריג יכול למנוע חסימת־שווא.
-          </p>
-
-          <div className="mt-3 grid gap-3">
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <select
-                  className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                  value={newRule.rule_type}
-                  onChange={e => setNewRule({ ...newRule, rule_type: e.target.value })}
-                >
-                  <option value="block">חסימה</option>
-                  <option value="allow">חריג</option>
-                </select>
-
-                <select
-                  className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                  value={newRule.match_type}
-                  onChange={e => setNewRule({ ...newRule, match_type: e.target.value })}
-                >
-                  <option value="contains">מכיל</option>
-                  <option value="exact">בדיוק</option>
-                  <option value="word">מילה שלמה</option>
-                </select>
-
-                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                  <input
-                    type="checkbox"
-                    checked={newRule.is_active !== false}
-                    onChange={e => setNewRule({ ...newRule, is_active: e.target.checked })}
-                  />
-                  פעיל
-                </label>
-              </div>
-
-              <Input
-                className="text-right"
-                dir="rtl"
-                value={String(newRule.expression ?? '')}
-                onChange={e => setNewRule({ ...newRule, expression: e.target.value })}
-                placeholder="מילה/ביטוי (למשל: למות עליך)"
-              />
-
-              <Input
-                className="text-right"
-                dir="rtl"
-                value={String(newRule.note ?? '')}
-                onChange={e => setNewRule({ ...newRule, note: e.target.value })}
-                placeholder="הערה (אופציונלי)"
-              />
-
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-right text-xs text-zinc-600">{rulesMsg ? rulesMsg : null}</div>
-                <div className="flex gap-2">
-                  {editingRuleId != null ? (
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setEditingRuleId(null)
-                        setNewRule({ rule_type: 'block', scope: 'event', match_type: 'contains', expression: '', note: '', is_active: true })
-                      }}
-                    >
-                      בטל
-                    </Button>
-                  ) : null}
-                  <Button onClick={createContentRule}>
-                    {editingRuleId != null ? 'שמור' : 'הוסף'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              {contentRules.length === 0 ? (
-                <p className="text-xs text-zinc-500 text-right">אין חוקים עדיין.</p>
-              ) : (
-                contentRules.map(r => (
-                  <div key={r.id} className="rounded-xl border border-zinc-200 p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-right">
-                        <p className="text-sm font-medium">
-                          {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : r.match_type === 'word' ? 'מילה שלמה' : 'מכיל'}
-                        </p>
-                        <p className="text-sm" dir="rtl">{r.expression}</p>
-                        {r.note ? <p className="text-xs text-zinc-500">{r.note}</p> : null}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                          <input
-                            type="checkbox"
-                            checked={r.is_active !== false}
-                            onChange={e => updateContentRule({ ...r, is_active: e.target.checked })}
-                          />
-                          פעיל
-                        </label>
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingRuleId(Number(r.id))
-                            setNewRule({
-                              rule_type: r.rule_type,
-                              scope: r.scope,
-                              match_type: r.match_type,
-                              expression: r.expression,
-                              note: r.note ?? '',
-                              is_active: r.is_active !== false
-                            })
-                          }}
-                        >
-                          ערוך
-                        </Button>
-                        <Button variant="ghost" onClick={() => deleteContentRule(Number(r.id))}>מחק</Button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
         </Card>
       )}
