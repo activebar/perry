@@ -20,6 +20,7 @@ export type EventAccessRow = {
   email: string | null
   is_active: boolean
   session_version: number
+  permissions?: Record<string, boolean> | null
 }
 
 function secret() {
@@ -72,7 +73,7 @@ export async function getEventAccessFromRequest(req: NextRequest) {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
     .from('event_access')
-    .select('id,event_id,name,role,phone,email,is_active,session_version')
+    .select('id,event_id,name,role,phone,email,is_active,session_version,permissions')
     .eq('id', payload.access_id)
     .eq('event_id', payload.event_id)
     .maybeSingle()
@@ -85,6 +86,7 @@ export async function getEventAccessFromRequest(req: NextRequest) {
     name: data.name,
     role: data.role,
     phone: data.phone,
-    email: data.email
+    email: data.email,
+    permissions: (data as any).permissions || {}
   }
 }

@@ -272,6 +272,7 @@ function friendlyError(msg: string) {
   if (m.includes('inactive')) return 'החשבון לא פעיל.'
   if (m.includes('service role')) return 'חסר מפתח Service Role בקובץ ENV (SUPABASE_SERVICE_ROLE_KEY).'
   if (m.includes('unauthorized')) return 'אין הרשאה (401). נסה להתנתק/למחוק עוגיות ולהתחבר שוב.'
+  if (m.includes('forbidden')) return 'אין לך הרשאה לבצע פעולה זו.'
   return msg || 'שגיאה'
 }
 

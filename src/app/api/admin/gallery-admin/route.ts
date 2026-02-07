@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { NextRequest } from 'next/server'
 import { supabaseServiceRole } from '@/lib/supabase'
-import { getAdminFromRequest, requireMaster } from '@/lib/adminSession'
+import { getAdminFromRequest, requirePermission, requireMaster } from '@/lib/adminSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,9 +10,8 @@ export async function DELETE(req: NextRequest) {
     const admin = await getAdminFromRequest(req)
     if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    // אם אתה רוצה שרק master ימחק – תשאיר.
-    // אם גם client יכול למחוק, תמחק את השורה הבאה:
-    requireMaster(admin)
+    // Permission: master always ok, event-access depends on galleries.delete
+    if (admin.role !== 'master') requirePermission(admin, 'galleries.delete')
 
     const { id } = await req.json()
     if (!id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
@@ -20,7 +19,9 @@ export async function DELETE(req: NextRequest) {
     const srv = supabaseServiceRole()
 
     // מוחק את הרשומה (הקובץ ב-storage לא נמחק כאן — אפשר להוסיף בהמשך)
-    const { data, error } = await srv.from('posts').delete().eq('id', id).select('id').single()
+    let q = srv.from('posts').delete().eq('id', id)
+    if (admin.event_id) q = q.eq('event_id', admin.event_id)
+    const { data, error } = await q.select('id').single()
     if (error) throw error
 
     return NextResponse.json({ ok: true, id: data.id })

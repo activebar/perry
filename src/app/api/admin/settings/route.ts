@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest } from '@/lib/adminSession'
+import { getAdminFromRequest, requirePermission } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 
 /**
@@ -47,6 +47,11 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  // event-access (code login) can update only with explicit permission
+  if (admin.role !== 'master') {
+    requirePermission(admin, 'event.edit')
+  }
 
   try {
     const patch = await req.json()

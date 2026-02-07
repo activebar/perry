@@ -21,13 +21,27 @@ type AccessRow = {
   session_version: number
   last_sent_at: string | null
   created_at: string
+  permissions: Record<string, boolean>
+}
+
+function defaultPermissionsForRole(role: string): Record<string, boolean> {
+  const r = (role || 'client').toLowerCase()
+  if (r === 'photographer') return { 'galleries.read': true, 'galleries.write': true }
+  if (r === 'partner') return {
+    'blessings.read': true,
+    'blessings.write': true,
+    'blessings.moderate': true,
+    'galleries.read': true,
+    'galleries.write': true
+  }
+  return { 'blessings.read': true, 'blessings.write': true }
 }
 
 async function list(event_id: string) {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
     .from('event_access')
-    .select('id,event_id,name,role,phone,email,is_active,session_version,last_sent_at,created_at')
+    .select('id,event_id,name,role,phone,email,is_active,session_version,last_sent_at,created_at,permissions')
     .eq('event_id', event_id)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -72,9 +86,11 @@ export async function POST(req: NextRequest) {
     const code_hash = hashCode(code)
 
     const srv = supabaseServiceRole()
+    const permissions = (body.permissions && typeof body.permissions === 'object') ? body.permissions : defaultPermissionsForRole(role)
+
     const { data, error } = await srv
       .from('event_access')
-      .insert({ event_id, name, role, phone, email, code_hash, is_active: true })
+      .insert({ event_id, name, role, phone, email, code_hash, is_active: true, permissions })
       .select('id')
       .single()
     if (error) return jsonError(error.message, 500)
@@ -121,6 +137,14 @@ export async function PATCH(req: NextRequest) {
       const is_active = !!body.is_active
       const { error } = await srv.from('event_access').update({ is_active }).eq('id', id).eq('event_id', event_id)
       if (error) return jsonError(error.message, 500)
+    }
+
+    if (body.action === 'set_permissions') {
+      const permissions = (body.permissions && typeof body.permissions === 'object') ? body.permissions : {}
+      const { error } = await srv.from('event_access').update({ permissions }).eq('id', id).eq('event_id', event_id)
+      if (error) return jsonError(error.message, 500)
+      const rows = await list(event_id)
+      return NextResponse.json({ ok: true, rows })
     }
 
     if (body.action === 'rotate_code') {

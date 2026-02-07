@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest } from '@/lib/adminSession'
+import { getAdminFromRequest, requirePermission } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
@@ -10,10 +10,22 @@ export async function GET(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const kind = (req.nextUrl.searchParams.get('kind') || '').trim()
+  // permission gate
+  if (admin.role !== 'master') {
+    if (kind === 'gallery' || kind === 'gallery_admin') {
+      requirePermission(admin, 'galleries.read')
+    } else {
+      // default blessing
+      requirePermission(admin, 'blessings.read')
+    }
+  }
   const status = (req.nextUrl.searchParams.get('status') || '').trim()
 
   const srv = supabaseServiceRole()
   let q = srv.from('posts').select('*').order('created_at', { ascending: false }).limit(500)
+
+  // Scope event-access (code login) to its event
+  if (admin.event_id) q = q.eq('event_id', admin.event_id)
 
   if (kind && ALLOWED_KINDS.has(kind)) q = q.eq('kind', kind)
   if (status && ALLOWED_STATUS.has(status)) q = q.eq('status', status)
@@ -37,6 +49,21 @@ export async function PUT(req: NextRequest) {
     if (typeof body.status === 'string' && ALLOWED_STATUS.has(body.status)) patch.status = body.status
 
     const editableFields = ['author_name', 'text', 'link_url', 'media_url', 'media_path', 'video_url']
+    const willEditFields = editableFields.some(k => k in body)
+    // permission gate (client access)
+    if (admin.role !== 'master') {
+      const kind = String(body.kind || '')
+      const wantStatus = typeof body.status === 'string' ? body.status : ''
+      const isGallery = kind === 'gallery' || kind === 'gallery_admin'
+      if (isGallery) {
+        if (wantStatus === 'deleted') requirePermission(admin, 'galleries.delete')
+        else requirePermission(admin, 'galleries.write')
+      } else {
+        if (wantStatus === 'deleted') requirePermission(admin, 'blessings.delete')
+        else if (wantStatus && wantStatus !== 'approved') requirePermission(admin, 'blessings.moderate')
+        else if (willEditFields) requirePermission(admin, 'blessings.moderate')
+      }
+    }
     for (const k of editableFields) {
       if (k in body) patch[k] = body[k] || null
     }
@@ -46,7 +73,11 @@ export async function PUT(req: NextRequest) {
     }
 
     const srv = supabaseServiceRole()
-    const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
+    let uq = srv.from('posts').update(patch).eq('id', id)
+    // Scope event-access (code login) to its event
+    if (admin.event_id) uq = uq.eq('event_id', admin.event_id)
+
+    const { data, error } = await uq.select('*').single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true, post: data })
   } catch (e: any) {

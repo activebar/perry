@@ -14,6 +14,7 @@ type Access = {
   session_version: number
   last_sent_at: string | null
   created_at: string
+  permissions?: PermissionMap
 }
 
 type PermissionMap = Record<string, boolean>
@@ -29,6 +30,7 @@ type Row = {
 
 const PERMS: Array<{ key: string; label: string; group: string }> = [
   { key: 'blessings.read', label: 'צפייה', group: 'ברכות' },
+  { key: 'blessings.write', label: 'הוספה', group: 'ברכות' },
   { key: 'blessings.moderate', label: 'אישור/סינון', group: 'ברכות' },
   { key: 'blessings.delete', label: 'מחיקה', group: 'ברכות' },
 
@@ -155,6 +157,49 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
     setAccessRows(j.rows || [])
     if (send === 'none' && j.code) setCreateMsg(`✅ קוד חדש: ${j.code}`)
     else setCreateMsg('✅ נוצר קוד חדש ונשלח מייל (אם פעיל).')
+  }
+
+  function setAccessPerm(accessId: string, key: string, value: boolean) {
+    setAccessRows(prev =>
+      prev.map(r => {
+        if (r.id !== accessId) return r
+        const next = { ...(r.permissions || {}) }
+        next[key] = value
+        return { ...r, permissions: next }
+      })
+    )
+  }
+
+  async function saveAccessPerms(row: Access) {
+    setAccessErr(null)
+    const res = await fetch('/api/admin/event-access', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'set_permissions',
+        id: row.id,
+        event_id: row.event_id,
+        permissions: row.permissions || {}
+      })
+    })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !j?.ok) {
+      setAccessErr(j?.error || 'שגיאה בשמירת הרשאות')
+      return
+    }
+    setAccessRows(j.rows || prev => prev)
+  }
+
+  function defaultAccessPermsForRole(role: string): PermissionMap {
+    const r = (role || 'client').toLowerCase()
+    if (r === 'photographer') return { 'galleries.read': true, 'galleries.write': true }
+    if (r === 'partner') return { 'blessings.read': true, 'blessings.write': true, 'blessings.moderate': true, 'galleries.read': true, 'galleries.write': true }
+    // client (default)
+    return { 'blessings.read': true, 'blessings.write': true }
+  }
+
+  function applyRoleDefaults(row: Access) {
+    setAccessRows(prev => prev.map(r => (r.id === row.id ? { ...r, permissions: defaultAccessPermsForRole(r.role) } : r)))
   }
 
   async function toggleAccessActive(row: Access) {
@@ -374,6 +419,42 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
                     ) : null}
                     <button onClick={() => deleteAccess(r)} className="rounded-xl bg-red-50 px-3 py-1.5 text-xs text-red-700 hover:bg-red-100">
                       מחק
+                    </button>
+                  </div>
+                </div>
+
+                {/* permissions for this access */}
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  {Object.entries(grouped).map(([groupName, items]) => (
+                    <div key={groupName} className="rounded-xl bg-zinc-50 p-3">
+                      <div className="mb-2 text-sm font-semibold">{groupName}</div>
+                      <div className="space-y-2">
+                        {items.map(p => (
+                          <label key={p.key} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={!!(r.permissions || {})[p.key]}
+                              onChange={e => setAccessPerm(r.id, p.key, e.target.checked)}
+                            />
+                            <span>{p.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="md:col-span-4 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => applyRoleDefaults(r)}
+                      className="rounded-xl bg-zinc-100 px-3 py-1.5 text-xs hover:bg-zinc-200"
+                    >
+                      ברירת מחדל לפי תפקיד
+                    </button>
+                    <button
+                      onClick={() => saveAccessPerms(r)}
+                      className="rounded-xl bg-zinc-900 px-3 py-1.5 text-xs text-white hover:opacity-90"
+                    >
+                      שמור הרשאות
                     </button>
                   </div>
                 </div>

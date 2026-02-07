@@ -30,7 +30,8 @@ export async function getAdminFromRequest(req: NextRequest): Promise<AdminRow | 
       role: 'client',
       is_active: true,
       event_id: ev.event_id,
-      access_id: ev.access_id
+      access_id: ev.access_id,
+      permissions: (ev as any).permissions || {}
     }
   }
 
@@ -52,6 +53,16 @@ export async function getAdminFromRequest(req: NextRequest): Promise<AdminRow | 
 
 export function requireMaster(admin: AdminRow) {
   if (admin.role !== 'master') {
+    const e = new Error('Forbidden')
+    ;(e as any).status = 403
+    throw e
+  }
+}
+
+export function requirePermission(admin: AdminRow, perm: string) {
+  if (admin.role === 'master') return
+  const allowed = !!admin.permissions?.[perm]
+  if (!allowed) {
     const e = new Error('Forbidden')
     ;(e as any).status = 403
     throw e
