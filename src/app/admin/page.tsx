@@ -1,7 +1,7 @@
 import { Container, Card } from '@/components/ui'
 import AdminDashboard from './AdminDashboard'
 
-export type AdminMainTab = 'event' | 'blessings' | 'galleries' | 'design'
+export type AdminMainTab = 'event' | 'blessings' | 'galleries' | 'design' | 'permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +18,7 @@ export default function AdminPage({
         <Card>
           <h2 className="text-xl font-bold">מערכת ניהול</h2>
           <p className="text-sm text-zinc-600">
-            טאבים: אירוע, ברכות, גלריות, עיצוב ותוכן.
+            טאבים: אירוע, ברכות, גלריות, עיצוב ותוכן, הרשאות..
           </p>
         </Card>
 

@@ -5,23 +5,25 @@ import { useMemo } from 'react'
 import AdminApp from './ui'
 import type { AdminMainTab } from './page'
 
-type InnerTab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag'
+type InnerTab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
 function classNames(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(' ')
 }
 
 export default function AdminDashboard({ tab }: { tab: AdminMainTab }) {
-  const tabs = useMemo(
-    () =>
-      [
-        { key: 'event', label: 'אירוע' },
-        { key: 'blessings', label: 'ברכות' },
-        { key: 'galleries', label: 'גלריות' },
-        { key: 'design', label: 'עיצוב ותוכן' }
-      ] as const,
-    []
-  )
+  
+const tabs = useMemo(
+  () =>
+    [
+      { key: 'event', label: 'אירוע' },
+      { key: 'blessings', label: 'ברכות' },
+      { key: 'galleries', label: 'גלריות' },
+      { key: 'design', label: 'עיצוב ותוכן' },
+      { key: 'permissions', label: 'הרשאות' }
+    ] as const,
+  []
+)
 
   const initial = useMemo(() => {
     // מיפוי “טאב עליון” לטאב הפנימי הקיים ב-AdminApp
@@ -41,6 +43,9 @@ export default function AdminDashboard({ tab }: { tab: AdminMainTab }) {
       pendingKind = 'gallery'
     } else if (tab === 'design') {
       initialTab = 'blocks'
+      pendingKind = 'blessing'
+    } else if (tab === 'permissions') {
+      initialTab = 'permissions'
       pendingKind = 'blessing'
     }
 

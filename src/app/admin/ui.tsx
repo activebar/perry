@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
+import PermissionsPanel from './PermissionsPanel'
 
 const ACTIVE_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
 
@@ -241,7 +242,7 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
@@ -250,6 +251,7 @@ const TAB_LABEL: Record<string, string> = {
   ads: 'פרסומות',
   admin_gallery: 'גלריית מנהל',
   diag: 'דיאגנוסטיקה',
+  permissions: 'הרשאות',
   login: 'התחברות'
 }
 
@@ -467,7 +469,8 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    return ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag'] as Tab[]
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
+    return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
   async function login() {
@@ -1014,6 +1017,12 @@ async function loadBlocks() {
           )}
         </div>
       </Card>
+
+
+{/* ===== PERMISSIONS ===== */}
+{tab === 'permissions' && admin?.role === 'master' && (
+  <PermissionsPanel eventId={ACTIVE_EVENT_ID} />
+)}
 
       {/* ===== SETTINGS ===== */}
       {tab === 'settings' && settings && (
