@@ -11,7 +11,7 @@ function normalize(s: string) {
 export default function LoginByCode() {
   const router = useRouter()
   const sp = useSearchParams()
-  const event = normalize(sp.get('event') || sp.get('event_id') || '')
+  const event = normalize((sp?.get('event') ?? sp?.get('event_id') ?? ''))
 
   const [eventId, setEventId] = useState(event)
   const [code, setCode] = useState('')
