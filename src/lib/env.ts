@@ -2,11 +2,15 @@ import { z } from 'zod'
 
 const serverSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  OPENAI_API_KEY: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   GDRIVE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   GDRIVE_ROOT_FOLDER_ID: z.string().optional(),
   EVENT_SLUG: z.string().default('ido'),
+
+  // OpenAI (optional): used for content moderation / AI helper
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODERATION_MODEL: z.string().optional(),
+
   FOOTER_LABEL: z.string().optional(),
   FOOTER_URL: z.string().optional()
 })
@@ -32,6 +36,10 @@ export function getServerEnv() {
     GDRIVE_SERVICE_ACCOUNT_JSON: process.env.GDRIVE_SERVICE_ACCOUNT_JSON,
     GDRIVE_ROOT_FOLDER_ID: process.env.GDRIVE_ROOT_FOLDER_ID,
     EVENT_SLUG: process.env.EVENT_SLUG,
+
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_MODERATION_MODEL: process.env.OPENAI_MODERATION_MODEL,
+
     FOOTER_LABEL: process.env.FOOTER_LABEL,
     FOOTER_URL: process.env.FOOTER_URL
   })
