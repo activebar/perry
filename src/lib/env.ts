@@ -5,8 +5,6 @@ const serverSchema = z.object({
   CRON_SECRET: z.string().optional(),
   GDRIVE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   GDRIVE_ROOT_FOLDER_ID: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODERATION_MODEL: z.string().optional(),
   EVENT_SLUG: z.string().default('ido'),
   FOOTER_LABEL: z.string().optional(),
   FOOTER_URL: z.string().optional()
@@ -32,8 +30,6 @@ export function getServerEnv() {
     CRON_SECRET: process.env.CRON_SECRET,
     GDRIVE_SERVICE_ACCOUNT_JSON: process.env.GDRIVE_SERVICE_ACCOUNT_JSON,
     GDRIVE_ROOT_FOLDER_ID: process.env.GDRIVE_ROOT_FOLDER_ID,
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-    OPENAI_MODERATION_MODEL: process.env.OPENAI_MODERATION_MODEL,
     EVENT_SLUG: process.env.EVENT_SLUG,
     FOOTER_LABEL: process.env.FOOTER_LABEL,
     FOOTER_URL: process.env.FOOTER_URL

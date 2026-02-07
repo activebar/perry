@@ -237,12 +237,13 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'content_rules' | 'ads' | 'admin_gallery' | 'diag'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
   blocks: 'בלוקים',
   moderation: 'אישור תכנים',
+  content_rules: 'ניהול תוכן',
   ads: 'פרסומות',
   admin_gallery: 'גלריית מנהל',
   diag: 'דיאגנוסטיקה',
@@ -320,7 +321,110 @@ export default function AdminApp() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
 
-  // OG default image uploader (1200x630)
+  
+  // content rules (word filtering)
+  type MatchType = 'contains' | 'exact' | 'whole_word'
+  type RuleType = 'block' | 'allow'
+  type ContentRuleRow = {
+    id: string
+    rule_type: RuleType
+    match_type: MatchType
+    phrase: string
+    is_active: boolean
+    note?: string | null
+    created_at?: string
+    updated_at?: string
+  }
+
+  const [contentRules, setContentRules] = useState<ContentRuleRow[]>([])
+  const [contentRulesLoading, setContentRulesLoading] = useState(false)
+  const [contentRulesErr, setContentRulesErr] = useState<string | null>(null)
+  const [crEditId, setCrEditId] = useState<string | null>(null)
+  const [crRuleType, setCrRuleType] = useState<RuleType>('block')
+  const [crMatchType, setCrMatchType] = useState<MatchType>('contains')
+  const [crPhrase, setCrPhrase] = useState('')
+  const [crActive, setCrActive] = useState(true)
+  const [crNote, setCrNote] = useState('')
+
+  function resetContentRuleForm() {
+    setCrEditId(null)
+    setCrRuleType('block')
+    setCrMatchType('contains')
+    setCrPhrase('')
+    setCrActive(true)
+    setCrNote('')
+  }
+
+  async function loadContentRules() {
+    setContentRulesErr(null)
+    setContentRulesLoading(true)
+    try {
+      const res = await jfetch('/api/admin/content-rules', { method: 'GET' })
+      const rows = Array.isArray(res?.rules) ? res.rules : []
+      setContentRules(rows)
+    } catch (e: any) {
+      setContentRulesErr(e?.message || 'שגיאה בטעינת חוקים')
+    } finally {
+      setContentRulesLoading(false)
+    }
+  }
+
+  function startEditRule(r: ContentRuleRow) {
+    setCrEditId(r.id)
+    setCrRuleType(r.rule_type)
+    setCrMatchType(r.match_type)
+    setCrPhrase(r.phrase || '')
+    setCrActive(!!r.is_active)
+    setCrNote((r.note as any) || '')
+    setTab('content_rules')
+  }
+
+  async function saveContentRule() {
+    setContentRulesErr(null)
+    const phrase = (crPhrase || '').trim()
+    if (!phrase) {
+      setContentRulesErr('חובה להזין מילה/ביטוי')
+      return
+    }
+
+    const payload = {
+      rule_type: crRuleType,
+      match_type: crMatchType,
+      phrase,
+      is_active: crActive,
+      note: (crNote || '').trim() || null,
+    }
+
+    setContentRulesLoading(true)
+    try {
+      if (crEditId) {
+        await jfetch('/api/admin/content-rules', { method: 'PATCH', body: JSON.stringify({ id: crEditId, ...payload }) })
+      } else {
+        await jfetch('/api/admin/content-rules', { method: 'POST', body: JSON.stringify(payload) })
+      }
+      resetContentRuleForm()
+      await loadContentRules()
+    } catch (e: any) {
+      setContentRulesErr(e?.message || 'שגיאה בשמירה')
+    } finally {
+      setContentRulesLoading(false)
+    }
+  }
+
+  async function deleteContentRule(id: string) {
+    if (!confirm('למחוק את החוק?')) return
+    setContentRulesLoading(true)
+    setContentRulesErr(null)
+    try {
+      await jfetch(`/api/admin/content-rules?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      await loadContentRules()
+    } catch (e: any) {
+      setContentRulesErr(e?.message || 'שגיאה במחיקה')
+    } finally {
+      setContentRulesLoading(false)
+    }
+  }
+// OG default image uploader (1200x630)
   const [ogFile, setOgFile] = useState<File | null>(null)
   const [ogPreview, setOgPreview] = useState<string>('')
   const [ogFocus, setOgFocus] = useState({ x: 0.5, y: 0.5 })
@@ -427,10 +531,18 @@ export default function AdminApp() {
     const t = setInterval(() => fetchTopCounts(), 15000)
     return () => clearInterval(t)
   }, [admin])
+  useEffect(() => {
+    if (!admin) return
+    if (tab === 'content_rules') {
+      loadContentRules()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admin, tab])
+
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    return ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag'] as Tab[]
+    return ['settings', 'blocks', 'moderation', 'content_rules', 'ads', 'admin_gallery', 'diag'] as Tab[]
   }, [admin])
 
   async function login() {
@@ -1584,7 +1696,109 @@ async function loadBlocks() {
       )}
 
       {/* ===== ADS ===== */}
-      {tab === 'ads' && (
+      
+      {/* ===== CONTENT RULES ===== */}
+      {tab === 'content_rules' && (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">ניהול תוכן – חסימות וחריגים</h3>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={resetContentRuleForm}>חדש</Button>
+              <Button variant="ghost" onClick={loadContentRules}>רענן</Button>
+            </div>
+          </div>
+
+          <p className="mt-1 text-xs text-zinc-600">
+            חסימה = מעביר לאישור מנהל. חריג = מאפשר גם אם נחסם (למשל &quot;למות עליך&quot;).
+          </p>
+
+          {contentRulesErr && <p className="mt-2 text-sm text-red-600">{contentRulesErr}</p>}
+
+          <div className="mt-4 grid gap-2 rounded-xl border bg-white p-3">
+            <div className="grid gap-2 md:grid-cols-5">
+              <div className="md:col-span-1">
+                <label className="text-xs text-zinc-600">סוג</label>
+                <select className="mt-1 w-full rounded-lg border px-2 py-2" value={crRuleType} onChange={e => setCrRuleType(e.target.value as any)}>
+                  <option value="block">חסימה</option>
+                  <option value="allow">חריג</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-1">
+                <label className="text-xs text-zinc-600">התאמה</label>
+                <select className="mt-1 w-full rounded-lg border px-2 py-2" value={crMatchType} onChange={e => setCrMatchType(e.target.value as any)}>
+                  <option value="contains">מכיל</option>
+                  <option value="exact">בדיוק</option>
+                  <option value="whole_word">מילה שלמה</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs text-zinc-600">מילה/ביטוי</label>
+                <input className="mt-1 w-full rounded-lg border px-2 py-2" value={crPhrase} onChange={e => setCrPhrase(e.target.value)} placeholder="למשל: פרי / למות עליך" />
+              </div>
+
+              <div className="md:col-span-1 flex items-end gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={crActive} onChange={e => setCrActive(e.target.checked)} />
+                  פעיל
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-600">הערה (אופציונלי)</label>
+              <input className="mt-1 w-full rounded-lg border px-2 py-2" value={crNote} onChange={e => setCrNote(e.target.value)} placeholder="למשל: רק לאירוע הזה" />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={saveContentRule} disabled={contentRulesLoading}>
+                {contentRulesLoading ? 'שומר...' : (crEditId ? 'שמור שינויים' : 'הוסף חוק')}
+              </Button>
+              {crEditId && <Button variant="ghost" onClick={resetContentRuleForm}>בטל עריכה</Button>}
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-auto rounded-xl border">
+            <table className="w-full text-sm" dir="rtl">
+              <thead className="bg-zinc-50 text-zinc-600">
+                <tr>
+                  <th className="p-2 text-right">סוג</th>
+                  <th className="p-2 text-right">התאמה</th>
+                  <th className="p-2 text-right">ביטוי</th>
+                  <th className="p-2 text-right">פעיל</th>
+                  <th className="p-2 text-right">הערה</th>
+                  <th className="p-2 text-right">פעולות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contentRulesLoading && contentRules.length === 0 ? (
+                  <tr><td className="p-3 text-zinc-500" colSpan={6}>טוען...</td></tr>
+                ) : contentRules.length === 0 ? (
+                  <tr><td className="p-3 text-zinc-500" colSpan={6}>אין חוקים</td></tr>
+                ) : contentRules.map(r => (
+                  <tr key={r.id} className="border-t">
+                    <td className="p-2">{r.rule_type === 'block' ? 'חסימה' : 'חריג'}</td>
+                    <td className="p-2">
+                      {r.match_type === 'contains' ? 'מכיל' : r.match_type === 'exact' ? 'בדיוק' : 'מילה שלמה'}
+                    </td>
+                    <td className="p-2">{r.phrase}</td>
+                    <td className="p-2">{r.is_active ? 'כן' : 'לא'}</td>
+                    <td className="p-2">{r.note || ''}</td>
+                    <td className="p-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="ghost" onClick={() => startEditRule(r)}>עריכה</Button>
+                        <Button variant="ghost" onClick={() => deleteContentRule(r.id)}>מחיקה</Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+{tab === 'ads' && (
         <Card>
           <h3 className="font-semibold">פרסומות</h3>
 

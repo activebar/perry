@@ -47,14 +47,6 @@ function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/')
 }
 
-function countLines(input: string) {
-  const s = String(input || '')
-  const parts = s.split(/\r\n|\r|\n/)
-  // Count non empty lines so trailing newlines do not inflate the number
-  const nonEmpty = parts.filter((p) => p.trim().length > 0)
-  return nonEmpty.length
-}
-
 
 function firstHttpUrl(input: string) {
   const s = String(input || '')
@@ -168,7 +160,6 @@ export default function BlessingsClient({
 
 
   const [busy, setBusy] = useState(false)
-  const [lineGate, setLineGate] = useState<{ current: number; max: number } | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -197,20 +188,11 @@ export default function BlessingsClient({
     }
   }, [])
 
-  async function submitBlessing(opts?: { skipLineCheck?: boolean }) {
+  async function submitBlessing() {
     setErr(null)
     setMsg(null)
     setBusy(true)
     try {
-      const maxLines = Number((settings as any)?.max_blessing_lines ?? 50)
-      const currentLines = countLines(text || '')
-      if (!opts?.skipLineCheck && Number.isFinite(maxLines) && maxLines > 0 && currentLines > maxLines) {
-        setLineGate({ current: currentLines, max: maxLines })
-        setBusy(false)
-        return
-      }
-
-
       let media_path: string | null = null
       let media_url: string | null = null
       let video_url: string | null = null
@@ -244,29 +226,15 @@ export default function BlessingsClient({
           video_url
         })
       })
-// If the blessing goes to approval, keep the form fields so the user can edit and resubmit.
-if (res.status !== 'pending') {
-  setItems(prev => [res.post as Post, ...prev])
-  setAuthor('')
-  setText('')
-  setLinkUrl('')
-  setLinkTouched(false)
-  setFile(null)
-}
 
+      setItems(prev => [res.post as Post, ...prev])
+      setAuthor('')
+      setText('')
+      setLinkUrl('')
+      setLinkTouched(false)
+      setFile(null)
 
-      if (res.status === 'pending') {
-        const reason = String(res.pending_reason || '')
-        if (reason === 'moderation') {
-          setMsg('הברכה נשמרה וממתינה לאישור מנהל. ניתן לערוך ולנסות שוב')
-        } else if (reason === 'lines') {
-          setMsg('הברכה ארוכה מהאורך המותר ונשלחה לאישור מנהל. ניתן לערוך ולקצר')
-        } else {
-          setMsg('✅ נשלח לאישור מנהל')
-        }
-      } else {
-        setMsg('✅ נשמר!')
-      }
+      setMsg(res.status === 'pending' ? '✅ נשלח לאישור מנהל' : '✅ נשמר!')
     } catch (e: any) {
       setErr(friendlyError(e?.message || 'שגיאה'))
     } finally {
@@ -459,33 +427,7 @@ async function saveEdit() {
 
   return (
     <main dir="rtl" className="text-right">
-      {lineGate ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-lg">
-            <div className="text-base font-semibold">הברכה ארוכה מהמותר</div>
-            <div className="mt-2 text-sm text-zinc-700">
-              הברכה כוללת {lineGate.current} שורות, והמקסימום הוא {lineGate.max}. אפשר לערוך ולקצר, או לשלוח לאישור מנהל.
-            </div>
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setLineGate(null)}>
-                ערוך
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  const lg = lineGate
-                  setLineGate(null)
-                  if (!lg) return
-                  void submitBlessing({ skipLineCheck: true })
-                }}
-              >
-                שלח לאישור
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-<Container>
+      <Container>
         {showHeader && (
           <Card>
             <div className="flex items-center justify-between gap-2">
@@ -550,7 +492,7 @@ async function saveEdit() {
 
                 {file && <p className="text-xs text-zinc-600">נבחר: {file.name}</p>}
               </div>
-              <Button disabled={busy || (!text && !file && !linkUrl)} onClick={() => submitBlessing()}>
+              <Button disabled={busy || (!text && !file && !linkUrl)} onClick={submitBlessing}>
                 {busy ? 'שולח...' : 'שלח ברכה'}
               </Button>
             </div>

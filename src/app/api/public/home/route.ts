@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
-import { getEventId } from '@/lib/event-id'
 
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
 async function fetchSettingsAndBlocks() {
   const sb = supabaseAnon()
   const [{ data: settings, error: sErr }, { data: blocks, error: bErr }] = await Promise.all([
-    sb.from('event_settings').select('*').eq('event_id', getEventId()).order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(1).single(),
+    sb.from('event_settings').select('*').order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(1).single(),
     sb.from('blocks').select('*').order('order_index', { ascending: true })
   ])
   if (sErr) throw sErr
