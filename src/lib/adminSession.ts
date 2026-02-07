@@ -15,7 +15,6 @@ export type AdminRow = {
   // when logged in via event access code
   event_id?: string
   access_id?: string
-  // permissions map (mainly for event-access code logins)
   permissions?: Record<string, boolean>
 }
 
@@ -30,9 +29,10 @@ export async function getAdminFromRequest(req: NextRequest): Promise<AdminRow | 
       username: ev.name,
       email: ev.email || '',
       role: 'client',
-      is_active: true,
+      is_active: ev.is_active,
       event_id: ev.event_id,
       access_id: ev.access_id,
+      permissions: (ev as any).permissions || {},
       permissions: (ev as any).permissions || {}
     }
   }
@@ -55,6 +55,22 @@ export async function getAdminFromRequest(req: NextRequest): Promise<AdminRow | 
 
 export function requireMaster(admin: AdminRow) {
   if (admin.role !== 'master') {
+    const e = new Error('Forbidden')
+    ;(e as any).status = 403
+    throw e
+  }
+}
+
+
+export function hasPermission(admin: AdminRow, perm: string) {
+  if (admin.role === 'master') return true
+  return !!admin.permissions?.[perm]
+}
+
+export function requireAnyPermission(admin: AdminRow, perms: string[]) {
+  if (admin.role === 'master') return
+  const ok = perms.some(p => !!admin.permissions?.[p])
+  if (!ok) {
     const e = new Error('Forbidden')
     ;(e as any).status = 403
     throw e

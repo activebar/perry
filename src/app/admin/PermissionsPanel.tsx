@@ -34,14 +34,32 @@ const PERMS: Array<{ key: string; label: string; group: string }> = [
   { key: 'blessings.moderate', label: 'אישור/סינון', group: 'ברכות' },
   { key: 'blessings.delete', label: 'מחיקה', group: 'ברכות' },
 
+  { key: 'blessings.settings.read', label: 'צפייה בהגדרות', group: 'ברכות – הגדרות' },
+  { key: 'blessings.settings.edit', label: 'עריכת הגדרות', group: 'ברכות – הגדרות' },
+
+
   { key: 'galleries.read', label: 'צפייה', group: 'גלריות' },
   { key: 'galleries.write', label: 'יצירה/העלאה/סדר', group: 'גלריות' },
   { key: 'galleries.delete', label: 'מחיקה', group: 'גלריות' },
 
-  { key: 'design.edit', label: 'עריכה', group: 'עיצוב ותוכן' },
 
-  { key: 'event.edit', label: 'עריכת פרטי אירוע', group: 'אירוע' },
+  { key: 'share.settings.read', label: 'צפייה בהגדרות', group: 'QR & שיתוף' },
+  { key: 'share.settings.edit', label: 'עריכת הגדרות', group: 'QR & שיתוף' },
+
+  { key: 'og.settings.read', label: 'צפייה בהגדרות', group: 'OpenGraph' },
+  { key: 'og.settings.edit', label: 'עריכת הגדרות', group: 'OpenGraph' },
+
+  { key: 'blocks.read', label: 'צפייה', group: 'בלוקים' },
+  { key: 'blocks.edit', label: 'עריכה', group: 'בלוקים' },
+
+
+  { key: 'design.edit', label: 'עריכת עיצוב/תוכן (ישן)', group: 'עיצוב ותוכן' },
+
+  { key: 'event.settings.edit', label: 'עריכת הגדרות אירוע', group: 'אירוע' },
+  { key: 'event.edit', label: 'עריכת פרטי אירוע (ישן)', group: 'אירוע' },
   { key: 'event.clone', label: 'שכפול אירוע', group: 'אירוע' },
+
+  { key: 'permissions.manage', label: 'ניהול הרשאות', group: 'הרשאות' },
 ]
 
 function groupPerms() {
@@ -193,9 +211,9 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
   function defaultAccessPermsForRole(role: string): PermissionMap {
     const r = (role || 'client').toLowerCase()
     if (r === 'photographer') return { 'galleries.read': true, 'galleries.write': true }
-    if (r === 'partner') return { 'blessings.read': true, 'blessings.write': true, 'blessings.moderate': true, 'galleries.read': true, 'galleries.write': true }
+    if (r === 'partner') return { 'blessings.read': true, 'blessings.write': true, 'blessings.moderate': true, 'galleries.read': true, 'galleries.write': true, 'blessings.settings.edit': true, 'share.settings.edit': true, 'og.settings.edit': true }
     // client (default)
-    return { 'blessings.read': true, 'blessings.write': true }
+    return { 'blessings.read': true, 'blessings.write': true, 'blessings.settings.read': true, 'share.settings.read': true, 'og.settings.read': true }
   }
 
   function applyRoleDefaults(row: Access) {
@@ -325,7 +343,7 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
   return (
     <div className="space-y-4">
       <Card>
-        <h3 className="text-lg font-bold">הרשאות מנהלים לאירוע</h3>
+        <h3 className="text-lg font-bold">מנהלי מערכת / מנהלי אירוע (ADMIN USERS)</h3>
         <p className="text-sm text-zinc-600">
           כאן מנהל ראשי (master) מאשר למנהלי אתר אילו חלקים הם יכולים לנהל.
         </p>
@@ -346,7 +364,7 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
       </Card>
 
       <Card>
-        <h3 className="text-lg font-bold">גישות מהירות לאירוע (קוד גישה)</h3>
+        <h3 className="text-lg font-bold">גישות עם קוד (לקוח / צלם / שותף)</h3>
         <p className="text-sm text-zinc-600">
           יצירת גישות ללקוח/צלם/שותף עם קוד גישה. ניתן לשלוח במייל (Resend) או לשתף בווטסאפ.
           קישור כניסה: <span className="font-mono" dir="ltr">/admin/login?event={eventId}</span>
@@ -372,7 +390,7 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
         {accessErr ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{accessErr}</div> : null}
 
         <div className="mt-4 flex items-center justify-between">
-          <h4 className="font-bold">רשימת גישות</h4>
+          <h4 className="font-bold">רשימת גישות (CODE ACCESS)</h4>
           <div className="text-xs text-zinc-500">{accessRows.length} גישות</div>
         </div>
 
@@ -466,7 +484,7 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
 
       <Card>
         <div className="flex items-center justify-between">
-          <h4 className="font-bold">רשימת מנהלים</h4>
+          <h4 className="font-bold">רשימת מנהלים (ADMIN USERS)</h4>
           <div className="text-xs text-zinc-500">{rows.length} מנהלים</div>
         </div>
 
