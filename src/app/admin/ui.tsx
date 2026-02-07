@@ -181,7 +181,7 @@ function LinkPreview({
                     /* loadPending removed: moderation tab loads on view */
         }}
       >
-        הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : ''}
+        הצג רק ממתינות)` : ''}
       </button>
       <span className="text-xs text-zinc-500">שינוי אירוע נעשה ב Vercel דרך NEXT_PUBLIC_EVENT_ID</span>
     </div>
@@ -671,8 +671,7 @@ async function loadBlocks() {
     }
   }
 
-  async function loadPending() {
-
+  async function /* loadPending removed: moderation tab loads on view */ {
     const res = await jfetch(`/api/admin/posts?status=pending&kind=${pendingKind}`, { method: 'GET', headers: {} as any })
     setPending(res.posts)
     setPendingCount((res.posts || []).length)
