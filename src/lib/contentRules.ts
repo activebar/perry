@@ -19,39 +19,28 @@ export type ContentRuleMatch = {
   matched_value?: string
 }
 
-function norm(s: unknown) {
-  return String(s ?? '').trim().toLowerCase()
-}
-
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// Whole word match for Hebrew/mixed text.
-// We treat boundaries as start/end, whitespace, NBSP, or common punctuation.
+// Whole word match for Hebrew and mixed text.
+// We consider "word boundaries" as start/end OR whitespace OR common punctuation.
 function includesWholeWord(haystack: string, needle: string) {
   const h = norm(haystack)
   const n = norm(needle)
   if (!h || !n) return false
-
-  // Boundary characters: whitespace + common punctuation (regex literal avoids string escaping issues)
-  const boundaryRe = /[\s\u00A0\t\n\r\.,!\?;:\"'\(\)\[\]{}<>\/\\|+=~`@#\$%\^&\*-]/
-
-  let idx = 0
-  while (true) {
-    const at = h.indexOf(n, idx)
-    if (at === -1) return false
-
-    const before = at === 0 ? '' : h[at - 1]
-    const afterPos = at + n.length
-    const after = afterPos >= h.length ? '' : h[afterPos]
-
-    const beforeOk = !before || boundaryRe.test(before)
-    const afterOk = !after || boundaryRe.test(after)
-
-    if (beforeOk && afterOk) return true
-    idx = at + 1
+  const pat = `(^|[\s\u00A0\t\n\r\.,!\?;:"'()\[\]{}<>/\\|+=~` + '`' + `@#\$%\^&\*-])${escapeRegExp(n)}($|[\s\u00A0\t\n\r\.,!\?;:"'()\[\]{}<>/\\|+=~` + '`' + `@#\$%\^&\*-])`
+  try {
+    const re = new RegExp(pat, 'i')
+    return re.test(h)
+  } catch {
+    // fallback
+    return h.split(/\s+/).includes(n)
   }
+}
+
+function norm(s: unknown) {
+  return String(s ?? '').trim().toLowerCase()
 }
 
 function ruleMatches(rule: ContentRule, value: string) {
@@ -91,22 +80,26 @@ export async function matchContentRules(input: {
     ['text', input.text || ''],
     ['link_url', input.link_url || ''],
     ['media_url', input.media_url || ''],
-    ['video_url', input.video_url || ''],
+    ['video_url', input.video_url || '']
   ]
 
-  // Block first
+  // 1) Block rules first
   for (const r of rules) {
     if (r.rule_type !== 'block') continue
     for (const [k, v] of fields) {
-      if (ruleMatches(r, v)) return { matched: true, rule: r, matched_on: k, matched_value: v } as ContentRuleMatch
+      if (ruleMatches(r, v)) {
+        return { matched: true, rule: r, matched_on: k, matched_value: v } as ContentRuleMatch
+      }
     }
   }
 
-  // Allow second
+  // 2) Allow rules (used to soften moderation in borderline cases)
   for (const r of rules) {
     if (r.rule_type !== 'allow') continue
     for (const [k, v] of fields) {
-      if (ruleMatches(r, v)) return { matched: true, rule: r, matched_on: k, matched_value: v } as ContentRuleMatch
+      if (ruleMatches(r, v)) {
+        return { matched: true, rule: r, matched_on: k, matched_value: v } as ContentRuleMatch
+      }
     }
   }
 

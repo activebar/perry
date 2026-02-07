@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 
-const ACTIVE_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
-
 async function fileToImage(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file)
   try {
@@ -166,8 +164,6 @@ function LinkPreview({
 
   return (
     <div className="mt-2">
-
-
       <div className="flex justify-center">
         <a
           href={d.url}
@@ -886,9 +882,7 @@ async function loadBlocks() {
             <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
 
-            
-            <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || 'IDO'}</span></p>
-{(pendingBlessingsCount + pendingPhotosCount) > 0 && (
+            {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
               <div className="mt-1 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {pendingPhotosCount}</span>
@@ -899,15 +893,6 @@ async function loadBlocks() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setTab('moderation' as any)
-                loadPending()
-              }}
-            >
-              הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : '' }
-            </Button>
             {tabs.map(t => (
               <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
                 {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
@@ -1525,7 +1510,6 @@ async function loadBlocks() {
                     <option value="contains">מכיל</option>
                     <option value="exact">בדיוק</option>
                     <option value="word">מילה שלמה</option>
-                    <option value="word">מילה שלמה</option>
                   </select>
 
                   <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
@@ -1571,7 +1555,7 @@ async function loadBlocks() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="text-right">
                           <p className="text-sm font-medium">
-                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : r.match_type === 'word' ? 'מילה שלמה' : 'מכיל'}
+                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : 'מכיל'}
                           </p>
                           <p className="text-sm" dir="rtl">{r.expression}</p>
                           {r.note ? <p className="text-xs text-zinc-500">{r.note}</p> : null}
