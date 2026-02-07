@@ -7,6 +7,17 @@ export const revalidate = 0
 
 type PermissionMap = Record<string, boolean>
 
+async function pickUsername(supabase: any, base: string) {
+  // User asked for constant USER. We'll try USER first and add suffix only if it already exists.
+  const b = (base || 'USER').trim() || 'USER'
+  const candidates = [b, `${b}-1`, `${b}-2`, `${b}-3`, `${b}-${Date.now().toString().slice(-4)}`]
+  for (const u of candidates) {
+    const ex = await supabase.from('admin_users').select('id').eq('username', u).maybeSingle()
+    if (!ex.error && !ex.data) return u
+  }
+  return `${b}-${Math.random().toString(36).slice(2, 7)}`
+}
+
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status })
 }
@@ -65,10 +76,26 @@ export async function POST(req: NextRequest) {
   // Find admin user by email
   const find = await supabase.from('admin_users').select('id,email,is_active').eq('email', email).maybeSingle()
   if (find.error) return jsonError(find.error.message, 500)
-  if (!find.data) return jsonError('Admin user not found')
-  if (!find.data.is_active) return jsonError('Admin user is inactive')
 
-  const admin_user_id = find.data.id
+  // Create admin user if missing (username is NOT NULL in your schema)
+  let admin_user_id = find.data?.id as string | undefined
+  if (!admin_user_id) {
+    const username = await pickUsername(supabase, 'USER')
+    const ins = await supabase
+      .from('admin_users')
+      .insert({
+        email,
+        username,
+        role: 'event_admin',
+        is_active: true
+      })
+      .select('id,is_active')
+      .single()
+    if (ins.error) return jsonError(ins.error.message, 500)
+    admin_user_id = ins.data.id
+  } else {
+    if (!find.data?.is_active) return jsonError('Admin user is inactive')
+  }
 
   const up = await supabase
     .from('event_admins')
