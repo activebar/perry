@@ -32,7 +32,6 @@ export async function getAdminFromRequest(req: NextRequest): Promise<AdminRow | 
       is_active: ev.is_active,
       event_id: ev.event_id,
       access_id: ev.access_id,
-      permissions: (ev as any).permissions || {},
       permissions: (ev as any).permissions || {}
     }
   }

@@ -87,6 +87,8 @@ export async function getEventAccessFromRequest(req: NextRequest) {
     role: data.role,
     phone: data.phone,
     email: data.email,
+    is_active: data.is_active,
+    session_version: data.session_version,
     permissions: (data as any).permissions || {}
   }
 }
