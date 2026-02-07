@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getEventId } from '@/lib/event-id'
 
 function pickRule(body: any) {
   const rule_type = (body?.rule_type === 'allow' ? 'allow' : 'block') as 'allow' | 'block'
@@ -10,7 +11,11 @@ function pickRule(body: any) {
   const note = body?.note ? String(body.note) : null
   const is_active = body?.is_active === false ? false : true
 
-  return { rule_type, scope, match_type, expression, note, is_active }
+  // Important: event-scoped rules must be tied to the current event_id, otherwise
+  // they will never match in public moderation.
+  const event_id = scope === 'event' ? getEventId() : null
+
+  return { rule_type, scope, event_id, match_type, expression, note, is_active }
 }
 
 export async function GET(req: NextRequest) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { matchContentRules } from '@/lib/contentRules'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 
@@ -15,6 +16,29 @@ export async function POST(req: Request) {
     const kind = String(body.kind || '')
     if (!ALLOWED_KINDS.has(kind)) return NextResponse.json({ error: 'bad kind' }, { status: 400 })
 
+    // Content rules (block/allow) – apply to public submissions
+    // We only hard-block when a matching rule_type === 'block' is found.
+    if (kind === 'blessing' || kind === 'gallery') {
+      const m = await matchContentRules({
+        author_name: body.author_name || null,
+        text: body.text || null,
+        link_url: body.link_url || null,
+        media_url: body.media_url || null,
+        video_url: body.video_url || null
+      })
+      if (m.matched && m.rule?.rule_type === 'block') {
+        return NextResponse.json(
+          {
+            error: 'התוכן נחסם לפי כללי סינון.',
+            blocked: true,
+            rule_id: m.rule.id,
+            matched_on: m.matched_on
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     const device_id = cookies().get('device_id')?.value || null
     const srv = supabaseServiceRole()
 
@@ -22,7 +46,7 @@ export async function POST(req: Request) {
     // defaults: 10/hour per device for blessings, 10/hour for gallery
     if (device_id && (kind === 'gallery' || kind === 'blessing')) {
       const { since } = withinOneHour(new Date().toISOString())
-      const limit = 50
+      const limit = 10
       const { count, error: cerr } = await srv
         .from('posts')
         .select('id', { count: 'exact', head: true })
@@ -106,6 +130,28 @@ export async function PUT(req: Request) {
     if ('media_url' in body) patch.media_url = body.media_url || null
     if ('media_path' in body) patch.media_path = body.media_path || null
     if ('video_url' in body) patch.video_url = body.video_url || null
+
+    // Re-check content rules on edit (only for public kinds)
+    if (post.kind === 'blessing' || post.kind === 'gallery') {
+      const m = await matchContentRules({
+        author_name: ('author_name' in patch ? patch.author_name : post.author_name) || null,
+        text: ('text' in patch ? patch.text : post.text) || null,
+        link_url: ('link_url' in patch ? patch.link_url : post.link_url) || null,
+        media_url: ('media_url' in patch ? patch.media_url : post.media_url) || null,
+        video_url: ('video_url' in patch ? patch.video_url : post.video_url) || null
+      })
+      if (m.matched && m.rule?.rule_type === 'block') {
+        return NextResponse.json(
+          {
+            error: 'התוכן נחסם לפי כללי סינון.',
+            blocked: true,
+            rule_id: m.rule.id,
+            matched_on: m.matched_on
+          },
+          { status: 400 }
+        )
+      }
+    }
 
     const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
     if (error) throw error

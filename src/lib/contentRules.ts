@@ -73,7 +73,11 @@ export async function matchContentRules(input: {
 }) {
   const rulesAll = await fetchActiveContentRules()
   const eventId = getEventId()
-  const rules = rulesAll.filter(r => r.scope === 'global' || (r.scope === 'event' && (r.event_id || '') === eventId))
+  // Legacy support: some older rows may have scope='event' but event_id NULL.
+  // Treat NULL as "current event" so existing rules still work.
+  const rules = rulesAll.filter(
+    r => r.scope === 'global' || (r.scope === 'event' && ((r.event_id || '') === eventId || !r.event_id))
+  )
 
   const fields: Array<[ContentRuleMatch['matched_on'], string]> = [
     ['author_name', input.author_name || ''],
