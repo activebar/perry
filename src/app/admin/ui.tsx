@@ -308,10 +308,12 @@ function parseLinesToArray(s: string) {
 
 export default function AdminApp({
   initialTab,
-  initialPendingKind
+  initialPendingKind,
+  embeddedMode
 }: {
   initialTab?: Tab
   initialPendingKind?: 'blessing' | 'gallery'
+  embeddedMode?: boolean
 } = {}) {
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [tab, setTab] = useState<Tab>(initialTab || 'login')
@@ -987,23 +989,29 @@ async function loadBlocks() {
             {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setTab('moderation' as any)
-                loadPending()
-              }}
-            >
-              הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : '' }
-            </Button>
-            {tabs.map(t => (
-              <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
-                {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
+          {embeddedMode ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={logout}>יציאה</Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setTab('moderation' as any)
+                  loadPending()
+                }}
+              >
+                הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : '' }
               </Button>
-            ))}
-            <Button variant="ghost" onClick={logout}>יציאה</Button>
-          </div>
+              {tabs.map(t => (
+                <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
+                  {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
+                </Button>
+              ))}
+              <Button variant="ghost" onClick={logout}>יציאה</Button>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -1980,12 +1988,26 @@ async function loadBlocks() {
         <Card>
           <h3 className="font-semibold">גלריית מנהל</h3>
 
-          <div className="mt-3 grid gap-2 rounded-xl border border-zinc-200 p-3">
-            <input type="file" accept="image/*" multiple onChange={e => setAdminFiles(Array.from(e.target.files || []))} />
-            <Button onClick={uploadAdminGalleryFiles} disabled={adminBusy || adminFiles.length === 0}>
-              {adminBusy ? 'מעלה...' : `העלה ${adminFiles.length || ''} תמונות`}
-            </Button>
-            {adminMsg && <p className="text-sm text-zinc-700">{adminMsg}</p>}
+          <div className="mt-3 rounded-xl border border-zinc-200 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+              <Button
+                onClick={uploadAdminGalleryFiles}
+                disabled={adminBusy || adminFiles.length === 0}
+                className="sm:w-44"
+              >
+                {adminBusy ? 'מעלה...' : `העלה ${adminFiles.length || ''} תמונות`}
+              </Button>
+
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={e => setAdminFiles(Array.from(e.target.files || []))}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+
+            {adminMsg && <p className="mt-2 text-sm text-zinc-700">{adminMsg}</p>}
           </div>
 
           {lightbox && (

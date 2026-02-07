@@ -67,29 +67,14 @@ export default function AdminDashboard({ tab }: { tab: AdminMainTab }) {
         ))}
       </div>
 
-      {/* שלד קצר לטאב גלריות */}
-      {tab === 'galleries' ? (
-        <div className="mt-4 rounded-2xl border bg-white p-4">
-          <div className="font-semibold">שלד טאב גלריות</div>
-          <div className="mt-1 text-sm text-zinc-600">
-            כרגע: גלריית מנהל + אישור תכנים לגלריה (קיים במערכת).
-            השלב הבא: ריבוי גלריות + שכפול בין אירועים (לפי event_id).
-          </div>
-          <ul className="mt-3 list-disc pr-5 text-sm text-zinc-700">
-            <li>יצירת גלריה חדשה</li>
-            <li>הוספה/סידור פריטים (תמונה/וידאו)</li>
-            <li>שכפול גלריה מאירוע אחר</li>
-            <li>RLS לפי event_id + הרשאות מנהל</li>
-          </ul>
-        </div>
-      ) : null}
-
+      {
       {/* דף המנהל המלא (הקיים) עם אתחול לפי הטאב העליון */}
       <div className="mt-4">
         <AdminApp
           key={tab}
           initialTab={initial.initialTab}
           initialPendingKind={initial.pendingKind}
+          embeddedMode
         />
       </div>
     </div>
