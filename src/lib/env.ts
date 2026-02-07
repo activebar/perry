@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 const serverSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  OPENAI_API_KEY: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   GDRIVE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   GDRIVE_ROOT_FOLDER_ID: z.string().optional(),
