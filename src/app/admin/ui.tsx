@@ -360,9 +360,29 @@ export default function AdminApp() {
   const [blocks, setBlocks] = useState<any[]>([])
 
   // content rules (allow/block)
-  const [contentRules, setContentRules] = useState<any[]>([])
+  type ContentRule = {
+    id: number | string
+    rule_type: 'block' | 'allow'
+    scope: 'event' | 'global'
+    match_type: 'contains' | 'exact' | 'word'
+    expression: string
+    note: string | null
+    is_active: boolean
+    created_at?: string
+    updated_at?: string
+  }
+
+  const [contentRules, setContentRules] = useState<ContentRule[]>([])
   const [rulesMsg, setRulesMsg] = useState<string | null>(null)
-  const [newRule, setNewRule] = useState<any>({ rule_type: 'block', scope: 'event', match_type: 'contains', expression: '', note: '', is_active: true })
+
+  // rule editor
+  const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
+  const [ruleType, setRuleType] = useState<'block' | 'allow'>('block')
+  const [ruleScope, setRuleScope] = useState<'event' | 'global'>('event')
+  const [ruleMatchType, setRuleMatchType] = useState<'contains' | 'exact' | 'word'>('contains')
+  const [ruleExpression, setRuleExpression] = useState('')
+  const [ruleNote, setRuleNote] = useState('')
+  const [ruleIsActive, setRuleIsActive] = useState(true)
 
   // moderation
   const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>('blessing')
@@ -477,31 +497,92 @@ export default function AdminApp() {
     setContentRules(Array.isArray(r.rules) ? r.rules : [])
   }
 
-  async function createContentRule() {
+  function resetRuleForm() {
+    setEditingRuleId(null)
+    setRuleType('block')
+    setRuleScope('event')
+    setRuleMatchType('contains')
+    setRuleExpression('')
+    setRuleNote('')
+    setRuleIsActive(true)
+  }
+
+  function beginEditRule(r: ContentRule) {
+    const idNum = Number(r.id)
+    setEditingRuleId(Number.isFinite(idNum) ? idNum : null)
+    setRuleType(r.rule_type)
+    setRuleScope(r.scope)
+    setRuleMatchType(r.match_type)
+    setRuleExpression(String(r.expression || ''))
+    setRuleNote(String(r.note || ''))
+    setRuleIsActive(r.is_active !== false)
+  }
+
+  async function saveContentRule() {
     setRulesMsg(null)
+    const expression = String(ruleExpression || '').trim()
+    if (!expression) {
+      setRulesMsg('חובה להזין מילה/ביטוי')
+      return
+    }
+
     try {
-      const payload = { ...newRule, expression: String(newRule.expression || '').trim() }
-      if (!payload.expression) {
-        setRulesMsg('הוסף מילה/ביטוי')
-        return
+      if (editingRuleId) {
+        const res = await jfetch('/api/admin/content-rules', {
+          method: 'PUT',
+          body: JSON.stringify({
+            id: editingRuleId,
+            rule_type: ruleType,
+            scope: ruleScope,
+            match_type: ruleMatchType,
+            expression,
+            note: ruleNote ? String(ruleNote) : null,
+            is_active: ruleIsActive,
+          }),
+        })
+        setContentRules(prev => prev.map(r => (Number(r.id) === editingRuleId ? res.rule : r)))
+        setRulesMsg('✅ עודכן')
+      } else {
+        const res = await jfetch('/api/admin/content-rules', {
+          method: 'POST',
+          body: JSON.stringify({
+            rule_type: ruleType,
+            scope: ruleScope,
+            match_type: ruleMatchType,
+            expression,
+            note: ruleNote ? String(ruleNote) : null,
+            is_active: ruleIsActive,
+          }),
+        })
+        setContentRules(prev => [res.rule, ...prev])
+        setRulesMsg('✅ נוסף')
       }
-      const res = await jfetch('/api/admin/content-rules', { method: 'POST', body: JSON.stringify(payload) })
-      setContentRules(prev => [res.rule, ...prev])
-      setNewRule({ ...newRule, expression: '', note: '' })
-      setRulesMsg('✅ נוסף')
-      setTimeout(() => setRulesMsg(null), 2000)
+
+      resetRuleForm()
+      setTimeout(() => setRulesMsg(null), 1500)
     } catch (e: any) {
       setRulesMsg(friendlyError(e?.message || 'שגיאה'))
     }
   }
 
-  async function updateContentRule(patch: any) {
+  async function toggleContentRule(id: number, is_active: boolean) {
+    const r = contentRules.find(x => Number(x.id) === id)
+    if (!r) return
     setRulesMsg(null)
     try {
-      const res = await jfetch('/api/admin/content-rules', { method: 'PUT', body: JSON.stringify(patch) })
-      setContentRules(prev => prev.map(r => (r.id === res.rule.id ? res.rule : r)))
-      setRulesMsg('✅ עודכן')
-      setTimeout(() => setRulesMsg(null), 1500)
+      const res = await jfetch('/api/admin/content-rules', {
+        method: 'PUT',
+        body: JSON.stringify({
+          id,
+          rule_type: r.rule_type,
+          scope: r.scope,
+          match_type: r.match_type,
+          expression: r.expression,
+          note: r.note,
+          is_active,
+        }),
+      })
+      setContentRules(prev => prev.map(x => (Number(x.id) === id ? res.rule : x)))
     } catch (e: any) {
       setRulesMsg(friendlyError(e?.message || 'שגיאה'))
     }
@@ -511,8 +592,10 @@ export default function AdminApp() {
     if (!confirm('למחוק את החוק?')) return
     setRulesMsg(null)
     try {
+      // API expects query param ?id=
       await jfetch(`/api/admin/content-rules?id=${id}`, { method: 'DELETE', headers: {} as any })
-      setContentRules(prev => prev.filter(r => r.id !== id))
+      setContentRules(prev => prev.filter(r => Number(r.id) !== id))
+      if (editingRuleId === id) resetRuleForm()
       setRulesMsg('✅ נמחק')
       setTimeout(() => setRulesMsg(null), 1500)
     } catch (e: any) {
@@ -1507,11 +1590,11 @@ async function loadBlocks() {
               </p>
 
               <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
                   <select
                     className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                    value={newRule.rule_type}
-                    onChange={e => setNewRule({ ...newRule, rule_type: e.target.value })}
+                    value={ruleType}
+                    onChange={e => setRuleType(e.target.value as any)}
                   >
                     <option value="block">חסימה</option>
                     <option value="allow">חריג</option>
@@ -1519,20 +1602,36 @@ async function loadBlocks() {
 
                   <select
                     className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                    value={newRule.match_type}
-                    onChange={e => setNewRule({ ...newRule, match_type: e.target.value })}
+                    value={ruleScope}
+                    onChange={e => setRuleScope(e.target.value as any)}
+                  >
+                    <option value="event">אירוע</option>
+                    <option value="global">גלובלי</option>
+                  </select>
+
+                  <select
+                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                    value={ruleMatchType}
+                    onChange={e => setRuleMatchType(e.target.value as any)}
                   >
                     <option value="contains">מכיל</option>
                     <option value="exact">בדיוק</option>
                     <option value="word">מילה שלמה</option>
-                    <option value="word">מילה שלמה</option>
                   </select>
+
+                  <Input
+                    className="text-right md:col-span-2"
+                    dir="rtl"
+                    value={ruleExpression}
+                    onChange={e => setRuleExpression(e.target.value)}
+                    placeholder="מילה/ביטוי (למשל: למות עליך)"
+                  />
 
                   <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
                     <input
                       type="checkbox"
-                      checked={newRule.is_active !== false}
-                      onChange={e => setNewRule({ ...newRule, is_active: e.target.checked })}
+                      checked={!!ruleIsActive}
+                      onChange={e => setRuleIsActive(e.target.checked)}
                     />
                     פעיל
                   </label>
@@ -1541,24 +1640,19 @@ async function loadBlocks() {
                 <Input
                   className="text-right"
                   dir="rtl"
-                  value={String(newRule.expression ?? '')}
-                  onChange={e => setNewRule({ ...newRule, expression: e.target.value })}
-                  placeholder="מילה/ביטוי (למשל: למות עליך)"
-                />
-
-                <Input
-                  className="text-right"
-                  dir="rtl"
-                  value={String(newRule.note ?? '')}
-                  onChange={e => setNewRule({ ...newRule, note: e.target.value })}
+                  value={ruleNote}
+                  onChange={e => setRuleNote(e.target.value)}
                   placeholder="הערה (אופציונלי)"
                 />
 
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-right text-xs text-zinc-600">{rulesMsg ? rulesMsg : null}</div>
-                  <Button onClick={createContentRule}>
-                    הוסף
-                  </Button>
+                  <div className="flex gap-2">
+                    {editingRuleId ? (
+                      <Button variant="ghost" onClick={resetRuleForm}>בטל עריכה</Button>
+                    ) : null}
+                    <Button onClick={saveContentRule}>{editingRuleId ? 'שמור שינוי' : 'הוסף'}</Button>
+                  </div>
                 </div>
               </div>
 
@@ -1567,11 +1661,12 @@ async function loadBlocks() {
                   <p className="text-xs text-zinc-500 text-right">אין חוקים עדיין.</p>
                 ) : (
                   contentRules.map(r => (
-                    <div key={r.id} className="rounded-xl border border-zinc-200 p-3">
+                    <div key={String(r.id)} className="rounded-xl border border-zinc-200 p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="text-right">
                           <p className="text-sm font-medium">
-                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : r.match_type === 'word' ? 'מילה שלמה' : 'מכיל'}
+                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.scope === 'global' ? 'גלובלי' : 'אירוע'} •{' '}
+                            {r.match_type === 'exact' ? 'בדיוק' : r.match_type === 'word' ? 'מילה שלמה' : 'מכיל'}
                           </p>
                           <p className="text-sm" dir="rtl">{r.expression}</p>
                           {r.note ? <p className="text-xs text-zinc-500">{r.note}</p> : null}
@@ -1582,10 +1677,11 @@ async function loadBlocks() {
                             <input
                               type="checkbox"
                               checked={r.is_active !== false}
-                              onChange={e => updateContentRule({ ...r, is_active: e.target.checked })}
+                              onChange={e => toggleContentRule(Number(r.id), e.target.checked)}
                             />
                             פעיל
                           </label>
+                          <Button variant="ghost" onClick={() => beginEditRule(r)}>ערוך</Button>
                           <Button variant="ghost" onClick={() => deleteContentRule(Number(r.id))}>מחק</Button>
                         </div>
                       </div>
