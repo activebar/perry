@@ -5,7 +5,11 @@ import { supabaseServiceRole } from '@/lib/supabase'
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  requireMaster(admin)
+  try {
+    requireMaster(admin)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
+  }
   const srv = supabaseServiceRole()
   const { data, error } = await srv.from('ads').select('*').order('created_at', { ascending: false }).limit(200)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -15,8 +19,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  requireMaster(admin)
-  requireMaster(admin)
+  try {
+    requireMaster(admin)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
+  }
   const body = await req.json()
   const srv = supabaseServiceRole()
   const { data, error } = await srv.from('ads').insert({
@@ -33,9 +40,11 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  requireMaster(admin)
-  requireMaster(admin)
-  requireMaster(admin)
+  try {
+    requireMaster(admin)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
+  }
   const body = await req.json()
   if (!body?.id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
   const srv = supabaseServiceRole()
@@ -47,10 +56,11 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  requireMaster(admin)
-  requireMaster(admin)
-  requireMaster(admin)
-  requireMaster(admin)
+  try {
+    requireMaster(admin)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
+  }
   const id = req.nextUrl.searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
   const srv = supabaseServiceRole()

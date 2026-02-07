@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { hashCode, normalizeCode } from '@/lib/accessCode'
 import { EVENT_ACCESS_COOKIE, signEventAccess } from '@/lib/eventAccessSession'
+import { ADMIN_TOKEN_COOKIE } from '@/lib/adminSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,10 @@ export async function POST(req: NextRequest) {
     secure: process.env.NODE_ENV === 'production',
     path: '/'
   })
+
+  // If a master admin is logged-in on the same browser, the admin cookie would otherwise
+  // override the event-access session and grant unintended privileges.
+  cookies().delete(ADMIN_TOKEN_COOKIE)
 
   return NextResponse.json({ ok: true })
 }

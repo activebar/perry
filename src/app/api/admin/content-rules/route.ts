@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest } from '@/lib/adminSession'
+import { getAdminFromRequest, requireMaster } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getEventId } from '@/lib/event-id'
 
@@ -21,6 +21,11 @@ function pickRule(body: any) {
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  try {
+    requireMaster(admin)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
+  }
 
   try {
     const srv = supabaseServiceRole()
@@ -40,6 +45,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  try {
+    requireMaster(admin)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
+  }
 
   try {
     const body = await req.json()
@@ -63,6 +73,11 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  try {
+    requireMaster(admin)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
+  }
 
   try {
     const body = await req.json()
@@ -90,6 +105,11 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  try {
+    requireMaster(admin)
+  } catch (e: any) {
+    return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
+  }
 
   try {
     const url = new URL(req.url)
