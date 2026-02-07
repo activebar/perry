@@ -1,21 +1,29 @@
 import { Container, Card } from '@/components/ui'
-import AdminApp from './ui'
+import AdminDashboard from './AdminDashboard'
+
+export type AdminMainTab = 'event' | 'blessings' | 'galleries' | 'design'
 
 export const dynamic = 'force-dynamic'
 
-export default function AdminPage() {
+export default function AdminPage({
+  searchParams
+}: {
+  searchParams?: { tab?: AdminMainTab }
+}) {
+  const tab = (searchParams?.tab || 'event') as AdminMainTab
+
   return (
-    <main>
+    <main dir="rtl">
       <Container>
         <Card>
-          <h2 className="text-xl font-bold">Admin</h2>
+          <h2 className="text-xl font-bold">מערכת ניהול</h2>
           <p className="text-sm text-zinc-600">
-            ניהול האתר: בלוקים, ברכות, גלריה, תשלום ופרסומות.
+            טאבים: אירוע, ברכות, גלריות, עיצוב ותוכן.
           </p>
         </Card>
 
         <div className="mt-4">
-          <AdminApp />
+          <AdminDashboard tab={tab} />
         </div>
       </Container>
     </main>

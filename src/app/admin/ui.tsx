@@ -306,9 +306,15 @@ function parseLinesToArray(s: string) {
     .filter(Boolean)
 }
 
-export default function AdminApp() {
+export default function AdminApp({
+  initialTab,
+  initialPendingKind
+}: {
+  initialTab?: Tab
+  initialPendingKind?: 'blessing' | 'gallery'
+} = {}) {
   const [admin, setAdmin] = useState<Admin | null>(null)
-  const [tab, setTab] = useState<Tab>('login')
+  const [tab, setTab] = useState<Tab>(initialTab || 'login')
   const [err, setErr] = useState<string | null>(null)
 
   // login
@@ -385,7 +391,7 @@ export default function AdminApp() {
   const [ruleIsActive, setRuleIsActive] = useState(true)
 
   // moderation
-  const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>('blessing')
+  const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>(initialPendingKind || 'blessing')
   const [pending, setPending] = useState<any[]>([])
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingBlessingsCount, setPendingBlessingsCount] = useState(0)
@@ -438,7 +444,7 @@ export default function AdminApp() {
     try {
       const me = await jfetch('/api/admin/me', { method: 'GET', headers: {} as any })
       setAdmin(me.admin)
-      setTab('settings')
+      setTab((initialTab && initialTab !== 'login' ? initialTab : 'settings') as Tab)
       fetchTopCounts()
     } catch {
       setAdmin(null)
