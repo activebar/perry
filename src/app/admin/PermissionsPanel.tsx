@@ -187,8 +187,8 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
       setAccessErr(j?.error || 'שגיאה בשמירת הרשאות')
       return
     }
-    setAccessRows(j.rows || prev => prev)
-  }
+    setAccessRows(prev => (Array.isArray(j.rows) ? j.rows : prev))
+}
 
   function defaultAccessPermsForRole(role: string): PermissionMap {
     const r = (role || 'client').toLowerCase()
