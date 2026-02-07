@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { supabaseAnon, supabaseServiceRole } from './supabase'
+import { getEventAccessFromRequest } from './eventAccessSession'
 
 export const ADMIN_TOKEN_COOKIE = 'sb_admin_token'
 
@@ -11,11 +12,27 @@ export type AdminRow = {
   email: string
   role: AdminRole
   is_active: boolean
+  // when logged in via event access code
+  event_id?: string
+  access_id?: string
 }
 
 export async function getAdminFromRequest(req: NextRequest): Promise<AdminRow | null> {
   const token = req.cookies.get(ADMIN_TOKEN_COOKIE)?.value
-  if (!token) return null
+  if (!token) {
+    // fallback: event-access session
+    const ev = await getEventAccessFromRequest(req)
+    if (!ev) return null
+    return {
+      id: ev.access_id,
+      username: ev.name,
+      email: ev.email || '',
+      role: 'client',
+      is_active: true,
+      event_id: ev.event_id,
+      access_id: ev.access_id
+    }
+  }
 
   const sb = supabaseAnon()
   const { data: userRes, error: userErr } = await sb.auth.getUser(token)

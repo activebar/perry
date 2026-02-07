@@ -5,7 +5,7 @@ import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 import PermissionsPanel from './PermissionsPanel'
 
-const ACTIVE_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
+const DEFAULT_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
 
 async function fileToImage(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file)
@@ -241,7 +241,7 @@ function MediaBox({
 
 /* ===================== Admin App ===================== */
 
-type Admin = { role: 'master' | 'client'; username: string; email: string }
+type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
 type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
@@ -320,6 +320,9 @@ export default function AdminApp({
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [tab, setTab] = useState<Tab>(initialTab || 'login')
   const [err, setErr] = useState<string | null>(null)
+
+  // active event id: prefer event-access session, fallback to env
+  const activeEventId = (admin?.event_id || String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || DEFAULT_EVENT_ID).trim()
 
   // login
   const [username, setUsername] = useState('')
@@ -981,7 +984,7 @@ async function loadBlocks() {
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
 
             
-            <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || 'IDO'}</span></p>
+            <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{activeEventId || 'IDO'}</span></p>
 {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
               <div className="mt-1 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
@@ -1021,7 +1024,7 @@ async function loadBlocks() {
 
 {/* ===== PERMISSIONS ===== */}
 {tab === 'permissions' && admin?.role === 'master' && (
-  <PermissionsPanel eventId={ACTIVE_EVENT_ID} />
+  <PermissionsPanel eventId={activeEventId} />
 )}
 
       {/* ===== SETTINGS ===== */}

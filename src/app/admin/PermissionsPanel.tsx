@@ -3,6 +3,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input } from '@/components/ui'
 
+type Access = {
+  id: string
+  event_id: string
+  name: string
+  role: string
+  phone: string | null
+  email: string | null
+  is_active: boolean
+  session_version: number
+  last_sent_at: string | null
+  created_at: string
+}
+
 type PermissionMap = Record<string, boolean>
 
 type Row = {
@@ -46,6 +59,17 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
   const [email, setEmail] = useState('')
   const grouped = useMemo(() => groupPerms(), [])
 
+  // Event access codes (per-event)
+  const [accessRows, setAccessRows] = useState<Access[]>([])
+  const [accessLoading, setAccessLoading] = useState(false)
+  const [accessErr, setAccessErr] = useState<string | null>(null)
+
+  const [aName, setAName] = useState('')
+  const [aRole, setARole] = useState('client')
+  const [aPhone, setAPhone] = useState('')
+  const [aEmail, setAEmail] = useState('')
+  const [createMsg, setCreateMsg] = useState<string | null>(null)
+
   async function load() {
     setLoading(true)
     setErr(null)
@@ -61,11 +85,117 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
     setLoading(false)
   }
 
+  async function loadAccess() {
+    setAccessLoading(true)
+    setAccessErr(null)
+    const res = await fetch(`/api/admin/event-access?event_id=${encodeURIComponent(eventId)}`, { cache: 'no-store' })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !j?.ok) {
+      setAccessErr(j?.error || 'שגיאה בטעינת גישות')
+      setAccessRows([])
+      setAccessLoading(false)
+      return
+    }
+    setAccessRows(j.rows || [])
+    setAccessLoading(false)
+  }
+
   useEffect(() => {
     if (!eventId) return
     load()
+    loadAccess()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId])
+
+  async function createAccess(send: 'none' | 'email' | 'both') {
+    setAccessErr(null)
+    setCreateMsg(null)
+    const payload = {
+      event_id: eventId,
+      name: aName.trim(),
+      role: aRole.trim() || 'client',
+      phone: aPhone.trim() || null,
+      email: aEmail.trim().toLowerCase() || null,
+      send
+    }
+    const res = await fetch('/api/admin/event-access', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !j?.ok) {
+      setAccessErr(j?.error || 'שגיאה ביצירה')
+      return
+    }
+    setAccessRows(j.rows || [])
+    setAName('')
+    setARole('client')
+    setAPhone('')
+    setAEmail('')
+    if (send === 'none' && j.code) {
+      setCreateMsg(`✅ נוצרה גישה. קוד זמני: ${j.code}`)
+    } else {
+      setCreateMsg('✅ נוצרה גישה ונשלח מייל (אם המייל מוגדר והשליחה פעילה).')
+    }
+  }
+
+  async function rotateCode(row: Access, send: 'none' | 'email') {
+    setAccessErr(null)
+    const res = await fetch('/api/admin/event-access', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'rotate_code', id: row.id, event_id: eventId, send, email: row.email })
+    })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !j?.ok) {
+      setAccessErr(j?.error || 'שגיאה')
+      return
+    }
+    setAccessRows(j.rows || [])
+    if (send === 'none' && j.code) setCreateMsg(`✅ קוד חדש: ${j.code}`)
+    else setCreateMsg('✅ נוצר קוד חדש ונשלח מייל (אם פעיל).')
+  }
+
+  async function toggleAccessActive(row: Access) {
+    setAccessErr(null)
+    const res = await fetch('/api/admin/event-access', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'toggle_active', id: row.id, event_id: eventId, is_active: !row.is_active })
+    })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !j?.ok) {
+      setAccessErr(j?.error || 'שגיאה')
+      return
+    }
+    await loadAccess()
+  }
+
+  async function logoutAll(row: Access) {
+    if (!confirm('לנתק את כל המכשירים של הגישה הזו?')) return
+    setAccessErr(null)
+    const res = await fetch('/api/admin/event-access', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'logout_all', id: row.id, event_id: eventId })
+    })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !j?.ok) {
+      setAccessErr(j?.error || 'שגיאה')
+      return
+    }
+    setAccessRows(j.rows || [])
+    setCreateMsg('✅ נותקו כל המכשירים (המשתמש יצטרך להתחבר מחדש).')
+  }
+
+  function waLink(row: Access) {
+    const phone = (row.phone || '').replace(/[^0-9]/g, '')
+    if (!phone) return ''
+    const url = `${location.origin}/admin/login?event=${encodeURIComponent(eventId)}`
+    const msg = `פרטי גישה לניהול האירוע\n\nאירוע: ${eventId}\nקישור כניסה: ${url}\n\n(אם שכחת קוד: בעמוד יש אפשרות "שכחתי קוד" למייל)`
+    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+  }
 
   async function addAdmin() {
     const e = email.trim().toLowerCase()
@@ -83,6 +213,20 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
     }
     setEmail('')
     await load()
+  }
+
+  async function deleteAccess(row: Access) {
+    if (!confirm('למחוק את הגישה?')) return
+    setAccessErr(null)
+    const res = await fetch(`/api/admin/event-access?event_id=${encodeURIComponent(eventId)}&id=${encodeURIComponent(row.id)}`, {
+      method: 'DELETE'
+    })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !j?.ok) {
+      setAccessErr(j?.error || 'שגיאה במחיקה')
+      return
+    }
+    setAccessRows(j.rows || [])
   }
 
   function togglePerm(row: Row, key: string) {
@@ -154,6 +298,89 @@ export default function PermissionsPanel({ eventId }: { eventId: string }) {
         {err ? (
           <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>
         ) : null}
+      </Card>
+
+      <Card>
+        <h3 className="text-lg font-bold">גישות מהירות לאירוע (קוד גישה)</h3>
+        <p className="text-sm text-zinc-600">
+          יצירת גישות ללקוח/צלם/שותף עם קוד גישה. ניתן לשלוח במייל (Resend) או לשתף בווטסאפ.
+          קישור כניסה: <span className="font-mono" dir="ltr">/admin/login?event={eventId}</span>
+        </p>
+
+        <div className="mt-4 grid gap-2 md:grid-cols-2">
+          <Input placeholder="שם" value={aName} onChange={e => setAName(e.target.value)} />
+          <Input placeholder="תפקיד (client/photographer/partner...)" value={aRole} onChange={e => setARole(e.target.value)} />
+          <Input placeholder="טלפון (לוואטסאפ)" value={aPhone} onChange={e => setAPhone(e.target.value)} />
+          <Input placeholder="מייל (לשליחה)" value={aEmail} onChange={e => setAEmail(e.target.value)} />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button onClick={() => createAccess('none')} disabled={!aName.trim()}>
+            צור קוד והצג לי
+          </Button>
+          <Button variant="ghost" onClick={() => createAccess('email')} disabled={!aName.trim() || !aEmail.trim()}>
+            צור ושלח במייל
+          </Button>
+        </div>
+
+        {createMsg ? <div className="mt-3 text-sm text-green-700">{createMsg}</div> : null}
+        {accessErr ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{accessErr}</div> : null}
+
+        <div className="mt-4 flex items-center justify-between">
+          <h4 className="font-bold">רשימת גישות</h4>
+          <div className="text-xs text-zinc-500">{accessRows.length} גישות</div>
+        </div>
+
+        {accessLoading ? (
+          <div className="mt-3 text-sm text-zinc-600">טוען...</div>
+        ) : accessRows.length === 0 ? (
+          <div className="mt-3 text-sm text-zinc-600">אין גישות עדיין.</div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {accessRows.map(r => (
+              <div key={r.id} className="rounded-2xl border p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="font-medium">{r.name} <span className="text-xs text-zinc-500">({r.role})</span></div>
+                    <div className="text-xs text-zinc-500" dir="ltr">
+                      {r.email || '—'} {r.phone ? ` • ${r.phone}` : ''}
+                    </div>
+                    <div className="text-xs text-zinc-400">id: <span className="font-mono">{r.id}</span> • ver: {r.session_version}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => toggleAccessActive(r)}
+                      className={'rounded-xl px-3 py-1.5 text-xs ' + (r.is_active ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-800')}
+                    >
+                      {r.is_active ? 'פעיל' : 'מושבת'}
+                    </button>
+                    <button onClick={() => rotateCode(r, 'none')} className="rounded-xl bg-zinc-100 px-3 py-1.5 text-xs hover:bg-zinc-200">
+                      קוד חדש
+                    </button>
+                    <button
+                      onClick={() => rotateCode(r, 'email')}
+                      disabled={!r.email}
+                      className="rounded-xl bg-zinc-100 px-3 py-1.5 text-xs hover:bg-zinc-200 disabled:opacity-50"
+                    >
+                      קוד חדש במייל
+                    </button>
+                    <button onClick={() => logoutAll(r)} className="rounded-xl bg-amber-50 px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-100">
+                      נתק מכשירים
+                    </button>
+                    {r.phone ? (
+                      <a href={waLink(r)} target="_blank" rel="noreferrer" className="rounded-xl bg-green-50 px-3 py-1.5 text-xs text-green-700 hover:bg-green-100">
+                        וואטסאפ
+                      </a>
+                    ) : null}
+                    <button onClick={() => deleteAccess(r)} className="rounded-xl bg-red-50 px-3 py-1.5 text-xs text-red-700 hover:bg-red-100">
+                      מחק
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card>
