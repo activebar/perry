@@ -52,6 +52,15 @@ npm run dev
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `EVENT_SLUG` (למשל `ido`)
 
+גישה מהירה (קוד גישה לאירוע) — V10.7:
+- `EVENT_ACCESS_SECRET` (מחרוזת ארוכה, חותמת Cookie)
+- `EVENT_ACCESS_PEPPER` (מחרוזת... )
+
+שליחת מיילים (Resend):
+- `RESEND_API_KEY`
+- `MAIL_FROM` (למשל `ActiveBar <mail@activebar.co.il>`)
+- `APP_URL` (למשל `https://site.activebar.co.il`)
+
 Google Drive Sync (Service Account):
 - `GDRIVE_SERVICE_ACCOUNT_JSON` (כל ה‑JSON בשורה אחת)
 - `GDRIVE_ROOT_FOLDER_ID` (תיקייה משותפת לשירות)
