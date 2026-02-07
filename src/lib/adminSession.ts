@@ -15,6 +15,8 @@ export type AdminRow = {
   // when logged in via event access code
   event_id?: string
   access_id?: string
+  // permissions map (mainly for event-access code logins)
+  permissions?: Record<string, boolean>
 }
 
 export async function getAdminFromRequest(req: NextRequest): Promise<AdminRow | null> {
