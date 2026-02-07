@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 
+const ACTIVE_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
+
 async function fileToImage(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file)
   try {
@@ -164,6 +166,8 @@ function LinkPreview({
 
   return (
     <div className="mt-2">
+
+
       <div className="flex justify-center">
         <a
           href={d.url}
@@ -237,13 +241,12 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'content_rules' | 'ads' | 'admin_gallery' | 'diag'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
   blocks: 'בלוקים',
   moderation: 'אישור תכנים',
-  content_rules: 'ניהול תוכן',
   ads: 'פרסומות',
   admin_gallery: 'גלריית מנהל',
   diag: 'דיאגנוסטיקה',
@@ -321,110 +324,7 @@ export default function AdminApp() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
 
-  
-  // content rules (word filtering)
-  type MatchType = 'contains' | 'exact' | 'whole_word'
-  type RuleType = 'block' | 'allow'
-  type ContentRuleRow = {
-    id: string
-    rule_type: RuleType
-    match_type: MatchType
-    phrase: string
-    is_active: boolean
-    note?: string | null
-    created_at?: string
-    updated_at?: string
-  }
-
-  const [contentRules, setContentRules] = useState<ContentRuleRow[]>([])
-  const [contentRulesLoading, setContentRulesLoading] = useState(false)
-  const [contentRulesErr, setContentRulesErr] = useState<string | null>(null)
-  const [crEditId, setCrEditId] = useState<string | null>(null)
-  const [crRuleType, setCrRuleType] = useState<RuleType>('block')
-  const [crMatchType, setCrMatchType] = useState<MatchType>('contains')
-  const [crPhrase, setCrPhrase] = useState('')
-  const [crActive, setCrActive] = useState(true)
-  const [crNote, setCrNote] = useState('')
-
-  function resetContentRuleForm() {
-    setCrEditId(null)
-    setCrRuleType('block')
-    setCrMatchType('contains')
-    setCrPhrase('')
-    setCrActive(true)
-    setCrNote('')
-  }
-
-  async function loadContentRules() {
-    setContentRulesErr(null)
-    setContentRulesLoading(true)
-    try {
-      const res = await jfetch('/api/admin/content-rules', { method: 'GET' })
-      const rows = Array.isArray(res?.rules) ? res.rules : []
-      setContentRules(rows)
-    } catch (e: any) {
-      setContentRulesErr(e?.message || 'שגיאה בטעינת חוקים')
-    } finally {
-      setContentRulesLoading(false)
-    }
-  }
-
-  function startEditRule(r: ContentRuleRow) {
-    setCrEditId(r.id)
-    setCrRuleType(r.rule_type)
-    setCrMatchType(r.match_type)
-    setCrPhrase(r.phrase || '')
-    setCrActive(!!r.is_active)
-    setCrNote((r.note as any) || '')
-    setTab('content_rules')
-  }
-
-  async function saveContentRule() {
-    setContentRulesErr(null)
-    const phrase = (crPhrase || '').trim()
-    if (!phrase) {
-      setContentRulesErr('חובה להזין מילה/ביטוי')
-      return
-    }
-
-    const payload = {
-      rule_type: crRuleType,
-      match_type: crMatchType,
-      phrase,
-      is_active: crActive,
-      note: (crNote || '').trim() || null,
-    }
-
-    setContentRulesLoading(true)
-    try {
-      if (crEditId) {
-        await jfetch('/api/admin/content-rules', { method: 'PATCH', body: JSON.stringify({ id: crEditId, ...payload }) })
-      } else {
-        await jfetch('/api/admin/content-rules', { method: 'POST', body: JSON.stringify(payload) })
-      }
-      resetContentRuleForm()
-      await loadContentRules()
-    } catch (e: any) {
-      setContentRulesErr(e?.message || 'שגיאה בשמירה')
-    } finally {
-      setContentRulesLoading(false)
-    }
-  }
-
-  async function deleteContentRule(id: string) {
-    if (!confirm('למחוק את החוק?')) return
-    setContentRulesLoading(true)
-    setContentRulesErr(null)
-    try {
-      await jfetch(`/api/admin/content-rules?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-      await loadContentRules()
-    } catch (e: any) {
-      setContentRulesErr(e?.message || 'שגיאה במחיקה')
-    } finally {
-      setContentRulesLoading(false)
-    }
-  }
-// OG default image uploader (1200x630)
+  // OG default image uploader (1200x630)
   const [ogFile, setOgFile] = useState<File | null>(null)
   const [ogPreview, setOgPreview] = useState<string>('')
   const [ogFocus, setOgFocus] = useState({ x: 0.5, y: 0.5 })
@@ -458,6 +358,11 @@ export default function AdminApp() {
 
   // blocks
   const [blocks, setBlocks] = useState<any[]>([])
+
+  // content rules (allow/block)
+  const [contentRules, setContentRules] = useState<any[]>([])
+  const [rulesMsg, setRulesMsg] = useState<string | null>(null)
+  const [newRule, setNewRule] = useState<any>({ rule_type: 'block', scope: 'event', match_type: 'contains', expression: '', note: '', is_active: true })
 
   // moderation
   const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>('blessing')
@@ -531,18 +436,10 @@ export default function AdminApp() {
     const t = setInterval(() => fetchTopCounts(), 15000)
     return () => clearInterval(t)
   }, [admin])
-  useEffect(() => {
-    if (!admin) return
-    if (tab === 'content_rules') {
-      loadContentRules()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [admin, tab])
-
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    return ['settings', 'blocks', 'moderation', 'content_rules', 'ads', 'admin_gallery', 'diag'] as Tab[]
+    return ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag'] as Tab[]
   }, [admin])
 
   async function login() {
@@ -573,6 +470,54 @@ export default function AdminApp() {
     const s = await jfetch('/api/admin/settings', { method: 'GET', headers: {} as any })
     setSettings(s.settings)
     setStartAtLocal(isoToLocalInput(s.settings?.start_at))
+  }
+
+  async function loadContentRules() {
+    const r = await jfetch('/api/admin/content-rules', { method: 'GET', headers: {} as any })
+    setContentRules(Array.isArray(r.rules) ? r.rules : [])
+  }
+
+  async function createContentRule() {
+    setRulesMsg(null)
+    try {
+      const payload = { ...newRule, expression: String(newRule.expression || '').trim() }
+      if (!payload.expression) {
+        setRulesMsg('הוסף מילה/ביטוי')
+        return
+      }
+      const res = await jfetch('/api/admin/content-rules', { method: 'POST', body: JSON.stringify(payload) })
+      setContentRules(prev => [res.rule, ...prev])
+      setNewRule({ ...newRule, expression: '', note: '' })
+      setRulesMsg('✅ נוסף')
+      setTimeout(() => setRulesMsg(null), 2000)
+    } catch (e: any) {
+      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
+    }
+  }
+
+  async function updateContentRule(patch: any) {
+    setRulesMsg(null)
+    try {
+      const res = await jfetch('/api/admin/content-rules', { method: 'PUT', body: JSON.stringify(patch) })
+      setContentRules(prev => prev.map(r => (r.id === res.rule.id ? res.rule : r)))
+      setRulesMsg('✅ עודכן')
+      setTimeout(() => setRulesMsg(null), 1500)
+    } catch (e: any) {
+      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
+    }
+  }
+
+  async function deleteContentRule(id: number) {
+    if (!confirm('למחוק את החוק?')) return
+    setRulesMsg(null)
+    try {
+      await jfetch(`/api/admin/content-rules?id=${id}`, { method: 'DELETE', headers: {} as any })
+      setContentRules(prev => prev.filter(r => r.id !== id))
+      setRulesMsg('✅ נמחק')
+      setTimeout(() => setRulesMsg(null), 1500)
+    } catch (e: any) {
+      setRulesMsg(friendlyError(e?.message || 'שגיאה'))
+    }
   }
 
   async function saveSettings(patch?: any) {
@@ -862,7 +807,10 @@ async function loadBlocks() {
 
   useEffect(() => {
     if (!admin) return
-    if (tab === 'settings') loadSettings()
+    if (tab === 'settings') {
+      loadSettings()
+      loadContentRules()
+    }
     if (tab === 'blocks') loadBlocks()
     if (tab === 'moderation') {
       loadPending()
@@ -938,7 +886,9 @@ async function loadBlocks() {
             <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
 
-            {(pendingBlessingsCount + pendingPhotosCount) > 0 && (
+            
+            <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || 'IDO'}</span></p>
+{(pendingBlessingsCount + pendingPhotosCount) > 0 && (
               <div className="mt-1 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {pendingPhotosCount}</span>
@@ -949,6 +899,15 @@ async function loadBlocks() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setTab('moderation' as any)
+                loadPending()
+              }}
+            >
+              הצג רק ממתינות {pendingCount > 0 ? `(${pendingCount})` : '' }
+            </Button>
             {tabs.map(t => (
               <Button key={t} variant={tab === t ? 'primary' : 'ghost'} onClick={() => setTab(t)}>
                 {t === 'moderation' && pendingCount > 0 ? `${TAB_LABEL[t]} (${pendingCount})` : (TAB_LABEL[t] ?? t)}
@@ -963,6 +922,18 @@ async function loadBlocks() {
       {tab === 'settings' && settings && (
         <Card>
           <h3 className="font-semibold">הגדרות</h3>
+
+          <div className="mt-2 grid gap-2" dir="rtl">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-right text-xs text-zinc-600">
+                {savedMsg ? <span className="text-green-700">{savedMsg}</span> : null}
+                {!savedMsg && err ? <span className="text-red-600">{err}</span> : null}
+              </div>
+              <Button onClick={() => saveSettings()} disabled={saving}>
+                {saving ? 'שומר...' : 'שמור'}
+              </Button>
+            </div>
+          </div>
 
           <div className="mt-3 grid gap-3">
             {/* כללי */}
@@ -1171,6 +1142,79 @@ async function loadBlocks() {
                 onChange={e => setSettings({ ...settings, blessings_media_size: Number(e.target.value) })}
                 placeholder="למשל 96"
               />
+
+              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                <input
+                  type="checkbox"
+                  checked={Boolean((settings as any).require_approval)}
+                  onChange={e => setSettings({ ...(settings as any), require_approval: e.target.checked })}
+                />
+                כל ברכה דורשת אישור מנהל גם לפני האירוע (require_approval)
+              </label>
+
+              {(() => {
+                try {
+                  const lockDaysRaw = Number((settings as any).approval_lock_after_days)
+                  const lockDays = Number.isFinite(lockDaysRaw) ? lockDaysRaw : 7
+                  const startAtIso = (settings as any).start_at as string | undefined
+                  const openedAtIso = (settings as any).approval_opened_at as string | undefined
+                  const startAt = startAtIso ? new Date(startAtIso) : null
+                  const openedAt = openedAtIso ? new Date(openedAtIso) : null
+                  const now = new Date()
+
+                  const startOfUtcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
+                  const addDaysUtc = (d: Date, days: number) => new Date(d.getTime() + days * 24 * 60 * 60 * 1000)
+
+                  const anchorAt = (startAt && openedAt && openedAt < startAt) ? startAt : (openedAt || startAt)
+                  const lockAt =
+                    anchorAt && Number.isFinite(lockDays) && lockDays >= 0
+                      ? addDaysUtc(startOfUtcDay(anchorAt), lockDays + 1)
+                      : null
+
+                  const isAfterLockWindow = lockAt ? now >= lockAt : false
+                  const effectiveApproval = Boolean((settings as any).require_approval) || isAfterLockWindow
+
+                  return (
+                    <div className="mt-1 grid gap-1" dir="rtl">
+                      <label className="text-xs flex items-center gap-2 flex-row-reverse justify-end text-right text-zinc-600">
+                        <input type="checkbox" checked={effectiveApproval} readOnly />
+                        מצב אישור בפועל כרגע
+                      </label>
+                      {lockAt && (
+                        <p className="text-xs text-zinc-500 text-right">
+                          נעילה אוטומטית לפי approval_lock_after_days ב {lockAt.toLocaleString('he-IL')}
+                        </p>
+                      )}
+                    </div>
+                  )
+                } catch {
+                  return null
+                }
+              })()}
+
+              <p className="text-xs text-zinc-500 text-right">
+                כשמכבים את האפשרות הזו, הברכות מתפרסמות אוטומטית עד שיחלפו הימים שמוגדרים בשדה למטה.
+                ספירת הימים מתחילה מיום האירוע. אם פותחים שוב, הספירה מתחילה מרגע הפתיחה.
+              </p>
+
+              <label className="text-xs text-zinc-500 text-right">אישור מנהל אוטומטי אחרי כמה ימים מיום האירוע (approval_lock_after_days)</label>
+              <Input
+                className="text-right"
+                dir="rtl"
+                value={String((settings as any).approval_lock_after_days ?? 7)}
+                onChange={e => setSettings({ ...(settings as any), approval_lock_after_days: Number(e.target.value) })}
+                placeholder="למשל 2 לבר מצווה, 7 לחתונה"
+              />
+
+              <label className="text-xs text-zinc-500 text-right">מקסימום שורות לברכה לפני שליחה לאישור מנהל (max_blessing_lines)</label>
+              <Input
+                className="text-right"
+                dir="rtl"
+                value={String((settings as any).max_blessing_lines ?? 50)}
+                onChange={e => setSettings({ ...(settings as any), max_blessing_lines: Number(e.target.value) })}
+                placeholder="למשל 50"
+              />
+
 
               <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
                 <input
@@ -1455,6 +1499,102 @@ async function loadBlocks() {
               ) : null}
             </div>
 
+            {/* ניהול תוכן (חסימות/חריגים) */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+              <p className="text-sm font-medium text-right">ניהול תוכן – חסימות וחריגים</p>
+              <p className="text-xs text-zinc-500 text-right">
+                החוקים חלים על טקסט הברכה, שם הכותב, קישור ומדיה. חסימה תמיד תשלח לאישור מנהל. חריג יכול למנוע חסימת־שווא במודרציה.
+              </p>
+
+              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <select
+                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                    value={newRule.rule_type}
+                    onChange={e => setNewRule({ ...newRule, rule_type: e.target.value })}
+                  >
+                    <option value="block">חסימה</option>
+                    <option value="allow">חריג</option>
+                  </select>
+
+                  <select
+                    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+                    value={newRule.match_type}
+                    onChange={e => setNewRule({ ...newRule, match_type: e.target.value })}
+                  >
+                    <option value="contains">מכיל</option>
+                    <option value="exact">בדיוק</option>
+                    <option value="word">מילה שלמה</option>
+                    <option value="word">מילה שלמה</option>
+                  </select>
+
+                  <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                    <input
+                      type="checkbox"
+                      checked={newRule.is_active !== false}
+                      onChange={e => setNewRule({ ...newRule, is_active: e.target.checked })}
+                    />
+                    פעיל
+                  </label>
+                </div>
+
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(newRule.expression ?? '')}
+                  onChange={e => setNewRule({ ...newRule, expression: e.target.value })}
+                  placeholder="מילה/ביטוי (למשל: למות עליך)"
+                />
+
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String(newRule.note ?? '')}
+                  onChange={e => setNewRule({ ...newRule, note: e.target.value })}
+                  placeholder="הערה (אופציונלי)"
+                />
+
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-right text-xs text-zinc-600">{rulesMsg ? rulesMsg : null}</div>
+                  <Button onClick={createContentRule}>
+                    הוסף
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                {contentRules.length === 0 ? (
+                  <p className="text-xs text-zinc-500 text-right">אין חוקים עדיין.</p>
+                ) : (
+                  contentRules.map(r => (
+                    <div key={r.id} className="rounded-xl border border-zinc-200 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-right">
+                          <p className="text-sm font-medium">
+                            {r.rule_type === 'block' ? 'חסימה' : 'חריג'} • {r.match_type === 'exact' ? 'בדיוק' : r.match_type === 'word' ? 'מילה שלמה' : 'מכיל'}
+                          </p>
+                          <p className="text-sm" dir="rtl">{r.expression}</p>
+                          {r.note ? <p className="text-xs text-zinc-500">{r.note}</p> : null}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                            <input
+                              type="checkbox"
+                              checked={r.is_active !== false}
+                              onChange={e => updateContentRule({ ...r, is_active: e.target.checked })}
+                            />
+                            פעיל
+                          </label>
+                          <Button variant="ghost" onClick={() => deleteContentRule(Number(r.id))}>מחק</Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
             {/* פוטר */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">פוטר</p>
@@ -1696,109 +1836,7 @@ async function loadBlocks() {
       )}
 
       {/* ===== ADS ===== */}
-      
-      {/* ===== CONTENT RULES ===== */}
-      {tab === 'content_rules' && (
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold">ניהול תוכן – חסימות וחריגים</h3>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={resetContentRuleForm}>חדש</Button>
-              <Button variant="ghost" onClick={loadContentRules}>רענן</Button>
-            </div>
-          </div>
-
-          <p className="mt-1 text-xs text-zinc-600">
-            חסימה = מעביר לאישור מנהל. חריג = מאפשר גם אם נחסם (למשל &quot;למות עליך&quot;).
-          </p>
-
-          {contentRulesErr && <p className="mt-2 text-sm text-red-600">{contentRulesErr}</p>}
-
-          <div className="mt-4 grid gap-2 rounded-xl border bg-white p-3">
-            <div className="grid gap-2 md:grid-cols-5">
-              <div className="md:col-span-1">
-                <label className="text-xs text-zinc-600">סוג</label>
-                <select className="mt-1 w-full rounded-lg border px-2 py-2" value={crRuleType} onChange={e => setCrRuleType(e.target.value as any)}>
-                  <option value="block">חסימה</option>
-                  <option value="allow">חריג</option>
-                </select>
-              </div>
-
-              <div className="md:col-span-1">
-                <label className="text-xs text-zinc-600">התאמה</label>
-                <select className="mt-1 w-full rounded-lg border px-2 py-2" value={crMatchType} onChange={e => setCrMatchType(e.target.value as any)}>
-                  <option value="contains">מכיל</option>
-                  <option value="exact">בדיוק</option>
-                  <option value="whole_word">מילה שלמה</option>
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="text-xs text-zinc-600">מילה/ביטוי</label>
-                <input className="mt-1 w-full rounded-lg border px-2 py-2" value={crPhrase} onChange={e => setCrPhrase(e.target.value)} placeholder="למשל: פרי / למות עליך" />
-              </div>
-
-              <div className="md:col-span-1 flex items-end gap-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={crActive} onChange={e => setCrActive(e.target.checked)} />
-                  פעיל
-                </label>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs text-zinc-600">הערה (אופציונלי)</label>
-              <input className="mt-1 w-full rounded-lg border px-2 py-2" value={crNote} onChange={e => setCrNote(e.target.value)} placeholder="למשל: רק לאירוע הזה" />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={saveContentRule} disabled={contentRulesLoading}>
-                {contentRulesLoading ? 'שומר...' : (crEditId ? 'שמור שינויים' : 'הוסף חוק')}
-              </Button>
-              {crEditId && <Button variant="ghost" onClick={resetContentRuleForm}>בטל עריכה</Button>}
-            </div>
-          </div>
-
-          <div className="mt-4 overflow-auto rounded-xl border">
-            <table className="w-full text-sm" dir="rtl">
-              <thead className="bg-zinc-50 text-zinc-600">
-                <tr>
-                  <th className="p-2 text-right">סוג</th>
-                  <th className="p-2 text-right">התאמה</th>
-                  <th className="p-2 text-right">ביטוי</th>
-                  <th className="p-2 text-right">פעיל</th>
-                  <th className="p-2 text-right">הערה</th>
-                  <th className="p-2 text-right">פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contentRulesLoading && contentRules.length === 0 ? (
-                  <tr><td className="p-3 text-zinc-500" colSpan={6}>טוען...</td></tr>
-                ) : contentRules.length === 0 ? (
-                  <tr><td className="p-3 text-zinc-500" colSpan={6}>אין חוקים</td></tr>
-                ) : contentRules.map(r => (
-                  <tr key={r.id} className="border-t">
-                    <td className="p-2">{r.rule_type === 'block' ? 'חסימה' : 'חריג'}</td>
-                    <td className="p-2">
-                      {r.match_type === 'contains' ? 'מכיל' : r.match_type === 'exact' ? 'בדיוק' : 'מילה שלמה'}
-                    </td>
-                    <td className="p-2">{r.phrase}</td>
-                    <td className="p-2">{r.is_active ? 'כן' : 'לא'}</td>
-                    <td className="p-2">{r.note || ''}</td>
-                    <td className="p-2">
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="ghost" onClick={() => startEditRule(r)}>עריכה</Button>
-                        <Button variant="ghost" onClick={() => deleteContentRule(r.id)}>מחיקה</Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-{tab === 'ads' && (
+      {tab === 'ads' && (
         <Card>
           <h3 className="font-semibold">פרסומות</h3>
 
