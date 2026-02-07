@@ -17,36 +17,32 @@ export async function POST(req: Request) {
     if (!ALLOWED_KINDS.has(kind)) return NextResponse.json({ error: 'bad kind' }, { status: 400 })
 
     // Content rules (block/allow) – apply to public submissions
-    // We only hard-block when a matching rule_type === 'block' is found.
-    if (kind === 'blessing' || kind === 'gallery') {
-      const m = await matchContentRules({
-        author_name: body.author_name || null,
-        text: body.text || null,
-        link_url: body.link_url || null,
-        media_url: body.media_url || null,
-        video_url: body.video_url || null
-      })
-      if (m.matched && m.rule?.rule_type === 'block') {
-        return NextResponse.json(
-          {
-            error: 'התוכן נחסם לפי כללי סינון.',
-            blocked: true,
-            rule_id: m.rule.id,
-            matched_on: m.matched_on
-          },
-          { status: 400 }
-        )
-      }
-    }
-
-    const device_id = cookies().get('device_id')?.value || null
+// Behavior: allow rules override block rules.
+// If a block rule matches (and no allow matched), we DO NOT reject –
+// we send the post to 'pending' for admin approval.
+let moderation: any = null
+let matchedBlock = false
+if (kind === 'blessing' || kind === 'gallery') {
+  const m = await matchContentRules({
+    author_name: body.author_name || null,
+    text: body.text || null,
+    link_url: body.link_url || null,
+    media_url: body.media_url || null,
+    video_url: body.video_url || null
+  })
+  if (m.matched && m.rule?.rule_type === 'block') {
+    matchedBlock = true
+    moderation = { source: 'content_rules', action: 'pending', rule_id: m.rule.id, matched_on: m.matched_on }
+  }
+}
+const device_id = cookies().get('device_id')?.value || null
     const srv = supabaseServiceRole()
 
     // anti-spam (public only): limit PER KIND (so gallery doesn't block blessings)
     // defaults: 10/hour per device for blessings, 10/hour for gallery
     if (device_id && (kind === 'gallery' || kind === 'blessing')) {
       const { since } = withinOneHour(new Date().toISOString())
-      const limit = 50
+      const limit = 10
       const { count, error: cerr } = await srv
         .from('posts')
         .select('id', { count: 'exact', head: true })
@@ -66,8 +62,8 @@ export async function POST(req: Request) {
       .single()
     if (serr) throw serr
 
-    const status =
-      kind === 'gallery_admin' ? 'approved' : (settings.require_approval ? 'pending' : 'approved')
+    const baseStatus = kind === 'gallery_admin' ? 'approved' : (settings.require_approval ? 'pending' : 'approved')
+    const status = matchedBlock ? 'pending' : baseStatus
 
     const insert = {
       kind,
@@ -93,7 +89,7 @@ export async function POST(req: Request) {
     }
 
     const post = { ...data, reaction_counts: { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }, my_reactions: [] }
-    return NextResponse.json({ ok: true, status, post })
+    return NextResponse.json({ ok: true, status, post, moderation })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
@@ -132,6 +128,7 @@ export async function PUT(req: Request) {
     if ('video_url' in body) patch.video_url = body.video_url || null
 
     // Re-check content rules on edit (only for public kinds)
+    let moderation: any = null
     if (post.kind === 'blessing' || post.kind === 'gallery') {
       const m = await matchContentRules({
         author_name: ('author_name' in patch ? patch.author_name : post.author_name) || null,
@@ -141,19 +138,13 @@ export async function PUT(req: Request) {
         video_url: ('video_url' in patch ? patch.video_url : post.video_url) || null
       })
       if (m.matched && m.rule?.rule_type === 'block') {
-        return NextResponse.json(
-          {
-            error: 'התוכן נחסם לפי כללי סינון.',
-            blocked: true,
-            rule_id: m.rule.id,
-            matched_on: m.matched_on
-          },
-          { status: 400 }
-        )
+        // Do not reject: send to pending for admin approval
+        patch.status = 'pending'
+        moderation = { source: 'content_rules', action: 'pending', rule_id: m.rule.id, matched_on: m.matched_on }
       }
     }
 
-    const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
+const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
     if (error) throw error
 
     // attach media_items if a new media_path is provided
@@ -165,7 +156,7 @@ export async function PUT(req: Request) {
         .is('post_id', null)
     }
 
-    return NextResponse.json({ ok: true, post: data })
+    return NextResponse.json({ ok: true, post: data, moderation })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }

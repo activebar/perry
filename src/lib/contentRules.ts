@@ -87,17 +87,8 @@ export async function matchContentRules(input: {
     ['video_url', input.video_url || '']
   ]
 
-  // 1) Block rules first
-  for (const r of rules) {
-    if (r.rule_type !== 'block') continue
-    for (const [k, v] of fields) {
-      if (ruleMatches(r, v)) {
-        return { matched: true, rule: r, matched_on: k, matched_value: v } as ContentRuleMatch
-      }
-    }
-  }
-
-  // 2) Allow rules (used to soften moderation in borderline cases)
+    // 1) Allow rules (exceptions) FIRST.
+  // If an allow rule matches, it overrides any block rule.
   for (const r of rules) {
     if (r.rule_type !== 'allow') continue
     for (const [k, v] of fields) {
@@ -107,5 +98,16 @@ export async function matchContentRules(input: {
     }
   }
 
+  // 2) Block rules (send to moderation / pending)
+  for (const r of rules) {
+    if (r.rule_type !== 'block') continue
+    for (const [k, v] of fields) {
+      if (ruleMatches(r, v)) {
+        return { matched: true, rule: r, matched_on: k, matched_value: v } as ContentRuleMatch
+      }
+    }
+  }
+
   return { matched: false } as ContentRuleMatch
 }
+
