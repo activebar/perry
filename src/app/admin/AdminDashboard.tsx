@@ -7,24 +7,37 @@ import type { AdminMainTab } from './page'
 
 type InnerTab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
-function classNames(...xs: Array<string | false | null | undefined>) {
+function cx(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(' ')
 }
 
-export default function AdminDashboard({ tab }: { tab: AdminMainTab }) {
-  
-const tabs = useMemo(
-  () =>
-    [
-      { key: 'event', label: 'אירוע' },
-      { key: 'blessings', label: 'ברכות' },
-      { key: 'galleries', label: 'גלריות' },
-      { key: 'design', label: 'עיצוב ותוכן' },
-      { key: 'permissions', label: 'הרשאות' }
-    ] as const,
-  []
-)
+type SettingsSub =
+  | 'general'
+  | 'hero'
+  | 'rotate'
+  | 'footer'
+  | 'blessings'
+  | 'content'
+  | 'qr'
 
+export default function AdminDashboard({
+  tab,
+  sub
+}: {
+  tab: AdminMainTab
+  sub?: string
+}) {
+  const tabs = useMemo(
+    () =>
+      [
+        { key: 'event', label: 'אירוע' },
+        { key: 'blessings', label: 'ברכות' },
+        { key: 'galleries', label: 'גלריות' },
+        { key: 'design', label: 'עיצוב ותוכן' },
+        { key: 'permissions', label: 'הרשאות' }
+      ] as const,
+    []
+  )
 
   const subTabs = useMemo(() => {
     if (tab === 'event') {
@@ -43,66 +56,53 @@ const tabs = useMemo(
         { key: 'moderation', label: 'אישור תכנים' }
       ] as const
     }
-    // גלריות – בהמשך: לכל גלריה תת-טאבים. כרגע נשאר מסך גלריה קיים.
     return [] as const
   }, [tab])
 
   const activeSub = useMemo(() => {
-    const def = tab === 'event' ? 'general' : tab === 'blessings' ? 'blessings' : ''
-    const allowed = new Set((subTabs as any[]).map(t => t.key))
+    if (!subTabs.length) return undefined
+    const allowed = new Set((subTabs as unknown as Array<{ key: string }>).map(s => s.key))
+    const def = tab === 'event' ? 'general' : tab === 'blessings' ? 'blessings' : undefined
     if (sub && allowed.has(sub)) return sub
     return def
-  }, [tab, sub, subTabs])
+  }, [sub, subTabs, tab])
 
   const initial = useMemo(() => {
-    // מיפוי “טאב עליון” + תת-טאב → טאב פנימי ב-AdminApp
     let initialTab: InnerTab = 'settings'
     let pendingKind: 'blessing' | 'gallery' = 'blessing'
-    let initialSettingsSub:
-      | 'general'
-      | 'hero'
-      | 'rotate'
-      | 'footer'
-      | 'blessings'
-      | 'content'
-      | 'qr'
-      | undefined
+    let initialSettingsSubTab: SettingsSub | undefined = undefined
 
     if (tab === 'event') {
       initialTab = 'settings'
-      pendingKind = 'blessing'
-      initialSettingsSub = (activeSub as any) || 'general'
+      initialSettingsSubTab = (activeSub as SettingsSub) || 'general'
     } else if (tab === 'blessings') {
       pendingKind = 'blessing'
       if (activeSub === 'moderation') {
         initialTab = 'moderation'
       } else {
         initialTab = 'settings'
-        initialSettingsSub = (activeSub as any) || 'blessings'
+        initialSettingsSubTab = (activeSub as SettingsSub) || 'blessings'
       }
     } else if (tab === 'galleries') {
       initialTab = 'admin_gallery'
       pendingKind = 'gallery'
     } else if (tab === 'design') {
       initialTab = 'blocks'
-      pendingKind = 'blessing'
     } else if (tab === 'permissions') {
       initialTab = 'permissions'
-      pendingKind = 'blessing'
     }
 
-    return { initialTab, pendingKind, initialSettingsSub }
+    return { initialTab, pendingKind, initialSettingsSubTab }
   }, [tab, activeSub])
 
   return (
     <div>
-      {/* טאבים עליונים */}
       <div className="flex flex-wrap gap-2">
         {tabs.map(t => (
           <Link
             key={t.key}
             href={`/admin?tab=${t.key}`}
-            className={classNames(
+            className={cx(
               'rounded-xl px-4 py-2 text-sm border',
               tab === t.key
                 ? 'bg-zinc-900 text-white border-zinc-900'
@@ -120,7 +120,7 @@ const tabs = useMemo(
             <Link
               key={st.key}
               href={`/admin?tab=${tab}&sub=${st.key}`}
-              className={classNames(
+              className={cx(
                 'rounded-xl px-4 py-2 text-sm border',
                 activeSub === st.key
                   ? 'bg-zinc-900 text-white border-zinc-900'
@@ -133,13 +133,12 @@ const tabs = useMemo(
         </div>
       )}
 
-      {/* דף המנהל המלא (הקיים) עם אתחול לפי הטאב העליון */}
       <div className="mt-4">
         <AdminApp
-          key={`${tab}:${activeSub}`}
+          key={`${tab}:${activeSub || ''}`}
           initialTab={initial.initialTab}
           initialPendingKind={initial.pendingKind}
-          initialSettingsSubTab={initial.initialSettingsSub}
+          initialSettingsSubTab={initial.initialSettingsSubTab}
           embeddedMode
         />
       </div>
