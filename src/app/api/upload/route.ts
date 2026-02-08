@@ -32,7 +32,10 @@ export async function POST(req: Request) {
       gallery_id = (g.data as any)?.id ? String((g.data as any).id) : null
     }
 
-    let buf = Buffer.from(await file.arrayBuffer())
+    // NOTE: In newer @types/node, Buffer is generic (Buffer<T extends ArrayBufferLike>).
+    // Keep this typed as plain `Buffer` to avoid build-time incompatibilities between
+    // Buffer<ArrayBuffer> and Buffer<ArrayBufferLike> across different typings.
+    let buf: Buffer = Buffer.from(await file.arrayBuffer())
 
     // WEB_ONLY resizing for images (max dimension controlled in event_settings.web_max_dimension)
     let contentType = file.type || 'application/octet-stream'
