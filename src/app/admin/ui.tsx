@@ -242,13 +242,15 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' |  'diag' | 'permissions'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
   blocks: 'בלוקים',
   moderation: 'אישור תכנים',
-  ads: 'פרסומות',  diag: 'דיאגנוסטיקה',
+  ads: 'פרסומות',
+  admin_gallery: 'גלריית מנהל',
+  diag: 'דיאגנוסטיקה',
   permissions: 'הרשאות',
   login: 'התחברות'
 }
@@ -471,7 +473,7 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'diag']
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
     return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
@@ -758,7 +760,7 @@ async function loadBlocks() {
       const [b, g, ga] = await Promise.all([
         jfetch(`/api/admin/posts?status=pending&kind=blessing`, { method: 'GET', headers: {} as any }),
         jfetch(`/api/admin/posts?status=pending&kind=gallery`, { method: 'GET', headers: {} as any }),
-        jfetch(`/api/admin/posts?status=pending&kind=gallery`, { method: 'GET', headers: {} as any })
+        jfetch(`/api/admin/posts?status=pending&kind=gallery_admin`, { method: 'GET', headers: {} as any })
       ])
 
       const bCount = (b.posts || []).length
@@ -859,6 +861,66 @@ async function loadBlocks() {
     setAds(prev => prev.map(a => (a.id === id ? res.ad : a)))
   }
 
+  async function loadAdminGallery() {
+    const res = await jfetch('/api/admin/posts?status=approved&kind=gallery_admin', { method: 'GET', headers: {} as any })
+    setAdminGallery(res.posts || [])
+  }
+
+  async function uploadAdminGalleryFiles() {
+    setAdminMsg(null)
+    if (!adminFiles.length) {
+      setAdminMsg('בחר תמונות להעלאה')
+      return
+    }
+
+    setAdminBusy(true)
+    try {
+      for (const f of adminFiles) {
+        const fd = new FormData()
+        fd.set('file', f)
+        fd.set('kind', 'gallery_admin')
+
+        const up = await fetch('/api/upload', { method: 'POST', body: fd })
+        const upJson = await up.json().catch(() => ({}))
+        if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+
+        const created = await fetch('/api/posts', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            kind: 'gallery_admin',
+            text: null,
+            author_name: null,
+            media_path: upJson.path,
+            media_url: upJson.publicUrl
+          })
+        })
+        const cJson = await created.json().catch(() => ({}))
+        if (!created.ok) throw new Error(cJson?.error || 'שגיאה ביצירת פוסט')
+      }
+
+      setAdminFiles([])
+      setAdminMsg('✅ הועלו התמונות בהצלחה')
+      await loadAdminGallery()
+    } catch (e: any) {
+      setAdminMsg(friendlyError(e?.message || 'שגיאה בהעלאה'))
+    } finally {
+      setAdminBusy(false)
+    }
+  }
+
+  async function deleteAdminImage(id: string) {
+    if (!confirm('למחוק את התמונה?')) return
+    setAdminMsg(null)
+    try {
+      await jfetch('/api/admin/gallery-admin', { method: 'DELETE', body: JSON.stringify({ id }) })
+      setAdminGallery(prev => prev.filter(p => p.id !== id))
+      setAdminMsg('✅ נמחק')
+    } catch (e: any) {
+      setAdminMsg(friendlyError(e?.message || 'שגיאה במחיקה'))
+    }
+  }
+
   async function loadDiag() {
     const d = await jfetch('/api/admin/diag', { method: 'GET', headers: {} as any })
     setDiag(d)
@@ -876,6 +938,7 @@ async function loadBlocks() {
       loadApprovedBlessings()
     }
     if (tab === 'ads') loadAds()
+    if (tab === 'admin_gallery') loadAdminGallery()
     if (tab === 'diag') loadDiag()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, admin, pendingKind])
@@ -1121,7 +1184,40 @@ async function loadBlocks() {
               </div>
             </div>
 
-            {/* גלריות (מנגנון ישן הוסר) */}
+            {/* גלריות */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">גלריות</p>
+
+              <Input
+                value={settings.guest_gallery_title || ''}
+                onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
+                placeholder="כותרת גלריית אורחים"
+              />
+
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.guest_gallery_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
+                />
+                להציג כפתור “לכל התמונות” בגלריית אורחים
+              </label>
+
+              <Input
+                value={settings.admin_gallery_title || ''}
+                onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
+                placeholder="כותרת גלריית מנהל"
+              />
+
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={settings.admin_gallery_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
+                />
+                להציג כפתור “לכל התמונות” בגלריית מנהל
+              </label>
+            </div>
 
             {/* ברכות */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
@@ -1987,7 +2083,67 @@ async function loadBlocks() {
         </Card>
       )}
 
-      {/* גלריית מנהל (מנגנון ישן הוסר) */}
+      {/* ===== ADMIN GALLERY ===== */}
+      {tab === 'admin_gallery' && (
+        <Card>
+          <h3 className="font-semibold">גלריית מנהל</h3>
+
+          <div className="mt-3 rounded-xl border border-zinc-200 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+              <Button
+                onClick={uploadAdminGalleryFiles}
+                disabled={adminBusy || adminFiles.length === 0}
+                className="sm:w-44"
+              >
+                {adminBusy ? 'מעלה...' : `העלה ${adminFiles.length || ''} תמונות`}
+              </Button>
+
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={e => setAdminFiles(Array.from(e.target.files || []))}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+
+            {adminMsg && <p className="mt-2 text-sm text-zinc-700">{adminMsg}</p>}
+          </div>
+
+          {lightbox && (
+  <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
+    <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+        <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="bg-white/90 text-black shadow hover:bg-white" type="button">הורד תמונה</Button>
+        <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white" type="button">סגור</Button>
+      </div>
+
+      <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
+    </div>
+  </div>
+)}
+
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {adminGallery.map((p: any) => (
+              <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
+                <button className="relative block aspect-square w-full bg-zinc-50" onClick={() => p.media_url && setLightbox(p.media_url)} type="button">
+                  <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                </button>
+
+                <div className="p-3">
+                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
+                  <div className="mt-2 flex gap-2">
+                    <Button variant="ghost" onClick={() => deleteAdminImage(p.id)}>מחק</Button>
+                    {p.media_url && <a className="text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח</a>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {adminGallery.length === 0 && <p className="mt-3 text-sm text-zinc-600">אין עדיין תמונות בגלריית מנהל.</p>}
+        </Card>
+      )}
 
       {/* ===== DIAG ===== */}
       {tab === 'diag' && (

@@ -14,42 +14,6 @@ function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/');
 }
 
-async function shrinkImageFile(file: File, maxDim = 2000, quality = 0.82): Promise<File> {
-  try {
-    // Skip non-images
-    if (!(file.type || '').startsWith('image/')) return file
-
-    // If it's already small-ish, keep as-is (avoids recompressing)
-    if (file.size && file.size < 2.5 * 1024 * 1024) return file
-
-    // Decode in browser
-    const bmp = await createImageBitmap(file)
-    const w = bmp.width
-    const h = bmp.height
-    const scale = Math.min(1, maxDim / Math.max(w, h))
-    const tw = Math.max(1, Math.round(w * scale))
-    const th = Math.max(1, Math.round(h * scale))
-
-    const canvas = document.createElement('canvas')
-    canvas.width = tw
-    canvas.height = th
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return file
-    ctx.drawImage(bmp, 0, 0, tw, th)
-
-    const blob: Blob | null = await new Promise(resolve =>
-      canvas.toBlob(b => resolve(b), 'image/jpeg', quality)
-    )
-
-    if (!blob) return file
-    const nameBase = (file.name || 'image').replace(/\.[^.]+$/, '')
-    return new File([blob], `${nameBase}.jpg`, { type: 'image/jpeg' })
-  } catch {
-    return file
-  }
-}
-
-
 async function downloadUrl(url: string) {
   try {
     const res = await fetch(url);
@@ -88,29 +52,11 @@ async function shareUrl(url: string) {
   }
 }
 
-export default function GalleryClient({
-  initialItems,
-  galleries,
-  currentGalleryId,
-}: {
-  initialItems: any[]
-  galleries: any[]
-  currentGalleryId: string | null
-}) {
+export default function GalleryClient({ initialItems }: { initialItems: any[] }) {
   const [items, setItems] = useState<Post[]>(initialItems || []);
   const [files, setFiles] = useState<File[]>([]);
-
-  const selectedGallery = useMemo(() => {
-    const gid = String(currentGalleryId || '')
-    return (Array.isArray(galleries) ? galleries : []).find((g: any) => String(g?.id || '') === gid) || null
-  }, [galleries, currentGalleryId])
-
-  // Upload requires an explicit gallery selection (gallery_id is mandatory server-side)
-  const uploadEnabled = !!selectedGallery && (selectedGallery as any)?.upload_enabled !== false
-
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ id: string; url: string; type: 'image' | 'video' } | null>(null);
 
   const pickerRef = useRef<HTMLInputElement | null>(null);
@@ -130,9 +76,6 @@ export default function GalleryClient({
   }
 
   async function uploadAll() {
-    if (!currentGalleryId) { setErr('בחר גלריה לפני העלאה'); return }
-    if (!uploadEnabled) { setErr('העלאה לגלריה הזו כבויה'); return }
-
     setErr(null);
     if (!files.length) {
       setErr('בחר תמונות/וידאו');
@@ -142,27 +85,34 @@ export default function GalleryClient({
     try {
       for (const f of files) {
         const fd = new FormData();
-        const fileToUpload = await shrinkImageFile(f, 2000, 0.82);
-        fd.set('file', fileToUpload);
+        fd.set('file', f);
         fd.set('kind', 'gallery');
-        if (currentGalleryId) fd.set('gallery_id', currentGalleryId)
 
         const up = await fetch('/api/upload', { method: 'POST', body: fd });
         const upJson = await up.json().catch(() => ({}));
         if (!up.ok) throw new Error((upJson as any)?.error || 'שגיאה בהעלאה');
 
-        const url = String((upJson as any).publicUrl || '')
-        const mime = String((upJson as any).mime_type || (fileToUpload as any)?.type || '')
-        const isVideo = mime.startsWith('video/') || isVideoFile(fileToUpload as any)
-        setItems(prev => [
-          {
-            id: String((upJson as any).id || crypto.randomUUID()),
-            created_at: new Date().toISOString(),
-            media_url: isVideo ? null : url,
-            video_url: isVideo ? url : null,
-          } as any,
-          ...prev,
-        ])
+        const payload: any = {
+          kind: 'gallery',
+          author_name: null,
+          text: null,
+          media_path: (upJson as any).path,
+          media_url: isVideoFile(f) ? null : (upJson as any).publicUrl,
+          video_url: isVideoFile(f) ? (upJson as any).publicUrl : null,
+          link_url: null,
+        };
+
+        const created = await fetch('/api/posts', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const cJson = await created.json().catch(() => ({}));
+        if (!created.ok) throw new Error((cJson as any)?.error || 'שגיאה ביצירת פוסט');
+
+        if ((cJson as any)?.status === 'approved' && (cJson as any)?.post) {
+          setItems(prev => [(cJson as any).post, ...prev]);
+        }
       }
       setFiles([]);
     } catch (e: any) {
@@ -174,48 +124,13 @@ export default function GalleryClient({
 
   return (
     <div className="space-y-4" dir="rtl">
-      {(!Array.isArray(galleries) || galleries.length === 0) && (
-        <Card>
-          <p className="text-sm text-zinc-700 font-medium">אין עדיין גלריות באירוע.</p>
-          <p className="text-sm text-zinc-600">כדי להעלות תמונות, מנהל האירוע צריך ליצור גלריה במערכת הניהול.</p>
-        </Card>
-      )}
       <Card>
-        {Array.isArray(galleries) && galleries.length > 1 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {galleries.map((g: any) => {
-              const gid = String(g?.id || '')
-              const active = gid && String(currentGalleryId || '') === gid
-              const label = String(g?.title || 'גלריה')
-              return (
-                <Button
-                  key={gid || label}
-                  type="button"
-                  variant={active ? 'default' : 'ghost'}
-                  onClick={() => {
-                    try {
-                      const u = new URL(window.location.href)
-                      if (gid) u.searchParams.set('g', gid)
-                      window.location.href = `${u.pathname}?${u.searchParams.toString()}`
-                    } catch {
-                      if (gid) window.location.href = `/gallery?g=${encodeURIComponent(gid)}`
-                    }
-                  }}
-                >
-                  {label}
-                </Button>
-              )
-            })}
-          </div>
-        )}
-
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <input
             ref={pickerRef}
             type="file"
             accept="image/*,video/*"
             multiple
-            disabled={!currentGalleryId || !uploadEnabled || busy}
             onChange={e => addFiles(e.target.files)}
           />
 
@@ -238,19 +153,18 @@ export default function GalleryClient({
           />
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="ghost" disabled={!currentGalleryId || !uploadEnabled || busy} onClick={() => cameraRef.current?.click()}>
+            <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()}>
               צלם תמונה
             </Button>
-            <Button type="button" variant="ghost" disabled={!currentGalleryId || !uploadEnabled || busy} onClick={() => videoRef.current?.click()}>
+            <Button type="button" variant="ghost" onClick={() => videoRef.current?.click()}>
               צלם וידאו
             </Button>
-            <Button type="button" onClick={uploadAll} disabled={!currentGalleryId || !uploadEnabled || busy || files.length === 0}>
+            <Button type="button" onClick={uploadAll} disabled={busy || files.length === 0}>
               {busy ? 'מעלה…' : 'העלה'}
             </Button>
           </div>
         </div>
 
-        {info && <p className="mt-2 text-sm text-emerald-700">{info}</p>}
         {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
 
         {files.length > 0 && (
