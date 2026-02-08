@@ -105,7 +105,8 @@ export default function GalleryClient({
     return (Array.isArray(galleries) ? galleries : []).find((g: any) => String(g?.id || '') === gid) || null
   }, [galleries, currentGalleryId])
 
-  const uploadEnabled = (selectedGallery as any)?.upload_enabled !== false
+  // Upload requires an explicit gallery selection (gallery_id is mandatory server-side)
+  const uploadEnabled = !!selectedGallery && (selectedGallery as any)?.upload_enabled !== false
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -129,6 +130,7 @@ export default function GalleryClient({
   }
 
   async function uploadAll() {
+    if (!currentGalleryId) { setErr('בחר גלריה לפני העלאה'); return }
     if (!uploadEnabled) { setErr('העלאה לגלריה הזו כבויה'); return }
 
     setErr(null);
@@ -172,6 +174,12 @@ export default function GalleryClient({
 
   return (
     <div className="space-y-4" dir="rtl">
+      {(!Array.isArray(galleries) || galleries.length === 0) && (
+        <Card>
+          <p className="text-sm text-zinc-700 font-medium">אין עדיין גלריות באירוע.</p>
+          <p className="text-sm text-zinc-600">כדי להעלות תמונות, מנהל האירוע צריך ליצור גלריה במערכת הניהול.</p>
+        </Card>
+      )}
       <Card>
         {Array.isArray(galleries) && galleries.length > 1 && (
           <div className="mb-3 flex flex-wrap gap-2">
@@ -207,6 +215,7 @@ export default function GalleryClient({
             type="file"
             accept="image/*,video/*"
             multiple
+            disabled={!currentGalleryId || !uploadEnabled || busy}
             onChange={e => addFiles(e.target.files)}
           />
 
@@ -229,13 +238,13 @@ export default function GalleryClient({
           />
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()}>
+            <Button type="button" variant="ghost" disabled={!currentGalleryId || !uploadEnabled || busy} onClick={() => cameraRef.current?.click()}>
               צלם תמונה
             </Button>
-            <Button type="button" variant="ghost" onClick={() => videoRef.current?.click()}>
+            <Button type="button" variant="ghost" disabled={!currentGalleryId || !uploadEnabled || busy} onClick={() => videoRef.current?.click()}>
               צלם וידאו
             </Button>
-            <Button type="button" onClick={uploadAll} disabled={!uploadEnabled || busy || files.length === 0}>
+            <Button type="button" onClick={uploadAll} disabled={!currentGalleryId || !uploadEnabled || busy || files.length === 0}>
               {busy ? 'מעלה…' : 'העלה'}
             </Button>
           </div>
