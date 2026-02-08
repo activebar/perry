@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Container, Card, Button } from '@/components/ui'
-import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
+import { supabaseServiceRole } from '@/lib/supabase'
 import { cookies } from 'next/headers'
 import { fetchBlocks, fetchSettings, getBlockTitle } from '@/lib/db'
 import GalleryClient from './ui'
@@ -10,7 +10,9 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 async function getGalleries() {
-  const supabase = supabaseAnon()
+  // Use service role to avoid any RLS / anon policy surprises.
+  // This page is rendered on the server and we still only return *active* galleries for the current event.
+  const supabase = supabaseServiceRole()
   const event_id = getEventId()
   const { data, error } = await supabase
     .from('galleries')

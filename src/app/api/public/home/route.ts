@@ -184,8 +184,9 @@ export async function GET() {
 
     const blessingsPreviewLimit = Number(settings.blessings_preview_limit ?? 3)
 
+    // Use service role to avoid any RLS / anon policy surprises.
     const galleries = showGalleryBlocks
-      ? (await supabaseAnon()
+      ? (await supabaseServiceRole()
           .from('galleries')
           .select('id, title, order_index, is_active')
           .eq('event_id', event_id)
