@@ -716,6 +716,29 @@ async function loadBlocks() {
     setBlocks(res.blocks)
   }
 
+  async function reorderBlocks(nextIds: string[]) {
+    setErr(null)
+    try {
+      await jfetch('/api/admin/blocks', { method: 'POST', body: JSON.stringify({ ids: nextIds }) })
+      // optimistic update
+      setBlocks(prev => {
+        const byId = new Map(prev.map((b: any) => [String(b.id), b]))
+        return nextIds
+          .map((id, idx) => {
+            const b = byId.get(String(id))
+            return b ? { ...b, order_index: idx + 1 } : null
+          })
+          .filter(Boolean) as any
+      })
+    } catch (e: any) {
+      setErr(friendlyError(e?.message || 'שגיאה'))
+      // fallback to reload
+      try {
+        await loadBlocks()
+      } catch {}
+    }
+  }
+
   async function updateBlock(patch: any) {
     setErr(null)
     try {
@@ -1760,22 +1783,84 @@ async function loadBlocks() {
         <Card>
           <h3 className="font-semibold">בלוקים</h3>
 
+          <p className="mt-1 text-sm text-zinc-600 text-right">
+            כאן ניתן להפעיל/לכבות בלוקים בדף הבית ולשנות סדר (↑↓). בשלב הבא נוסיף שמות/כפתורים לכל בלוק.
+          </p>
+
           <div className="mt-3 grid gap-3">
-            {blocks.map(b => (
+            {(() => {
+              const typeLabel: Record<string, string> = {
+                hero: 'כותרת עליונה (Hero)',
+                menu: 'תפריט / ניווט',
+                gallery: 'גלריה',
+                blessings: 'ברכות',
+                gift: 'מתנה / תשלום',
+                qr: 'QR ושיתוף',
+              }
+
+              return blocks.map((b: any, idx: number) => {
+                const title = (b?.config?.title || typeLabel[String(b.type)] || String(b.type)) as string
+                const canUp = idx > 0
+                const canDown = idx < blocks.length - 1
+
+                return (
               <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
                 <div className="flex items-center justify-between">
                   <div className="text-right">
-                    <p className="font-medium">{b.type}</p>
-                    <p className="text-xs text-zinc-500">סדר: {b.order_index}</p>
+                    <p className="font-medium">{title}</p>
+                    <p className="text-xs text-zinc-500">key: {b.type} • סדר: {b.order_index}</p>
                   </div>
-                  <label className="text-sm flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={!!b.is_visible}
-                      onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })}
-                    />
-                    מוצג
-                  </label>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      disabled={!canUp}
+                      title="הזז למעלה"
+                      onClick={() => {
+                        if (!canUp) return
+                        const ids = blocks.map((x: any) => String(x.id))
+                        ;[ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]]
+                        reorderBlocks(ids)
+                      }}
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={!canDown}
+                      title="הזז למטה"
+                      onClick={() => {
+                        if (!canDown) return
+                        const ids = blocks.map((x: any) => String(x.id))
+                        ;[ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]]
+                        reorderBlocks(ids)
+                      }}
+                    >
+                      ↓
+                    </Button>
+
+                    <label className="text-sm flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!b.is_visible}
+                        onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })}
+                      />
+                      מוצג
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2">
+                  <Input
+                    value={String(b?.config?.title || '')}
+                    onChange={e => {
+                      const v = e.target.value
+                      updateBlock({ id: b.id, config: { ...(b.config || {}), title: v } })
+                    }}
+                    placeholder="שם בלוק לתצוגה (רשות)"
+                  />
+
+                  {/* בקרוב: cta_label / cta_action */}
                 </div>
 
                 {b.type === 'gift' && (
@@ -1792,7 +1877,9 @@ async function loadBlocks() {
                   </div>
                 )}
               </div>
-            ))}
+                )
+              })
+            })()}
           </div>
 
           {err && <p className="text-sm text-red-600">{err}</p>}
