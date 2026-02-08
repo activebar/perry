@@ -30,7 +30,7 @@ export default async function AdminGalleryPage() {
         </Card>
 
         <div className="mt-4">
-          <GalleryClient initialItems={items} />
+          <GalleryClient initialItems={items} galleries={[]} currentGalleryId={null} />
         </div>
       </Container>
     </main>
