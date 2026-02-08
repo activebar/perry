@@ -211,6 +211,18 @@ export default function HomePage() {
   const showBlessingsBlock = visibleTypes.has('blessings')
   const showGiftBlock = visibleTypes.has('gift')
 
+  const galleryLabel = useMemo(() => {
+    const b = (blocks || []).find((x: any) => String(x?.type) === 'gallery')
+    const t = String(b?.config?.title || '').trim()
+    return t || 'גלריה'
+  }, [blocks])
+
+  const giftLabel = useMemo(() => {
+    const b = (blocks || []).find((x: any) => String(x?.type) === 'gift')
+    const t = String(b?.config?.title || '').trim()
+    return t || 'מתנה'
+  }, [blocks])
+
   const guestTitle = settings?.guest_gallery_title || 'גלריית אורחים'
   const adminTitle = settings?.admin_gallery_title || 'גלריית מנהל'
   const guestShowAll = settings?.guest_gallery_show_all_button !== false
@@ -346,14 +358,14 @@ export default function HomePage() {
           {showMenu && (
             <div className="flex gap-2">
               <Link href="/gallery">
-                <Button variant="ghost">גלריה</Button>
+                <Button variant="ghost">{galleryLabel}</Button>
               </Link>
               <Link href="/blessings">
                 <Button variant="ghost">{blessingsTitle}</Button>
               </Link>
               {showGiftBlock && (
                 <Link href="/gift">
-                  <Button>מתנה</Button>
+                  <Button>{giftLabel}</Button>
                 </Link>
               )}
               <Link href="/admin">
@@ -378,12 +390,12 @@ export default function HomePage() {
                   )}
                   {showGiftBlock && (
                     <Link href="/gift">
-                      <Button variant="ghost">מתנה</Button>
+                      <Button variant="ghost">{giftLabel}</Button>
                     </Link>
                   )}
                   {showGalleryBlock && (
                     <Link href="/gallery">
-                      <Button variant="ghost">גלריה</Button>
+                      <Button variant="ghost">{galleryLabel}</Button>
                     </Link>
                   )}
                   {showBlessingsBlock && (
@@ -554,11 +566,11 @@ export default function HomePage() {
             <Card dir="rtl">
               <div className="flex items-center justify-between">
                 <div className="text-right">
-                  <p className="font-semibold">מתנה</p>
+                  <p className="font-semibold">{giftLabel}</p>
                   <p className="text-sm text-zinc-600">אפשר להשאיר מתנה בלחיצה.</p>
                 </div>
                 <Link href="/gift">
-                  <Button>למתנה</Button>
+                  <Button>ל{giftLabel}</Button>
                 </Link>
               </div>
             </Card>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Container, Card, Button } from "@/components/ui";
 import { supabaseServiceRole } from "@/lib/supabase";
-import { fetchBlocks, fetchSettings } from "@/lib/db";
+import { fetchBlocks, fetchSettings, getBlockTitle } from "@/lib/db";
 import BlessingsClient from "./ui";
 import BlessingsShareHeader from "./BlessingsShareHeader";
 import type { Metadata } from "next";
@@ -127,7 +127,9 @@ export default async function BlessingsPage() {
     fetchBlocks(),
   ]);
 
-  const blessingsTitle = (settings as any)?.blessings_title || 'ברכות';
+  const blessingsTitle = getBlockTitle(blocks as any, 'blessings', (settings as any)?.blessings_title || 'ברכות');
+  const galleryTitle = getBlockTitle(blocks as any, 'gallery', 'גלריה');
+  const giftTitle = getBlockTitle(blocks as any, 'gift', 'מתנה');
   // subtitle in /blessings is controlled by blessings_label (falls back to blessings_subtitle)
   const blessingsSubtitle = (settings as any)?.blessings_label || (settings as any)?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.';
 
@@ -147,14 +149,14 @@ export default async function BlessingsPage() {
                 <Button variant="ghost">בית</Button>
               </Link>
               <Link href="/gallery">
-                <Button variant="ghost">גלריה</Button>
+                <Button variant="ghost">{galleryTitle}</Button>
               </Link>
               <Link href="/blessings">
                 <Button>{blessingsTitle}</Button>
               </Link>
               {settings.gift_enabled && (
                 <Link href="/gift">
-                  <Button variant="ghost">מתנה</Button>
+                  <Button variant="ghost">{giftTitle}</Button>
                 </Link>
               )}
             </div>

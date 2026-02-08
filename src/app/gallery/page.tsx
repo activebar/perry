@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Container, Card, Button } from '@/components/ui'
 import { supabaseAnon } from '@/lib/supabase'
-import { fetchSettings } from '@/lib/db'
+import { fetchBlocks, fetchSettings, getBlockTitle } from '@/lib/db'
 import GalleryClient from './ui'
 
 export const dynamic = 'force-dynamic'
@@ -43,9 +43,11 @@ async function getImages() {
 
 
 export default async function GalleryPage() {
-  const [items, settings] = await Promise.all([getImages(), fetchSettings()])
+  const [items, settings, blocks] = await Promise.all([getImages(), fetchSettings(), fetchBlocks()])
 
-    const blessingsTitle = (String((settings as any)?.blessings_title || '').trim() || 'ברכות')
+  const blessingsTitle = getBlockTitle(blocks, 'blessings', (String((settings as any)?.blessings_title || '').trim() || 'ברכות'))
+  const giftTitle = getBlockTitle(blocks, 'gift', 'מתנה')
+  const galleryTitle = getBlockTitle(blocks, 'gallery', 'גלריה')
 
 
   return (
@@ -58,10 +60,10 @@ export default async function GalleryPage() {
 
             <div className="flex flex-wrap gap-2">
               <Link href="/"><Button variant="ghost">בית</Button></Link>
-              <Link href="/gallery"><Button>גלריה</Button></Link>
+              <Link href="/gallery"><Button>{galleryTitle}</Button></Link>
               <Link href="/blessings"><Button variant="ghost">{blessingsTitle}</Button></Link>
               {settings.gift_enabled && (
-                <Link href="/gift"><Button variant="ghost">מתנה</Button></Link>
+                <Link href="/gift"><Button variant="ghost">{giftTitle}</Button></Link>
               )}
             </div>
           </div>
@@ -69,7 +71,7 @@ export default async function GalleryPage() {
 
         <div className="mt-4">
   <Card>
-    <h2 className="text-xl font-bold">גלריה</h2>
+    <h2 className="text-xl font-bold">{galleryTitle}</h2>
     <p className="text-sm text-zinc-600">העלו תמונות מהאירוע.</p>
   </Card>
 </div>

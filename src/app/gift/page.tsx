@@ -1,7 +1,7 @@
 // src/app/gift/page.tsx
 import Link from 'next/link'
 import { Container, Card, Button } from '@/components/ui'
-import { fetchSettings } from '@/lib/db'
+import { fetchBlocks, fetchSettings, getBlockTitle } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -25,8 +25,10 @@ function CircleImage({ src, size, alt }: { src: string; size: number; alt: strin
 }
 
 export default async function GiftPage() {
-  const s: any = await fetchSettings()
-    const blessingsTitle = (String(s?.blessings_title || '').trim() || 'ברכות')
+  const [s, blocks] = await Promise.all([fetchSettings(), fetchBlocks()])
+  const blessingsTitle = getBlockTitle(blocks as any, 'blessings', (String((s as any)?.blessings_title || '').trim() || 'ברכות'))
+  const galleryTitle = getBlockTitle(blocks as any, 'gallery', 'גלריה')
+  const giftTitle = getBlockTitle(blocks as any, 'gift', 'מתנה')
 
   const diameter = Math.max(80, Math.min(320, Number(s.gift_image_diameter || 160)))
 
@@ -38,9 +40,9 @@ export default async function GiftPage() {
             <Link href="/"><Button variant="ghost">← חזרה לדף הבית</Button></Link>
             <div className="flex flex-wrap gap-2">
               <Link href="/"><Button variant="ghost">בית</Button></Link>
-              <Link href="/gallery"><Button variant="ghost">גלריה</Button></Link>
+              <Link href="/gallery"><Button variant="ghost">{galleryTitle}</Button></Link>
               <Link href="/blessings"><Button variant="ghost">{blessingsTitle}</Button></Link>
-              <Link href="/gift"><Button>מתנה</Button></Link>
+              <Link href="/gift"><Button>{giftTitle}</Button></Link>
             </div>
           </div>
         </Card>
@@ -48,7 +50,7 @@ export default async function GiftPage() {
         {!s.gift_enabled ? (
           <div className="mt-4">
             <Card>
-              <h2 className="text-xl font-bold">המתנה לא זמינה כרגע</h2>
+              <h2 className="text-xl font-bold">{giftTitle} לא זמינה כרגע</h2>
               <p className="text-sm text-zinc-600">אפשר לחזור לעמוד הראשי ולהמשיך לגלריה/ברכות.</p>
               <div className="mt-3">
                 <Link href="/"><Button>חזרה לדף הבית</Button></Link>
@@ -58,7 +60,7 @@ export default async function GiftPage() {
         ) : (
           <div className="mt-4">
             <Card>
-              <h2 className="text-xl font-bold">מתנה</h2>
+              <h2 className="text-xl font-bold">{giftTitle}</h2>
               <p className="text-sm text-zinc-600">תודה! בחרו דרך תשלום:</p>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2">

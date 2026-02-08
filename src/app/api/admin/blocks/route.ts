@@ -43,8 +43,18 @@ export async function POST(req: NextRequest) {
   const { ids } = await req.json()
   if (!Array.isArray(ids) || ids.length === 0) return NextResponse.json({ error: 'missing ids' }, { status: 400 })
   const srv = supabaseServiceRole()
+
+  // IMPORTANT:
+  // We must NOT use upsert() here.
+  // Upsert can attempt to INSERT missing rows with only {id, order_index},
+  // which violates NOT NULL constraints (e.g. blocks.type).
+  // Instead, update existing rows only.
   const updates = ids.map((id: string, idx: number) => ({ id, order_index: idx + 1 }))
-  const { error } = await srv.from('blocks').upsert(updates, { onConflict: 'id' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const results = await Promise.all(
+    updates.map(u => srv.from('blocks').update({ order_index: u.order_index }).eq('id', u.id))
+  )
+  const firstErr = results.find(r => (r as any)?.error)?.error
+  if (firstErr) return NextResponse.json({ error: firstErr.message }, { status: 500 })
+
   return NextResponse.json({ ok: true })
 }

@@ -62,6 +62,12 @@ export type Block = {
   config: any
 }
 
+export function getBlockTitle(blocks: Block[] | null | undefined, type: string, fallback: string) {
+  const b = (blocks || []).find(x => String(x.type) === type)
+  const t = String((b as any)?.config?.title || '').trim()
+  return t || fallback
+}
+
 /**
  * IMPORTANT:
  * There should be only ONE row in event_settings.
