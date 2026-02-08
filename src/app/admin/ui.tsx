@@ -1070,7 +1070,7 @@ async function loadBlocks() {
 
           <div className="mt-3 grid gap-3">
             {/* כללי */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+            <div className={'grid gap-2 rounded-xl border border-zinc-200 p-3 ' + (settingsSubTab === 'general' ? '' : 'hidden')}>
               <p className="text-sm font-medium">הגדרות כלליות</p>
 
               <Input
@@ -1117,10 +1117,11 @@ async function loadBlocks() {
             </div>
 
             {/* HERO */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+            <div className={'grid gap-2 rounded-xl border border-zinc-200 p-3 ' + ((settingsSubTab === 'hero' || settingsSubTab === 'rotate') ? '' : 'hidden')}>
               <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
 
-              <Textarea
+              <div className={(settingsSubTab === 'hero') ? '' : 'hidden'}>
+<Textarea
                 value={settings.hero_pre_text || ''}
                 onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
                 placeholder="טקסט לפני האירוע (עד 30 דק׳ אחרי start_at)"
@@ -1140,8 +1141,9 @@ async function loadBlocks() {
                 placeholder="טקסט אחרי האירוע"
                 rows={4}
               />
+</div>
 
-              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <div className={'grid gap-2 rounded-xl border border-zinc-200 p-3 ' + (settingsSubTab === 'rotate' ? '' : 'hidden')}>
                 <p className="text-sm font-medium">תמונות מתחלפות</p>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -1185,7 +1187,7 @@ async function loadBlocks() {
             </div>
 
             {/* גלריות */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+            <div className={'grid gap-2 rounded-xl border border-zinc-200 p-3 hidden'}>
               <p className="text-sm font-medium">גלריות</p>
 
               <Input
@@ -1220,7 +1222,7 @@ async function loadBlocks() {
             </div>
 
             {/* ברכות */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+            <div className={'grid gap-2 rounded-xl border border-zinc-200 p-3 ' + (settingsSubTab === 'blessings' ? '' : 'hidden')} dir="rtl">
               <p className="text-sm font-medium text-right">ברכות</p>
 
               <Input
@@ -1360,7 +1362,7 @@ async function loadBlocks() {
             </div>
 
             {/* QR & שיתוף */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+            <div className={'grid gap-2 rounded-xl border border-zinc-200 p-3 ' + (settingsSubTab === 'qr' ? '' : 'hidden')} dir="rtl">
               <p className="text-sm font-medium text-right">QR & שיתוף</p>
 
               <div className="grid gap-2">
@@ -1633,7 +1635,7 @@ async function loadBlocks() {
             </div>
 
             {/* ניהול תוכן (חסימות/חריגים) */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+            <div className={'grid gap-2 rounded-xl border border-zinc-200 p-3 ' + (settingsSubTab === 'content' ? '' : 'hidden')} dir="rtl">
               <p className="text-sm font-medium text-right">ניהול תוכן – חסימות וחריגים</p>
               <p className="text-xs text-zinc-500 text-right">
                 החוקים חלים על טקסט הברכה, שם הכותב, קישור ומדיה. חסימה תמיד תשלח לאישור מנהל. חריג יכול למנוע חסימת־שווא במודרציה.
@@ -1742,7 +1744,7 @@ async function loadBlocks() {
             </div>
 
             {/* פוטר */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+            <div className={'grid gap-2 rounded-xl border border-zinc-200 p-3 ' + (settingsSubTab === 'footer' ? '' : 'hidden')}>
               <p className="text-sm font-medium">פוטר</p>
 
               <label className="text-sm flex items-center gap-2">

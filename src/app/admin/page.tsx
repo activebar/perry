@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export default function AdminPage({
   searchParams
 }: {
-  searchParams?: { tab?: AdminMainTab }
+  searchParams?: { tab?: AdminMainTab; sub?: string }
 }) {
   const tab = (searchParams?.tab || 'event') as AdminMainTab
 
@@ -23,7 +23,7 @@ export default function AdminPage({
         </Card>
 
         <div className="mt-4">
-          <AdminDashboard tab={tab} />
+          <AdminDashboard tab={tab} sub={searchParams?.sub} />
         </div>
       </Container>
     </main>
