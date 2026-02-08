@@ -38,8 +38,8 @@ const tabs = useMemo(
       initialTab = 'moderation'
       pendingKind = 'blessing'
     } else if (tab === 'galleries') {
-      // שלד “גלריות” – מתחילים מגלריית מנהל (קיים), ומאישור תכנים לגלריה
-      initialTab = 'admin_gallery'
+      // גלריות = מסך אישור תמונות (כמו ברכות)
+      initialTab = 'moderation'
       pendingKind = 'gallery'
     } else if (tab === 'design') {
       initialTab = 'blocks'
@@ -78,7 +78,8 @@ const tabs = useMemo(
           key={tab}
           initialTab={initial.initialTab}
           initialPendingKind={initial.pendingKind}
-          embeddedMode
+          // להחזיר את דף הניהול המלא (עם הטאבים הפנימיים)
+          embeddedMode={false}
         />
       </div>
     </div>
