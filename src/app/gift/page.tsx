@@ -6,9 +6,8 @@ import { fetchBlocks, fetchSettings, getBlockTitle } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-function isLikelyImageUrl(u?: string | null) {
-  const val = String(u || '')
-  if (!val) return false
+function isLikelyImageUrl(u?: string | null): u is string {  if (!u) return false
+  const val = u
   const base = val.split('?')[0] || ''
   return /\.(png|jpe?g|webp|gif|svg)$/i.test(base)
 }
@@ -70,7 +69,7 @@ export default async function GiftPage() {
 
                   {isLikelyImageUrl(s.gift_bit_image_url) && (
                     <div className="mt-3 flex justify-center">
-                      <CircleImage src={s.gift_bit_image_url} size={diameter} alt="Bit" />
+                      <CircleImage src={s.gift_bit_image_url!} size={diameter} alt="Bit" />
                     </div>
                   )}
 
@@ -91,7 +90,7 @@ export default async function GiftPage() {
 
                   {isLikelyImageUrl(s.gift_paybox_image_url) && (
                     <div className="mt-3 flex justify-center">
-                      <CircleImage src={s.gift_paybox_image_url} size={diameter} alt="PayBox" />
+                      <CircleImage src={s.gift_paybox_image_url!} size={diameter} alt="PayBox" />
                     </div>
                   )}
 
