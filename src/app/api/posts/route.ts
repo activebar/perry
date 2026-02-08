@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { matchContentRules } from '@/lib/contentRules'
+import { getEventId } from '@/lib/event-id'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 
@@ -12,6 +13,7 @@ function withinOneHour(iso: string) {
 
 export async function POST(req: Request) {
   try {
+    const event_id = getEventId()
     const body = await req.json()
     const kind = String(body.kind || '')
     if (!ALLOWED_KINDS.has(kind)) return NextResponse.json({ error: 'bad kind' }, { status: 400 })
@@ -46,6 +48,7 @@ const device_id = cookies().get('device_id')?.value || null
       const { count, error: cerr } = await srv
         .from('posts')
         .select('id', { count: 'exact', head: true })
+        .eq('event_id', event_id)
         .eq('device_id', device_id)
         .eq('kind', kind)
         .gte('created_at', since)
@@ -58,6 +61,9 @@ const device_id = cookies().get('device_id')?.value || null
     const { data: settings, error: serr } = await srv
       .from('event_settings')
       .select('require_approval')
+      .eq('event_id', event_id)
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1)
       .single()
     if (serr) throw serr
@@ -66,6 +72,7 @@ const device_id = cookies().get('device_id')?.value || null
     const status = matchedBlock ? 'pending' : baseStatus
 
     const insert = {
+      event_id,
       kind,
       author_name: body.author_name || null,
       text: body.text || null,
@@ -97,6 +104,7 @@ const device_id = cookies().get('device_id')?.value || null
 
 export async function PUT(req: Request) {
   try {
+    const event_id = getEventId()
     const body = await req.json()
     const id = String(body.id || '')
     if (!id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
@@ -105,7 +113,7 @@ export async function PUT(req: Request) {
     if (!device_id) return NextResponse.json({ error: 'missing device_id' }, { status: 400 })
 
     const srv = supabaseServiceRole()
-    const { data: post, error: perr } = await srv.from('posts').select('*').eq('id', id).limit(1).single()
+    const { data: post, error: perr } = await srv.from('posts').select('*').eq('event_id', event_id).eq('id', id).limit(1).single()
     if (perr) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (post.device_id !== device_id) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
@@ -144,7 +152,7 @@ export async function PUT(req: Request) {
       }
     }
 
-const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
+const { data, error } = await srv.from('posts').update(patch).eq('event_id', event_id).eq('id', id).select('*').single()
     if (error) throw error
 
     // attach media_items if a new media_path is provided
@@ -164,6 +172,7 @@ const { data, error } = await srv.from('posts').update(patch).eq('id', id).selec
 
 export async function DELETE(req: Request) {
   try {
+    const event_id = getEventId()
     const { id } = await req.json()
     const postId = String(id || '')
     if (!postId) return NextResponse.json({ error: 'missing id' }, { status: 400 })
@@ -172,7 +181,7 @@ export async function DELETE(req: Request) {
     if (!device_id) return NextResponse.json({ error: 'missing device_id' }, { status: 400 })
 
     const srv = supabaseServiceRole()
-    const { data: post, error: perr } = await srv.from('posts').select('*').eq('id', postId).limit(1).single()
+    const { data: post, error: perr } = await srv.from('posts').select('*').eq('event_id', event_id).eq('id', postId).limit(1).single()
     if (perr) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (post.device_id !== device_id) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
@@ -183,7 +192,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'אפשר למחוק רק בשעה הראשונה.' }, { status: 403 })
     }
 
-    const { error } = await srv.from('posts').update({ status: 'deleted' }).eq('id', postId)
+    const { error } = await srv.from('posts').update({ status: 'deleted' }).eq('event_id', event_id).eq('id', postId)
     if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e: any) {

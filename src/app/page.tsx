@@ -12,8 +12,8 @@ type HomePayload = {
   ok: boolean
   settings: any
   blocks: any[]
-  guestPreview: any[]
-  adminPreview: any[]
+  galleries?: any[]
+  galleryBlocksPreview?: Array<{ block_id: string; gallery_id: string | null; title: string; items: any[] }>
   blessingsPreview: any[]
 }
 
@@ -141,7 +141,7 @@ function HomeLinkMeta({
 export default function HomePage() {
   const [data, setData] = useState<HomePayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
+  const [lightbox, setLightbox] = useState<{ id?: string; url: string; isVideo: boolean } | null>(null)
 
   async function triggerDownload(url: string) {
     try {
@@ -158,6 +158,39 @@ export default function HomePage() {
     } catch {
       window.open(url, '_blank', 'noopener,noreferrer')
     }
+  }
+
+  async function triggerShareFromLightbox() {
+    if (!lightbox) return
+    const origin = window.location.origin
+    const eventName = String(settings?.event_name || '')
+
+    // If we have an id (gallery media item), share an OG-friendly page for WhatsApp.
+    const mediaId = String(lightbox.id || '').trim()
+    let link = ''
+    if (mediaId) {
+      const code = mediaId.slice(0, 8)
+      const targetPath = `/gallery/p/${mediaId}`
+      try {
+        await fetch('/api/short-links', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ kind: 'gl', post_id: mediaId, code, target_path: targetPath })
+        })
+      } catch {}
+      link = `${origin}/gl/${code}`
+    } else {
+      link = lightbox.url
+    }
+
+    const message = buildShareMessage(
+      (settings as any)?.share_template,
+      { EVENT_NAME: eventName, TEXT: 'תמונה מהאירוע', LINK: link },
+      'תמונה מהאירוע'
+    )
+
+    setSharePayload({ message, link })
+    setShareOpen(true)
   }
 
   async function load() {
@@ -177,7 +210,7 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const { settings, blocks, guestPreview, adminPreview, blessingsPreview } = data || ({} as any)
+  const { settings, blocks, galleries, galleryBlocksPreview, blessingsPreview } = data || ({} as any)
 
   const phase = useMemo(() => {
     if (!settings?.start_at) return 'pre'
@@ -421,56 +454,65 @@ export default function HomePage() {
               }
 
               if (type === 'gallery') {
+                const blockData = (galleryBlocksPreview || []).find((x: any) => String(x.block_id) === String(b.id))
+                const title = String(blockData?.title || b?.config?.title || 'גלריה')
+                const items = Array.isArray(blockData?.items) ? blockData.items : []
+
                 return (
-                  <div key={b.id} className="space-y-4">
-                    <Card dir="rtl">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="text-right">
-                          <p className="font-semibold">{guestTitle}</p>
-                          <p className="text-sm text-zinc-600">תמונות מהאורחים.</p>
-                        </div>
-                        {guestShowAll && (
-                          <Link href="/gallery">
-                            <Button>לכל התמונות</Button>
-                          </Link>
-                        )}
+                  <Card key={b.id} dir="rtl">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="font-semibold">{title}</p>
+                        <p className="text-sm text-zinc-600">תמונות מהאירוע.</p>
                       </div>
 
-                      {Array.isArray(guestPreview) && guestPreview.length > 0 && (
-                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                          {guestPreview.map((it: any) => (
-                            <div key={it.id} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50">
-                              <img src={it.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </Card>
-
-                    <Card dir="rtl">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="text-right">
-                          <p className="font-semibold">{adminTitle}</p>
-                          <p className="text-sm text-zinc-600">תמונות המנהל.</p>
-                        </div>
-                        {adminShowAll && (
-                          <Link href="/gallery/admin">
-                            <Button>לכל התמונות</Button>
-                          </Link>
-                        )}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`/api/public/home?ts=${Date.now()}`, { cache: 'no-store' as any })
+                              const j = await res.json().catch(() => ({}))
+                              if (j?.ok) setData(j)
+                            } catch {}
+                          }}
+                        >
+                          רענן
+                        </Button>
+                        <Link href="/gallery">
+                          <Button>לכל התמונות</Button>
+                        </Link>
                       </div>
+                    </div>
 
-                      {Array.isArray(adminPreview) && adminPreview.length > 0 && (
-                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                          {adminPreview.map((it: any) => (
-                            <div key={it.id} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50">
-                              <img src={it.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </Card>
-                  </div>
+                    {items.length > 0 ? (
+                      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                        {items.map((it: any) => {
+                          const url = String(it.public_url || '')
+                          const mime = String(it.mime_type || '')
+                          const isVideo = mime.startsWith('video/')
+                          return (
+                            <button
+                              key={it.id}
+                              type="button"
+                              className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50"
+                              onClick={() => setLightbox({ id: String(it.id), url, isVideo })}
+                            >
+                              {isVideo ? (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <span className="text-3xl">▶️</span>
+                                </div>
+                              ) : (
+                                <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-right text-sm text-zinc-600">עדיין אין תמונות.</div>
+                    )}
+                  </Card>
                 )
               }
 
@@ -589,8 +631,17 @@ export default function HomePage() {
   <div className="fixed inset-0 z-50 bg-black/80 p-4" onClick={() => setLightbox(null)}>
     <div className="mx-auto flex h-full max-w-5xl items-center justify-center">
       <div className="w-full" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          {!lightbox.isVideo && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              className="bg-white/90 text-black shadow hover:bg-white"
+              onClick={triggerShareFromLightbox}
+              type="button"
+            >
+              שתף
+            </Button>
+            {!lightbox.isVideo && (
             <Button
               variant="ghost"
               className="bg-white/90 text-black shadow hover:bg-white"
@@ -599,7 +650,8 @@ export default function HomePage() {
             >
               הורד תמונה
             </Button>
-          )}
+            )}
+          </div>
           <Button
             variant="ghost"
             className="bg-white/90 text-black shadow hover:bg-white"

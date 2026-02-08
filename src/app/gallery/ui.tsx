@@ -52,7 +52,15 @@ async function shareUrl(url: string) {
   }
 }
 
-export default function GalleryClient({ initialItems }: { initialItems: any[] }) {
+export default function GalleryClient({
+  initialItems,
+  galleries,
+  currentGalleryId,
+}: {
+  initialItems: any[]
+  galleries: any[]
+  currentGalleryId: string | null
+}) {
   const [items, setItems] = useState<Post[]>(initialItems || []);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -87,32 +95,24 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
         const fd = new FormData();
         fd.set('file', f);
         fd.set('kind', 'gallery');
+        if (currentGalleryId) fd.set('gallery_id', currentGalleryId)
 
         const up = await fetch('/api/upload', { method: 'POST', body: fd });
         const upJson = await up.json().catch(() => ({}));
         if (!up.ok) throw new Error((upJson as any)?.error || 'שגיאה בהעלאה');
 
-        const payload: any = {
-          kind: 'gallery',
-          author_name: null,
-          text: null,
-          media_path: (upJson as any).path,
-          media_url: isVideoFile(f) ? null : (upJson as any).publicUrl,
-          video_url: isVideoFile(f) ? (upJson as any).publicUrl : null,
-          link_url: null,
-        };
-
-        const created = await fetch('/api/posts', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const cJson = await created.json().catch(() => ({}));
-        if (!created.ok) throw new Error((cJson as any)?.error || 'שגיאה ביצירת פוסט');
-
-        if ((cJson as any)?.status === 'approved' && (cJson as any)?.post) {
-          setItems(prev => [(cJson as any).post, ...prev]);
-        }
+        const url = String((upJson as any).publicUrl || '')
+        const mime = String((upJson as any).mime_type || f.type || '')
+        const isVideo = mime.startsWith('video/') || isVideoFile(f)
+        setItems(prev => [
+          {
+            id: String((upJson as any).id || crypto.randomUUID()),
+            created_at: new Date().toISOString(),
+            media_url: isVideo ? null : url,
+            video_url: isVideo ? url : null,
+          } as any,
+          ...prev,
+        ])
       }
       setFiles([]);
     } catch (e: any) {
@@ -125,6 +125,34 @@ export default function GalleryClient({ initialItems }: { initialItems: any[] })
   return (
     <div className="space-y-4" dir="rtl">
       <Card>
+        {Array.isArray(galleries) && galleries.length > 1 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {galleries.map((g: any) => {
+              const gid = String(g?.id || '')
+              const active = gid && String(currentGalleryId || '') === gid
+              const label = String(g?.title || 'גלריה')
+              return (
+                <Button
+                  key={gid || label}
+                  type="button"
+                  variant={active ? 'default' : 'ghost'}
+                  onClick={() => {
+                    try {
+                      const u = new URL(window.location.href)
+                      if (gid) u.searchParams.set('g', gid)
+                      window.location.href = `${u.pathname}?${u.searchParams.toString()}`
+                    } catch {
+                      if (gid) window.location.href = `/gallery?g=${encodeURIComponent(gid)}`
+                    }
+                  }}
+                >
+                  {label}
+                </Button>
+              )
+            })}
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <input
             ref={pickerRef}

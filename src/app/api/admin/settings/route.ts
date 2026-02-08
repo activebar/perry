@@ -8,11 +8,12 @@ import { supabaseServiceRole } from '@/lib/supabase'
  * The site homepage reads the *latest* row (updated_at/created_at desc).
  * To keep admin + homepage in sync, the admin API must also read/update the same latest row.
  */
-async function getLatestSettingsRow() {
+async function getLatestSettingsRow(event_id: string) {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
     .from('event_settings')
     .select('*')
+    .eq('event_id', event_id)
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   try {
-    let row = await getLatestSettingsRow()
+    let row = await getLatestSettingsRow(String((admin as any).event_id || 'default'))
 
     const lockDays = Number((row as any).approval_lock_after_days ?? 7)
     const startAt = new Date((row as any).start_at)
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     if (isLocked && (row as any).require_approval === false) {
       await supabaseServiceRole().from('event_settings').update({ require_approval: true }).eq('id', (row as any).id)
-      row = await getLatestSettingsRow()
+      row = await getLatestSettingsRow(String((admin as any).event_id || 'default'))
     }
     return NextResponse.json({ ok: true, settings: row })
   } catch (e: any) {
@@ -94,7 +95,7 @@ export async function PUT(req: NextRequest) {
 
     // continue with same patch below
     try {
-      const row = await getLatestSettingsRow()
+      const row = await getLatestSettingsRow(String((admin as any).event_id || 'default'))
 
       const srv = supabaseServiceRole()
       const { data, error } = await srv
@@ -114,7 +115,7 @@ export async function PUT(req: NextRequest) {
 
   try {
     const patch = await req.json()
-    const row = await getLatestSettingsRow()
+    const row = await getLatestSettingsRow(String((admin as any).event_id || 'default'))
 
     const srv = supabaseServiceRole()
     const { data, error } = await srv

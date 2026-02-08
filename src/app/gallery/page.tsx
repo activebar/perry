@@ -3,23 +3,43 @@ import { Container, Card, Button } from '@/components/ui'
 import { supabaseAnon } from '@/lib/supabase'
 import { fetchBlocks, fetchSettings, getBlockTitle } from '@/lib/db'
 import GalleryClient from './ui'
+import { getEventId } from '@/lib/event-id'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-async function getImages() {
+async function getGalleries() {
   const supabase = supabaseAnon()
+  const event_id = getEventId()
+  const { data, error } = await supabase
+    .from('galleries')
+    .select('id, title, order_index')
+    .eq('event_id', event_id)
+    .eq('is_active', true)
+    .order('order_index', { ascending: true })
+  if (error) return []
+  return data || []
+}
+
+async function getImages(galleryId: string | null) {
+  const supabase = supabaseAnon()
+  const event_id = getEventId()
 
   // Gallery items are stored in public.media_items (created by /api/upload)
   // NOTE: media_items schema uses: public_url, storage_path, mime_type, kind, deleted_at, archived_at
-  const { data, error } = await supabase
+  let q: any = supabase
     .from('media_items')
     .select('id, public_url, storage_path, mime_type, created_at')
+    .eq('event_id', event_id)
     .eq('kind', 'gallery')
     .is('deleted_at', null)
     .is('archived_at', null)
     .order('created_at', { ascending: false })
     .limit(200)
+
+  if (galleryId) q = q.eq('gallery_id', galleryId)
+
+  const { data, error } = await q
 
   if (error) return []
 
@@ -42,8 +62,14 @@ async function getImages() {
 }
 
 
-export default async function GalleryPage() {
-  const [items, settings, blocks] = await Promise.all([getImages(), fetchSettings(), fetchBlocks()])
+export default async function GalleryPage({ searchParams }: { searchParams: { g?: string } }) {
+  const [settings, blocks, galleries] = await Promise.all([fetchSettings(), fetchBlocks(), getGalleries()])
+
+  const requested = String(searchParams?.g || '').trim()
+  const first = galleries?.[0]?.id ? String(galleries[0].id) : ''
+  const currentGalleryId = requested && galleries.some((x: any) => String(x.id) === requested) ? requested : (first || null)
+
+  const items = await getImages(currentGalleryId)
 
   const blessingsTitle = getBlockTitle(blocks, 'blessings', (String((settings as any)?.blessings_title || '').trim() || 'ברכות'))
   const giftTitle = getBlockTitle(blocks, 'gift', 'מתנה')
@@ -77,7 +103,7 @@ export default async function GalleryPage() {
 </div>
 
         <div className="mt-4">
-          <GalleryClient initialItems={items} />
+          <GalleryClient initialItems={items} galleries={galleries} currentGalleryId={currentGalleryId} />
         </div>
       </Container>
     </main>
