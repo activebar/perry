@@ -110,7 +110,7 @@ const status = matchedBlock ? 'pending' : baseStatus
     }
 
     const { data, error } = await srv.from('posts').insert(insert).select('*').single()
-    if (error) throw errorr
+    if (error) throw error
 
     if (insert.media_path) {
       await srv
@@ -181,7 +181,7 @@ const oldMediaPath = String((post as any)?.media_path || '')
 const newMediaPath = 'media_path' in patch ? String(patch.media_path || '') : oldMediaPath
 
 const { data, error } = await srv.from('posts').update(patch).eq('event_id', event_id).eq('id', id).select('*').single()
-    if (error) throw errorr
+    if (error) throw error
 
     // If media_path changed: delete old object to avoid storage leftovers
     if (newMediaPath && oldMediaPath && newMediaPath !== oldMediaPath) {
@@ -190,7 +190,7 @@ const { data, error } = await srv.from('posts').update(patch).eq('event_id', eve
     }
 
 
-    if (error) throw errorr
+    if (error) throw error
 
     // attach media_items if a new media_path is provided
     if (patch.media_path) {
@@ -230,7 +230,7 @@ export async function DELETE(req: Request) {
     }
 
     const { error } = await srv.from('posts').update({ status: 'deleted' }).eq('event_id', event_id).eq('id', postId)
-    if (error) throw errorr
+    if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
