@@ -14,6 +14,42 @@ function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/');
 }
 
+async function shrinkImageFile(file: File, maxDim = 2000, quality = 0.82): Promise<File> {
+  try {
+    // Skip non-images
+    if (!(file.type || '').startsWith('image/')) return file
+
+    // If it's already small-ish, keep as-is (avoids recompressing)
+    if (file.size && file.size < 2.5 * 1024 * 1024) return file
+
+    // Decode in browser
+    const bmp = await createImageBitmap(file)
+    const w = bmp.width
+    const h = bmp.height
+    const scale = Math.min(1, maxDim / Math.max(w, h))
+    const tw = Math.max(1, Math.round(w * scale))
+    const th = Math.max(1, Math.round(h * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = tw
+    canvas.height = th
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return file
+    ctx.drawImage(bmp, 0, 0, tw, th)
+
+    const blob: Blob | null = await new Promise(resolve =>
+      canvas.toBlob(b => resolve(b), 'image/jpeg', quality)
+    )
+
+    if (!blob) return file
+    const nameBase = (file.name || 'image').replace(/\.[^.]+$/, '')
+    return new File([blob], `${nameBase}.jpg`, { type: 'image/jpeg' })
+  } catch {
+    return file
+  }
+}
+
+
 async function downloadUrl(url: string) {
   try {
     const res = await fetch(url);
@@ -93,7 +129,8 @@ export default function GalleryClient({
     try {
       for (const f of files) {
         const fd = new FormData();
-        fd.set('file', f);
+        const fileToUpload = await shrinkImageFile(f, 2000, 0.82);
+        fd.set('file', fileToUpload);
         fd.set('kind', 'gallery');
         if (currentGalleryId) fd.set('gallery_id', currentGalleryId)
 
@@ -102,8 +139,8 @@ export default function GalleryClient({
         if (!up.ok) throw new Error((upJson as any)?.error || 'שגיאה בהעלאה');
 
         const url = String((upJson as any).publicUrl || '')
-        const mime = String((upJson as any).mime_type || f.type || '')
-        const isVideo = mime.startsWith('video/') || isVideoFile(f)
+        const mime = String((upJson as any).mime_type || (fileToUpload as any)?.type || '')
+        const isVideo = mime.startsWith('video/') || isVideoFile(fileToUpload as any)
         setItems(prev => [
           {
             id: String((upJson as any).id || crypto.randomUUID()),

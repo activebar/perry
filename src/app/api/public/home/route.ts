@@ -181,13 +181,15 @@ export async function GET() {
 
     const galleryBlocksPreview = await Promise.all(
       (showGalleryBlocks ? galleryBlocks : []).map(async (b: any) => {
-        const gid = String(b?.config?.gallery_id || '')
-        const limit = Number(b?.config?.preview_limit ?? settings.guest_gallery_preview_limit ?? 6)
-        if (!gid) return { block_id: b.id, gallery_id: null, title: String(b?.config?.title || ''), items: [] }
-        const items = await fetchGalleryPreviewByGalleryId(gid, limit, String(Date.now()))
-        const title = String(b?.config?.title || titleById.get(gid) || 'גלריה')
-        return { block_id: b.id, gallery_id: gid, title, items }
-      })
+        
+const requestedGid = String(b?.config?.gallery_id || '').trim()
+const fallbackGid = galleriesList?.[0]?.id ? String(galleriesList[0].id) : ''
+const gid = requestedGid || fallbackGid
+const limit = Number(b?.config?.preview_limit ?? settings.guest_gallery_preview_limit ?? 6)
+if (!gid) return { block_id: b.id, gallery_id: null, title: String(b?.config?.title || 'גלריה'), items: [] }
+const items = await fetchGalleryPreviewByGalleryId(gid, limit, String(Date.now()))
+const title = String(b?.config?.title || titleById.get(gid) || 'גלריה')
+return { block_id: b.id, gallery_id: gid, title, items }      })
     )
 
     const blessingsPreview = await fetchBlessingsPreview(blessingsPreviewLimit, device_id)

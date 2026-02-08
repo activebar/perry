@@ -32,6 +32,16 @@ export async function POST(req: Request) {
       gallery_id = (g.data as any)?.id ? String((g.data as any).id) : null
     }
 
+// If there is still no gallery (first run), create a default one automatically
+if (!gallery_id && kind === 'gallery') {
+  const created = await sb
+    .from('galleries')
+    .insert({ event_id, title: 'גלריה', order_index: 1, is_active: true })
+    .select('id')
+    .single()
+  gallery_id = (created.data as any)?.id ? String((created.data as any).id) : null
+}
+
     // NOTE: In newer @types/node, Buffer is generic (Buffer<T extends ArrayBufferLike>).
     // Keep this typed as plain `Buffer` to avoid build-time incompatibilities between
     // Buffer<ArrayBuffer> and Buffer<ArrayBufferLike> across different typings.
