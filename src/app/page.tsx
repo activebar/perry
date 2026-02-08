@@ -211,6 +211,12 @@ export default function HomePage() {
   const showBlessingsBlock = visibleTypes.has('blessings')
   const showGiftBlock = visibleTypes.has('gift')
 
+  const orderedBlocks = useMemo(() => {
+    return (blocks || [])
+      .slice()
+      .sort((a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0))
+  }, [blocks])
+
   const galleryLabel = useMemo(() => {
     const b = (blocks || []).find((x: any) => String(x?.type) === 'gallery')
     const t = String(b?.config?.title || '').trim()
@@ -376,215 +382,210 @@ export default function HomePage() {
         </div>
 
         <div className="mt-4 space-y-4">
-          {showHero && (
-            <Card dir="rtl">
-              <div className="space-y-3 text-right">
-                {heroImages.length > 0 && <HeroRotator images={heroImages} seconds={heroSeconds} />}
-                <div className="whitespace-pre-wrap text-sm text-zinc-700">{heroText}</div>
+          {orderedBlocks
+            .filter((b: any) => !!b?.is_visible && String(b?.type) !== 'menu')
+            .map((b: any) => {
+              const type = String(b?.type || '')
+              if (type === 'hero') {
+                return (
+                  <Card key={b.id} dir="rtl">
+                    <div className="space-y-3 text-right">
+                      {heroImages.length > 0 && <HeroRotator images={heroImages} seconds={heroSeconds} />}
+                      <div className="whitespace-pre-wrap text-sm text-zinc-700">{heroText}</div>
 
-                <div className="flex flex-wrap gap-2">
-                  {settings?.waze_url && (
-                    <a href={settings.waze_url} target="_blank" rel="noreferrer">
-                      <Button>Waze</Button>
-                    </a>
-                  )}
-                  {showGiftBlock && (
-                    <Link href="/gift">
-                      <Button variant="ghost">{giftLabel}</Button>
-                    </Link>
-                  )}
-                  {showGalleryBlock && (
-                    <Link href="/gallery">
-                      <Button variant="ghost">{galleryLabel}</Button>
-                    </Link>
-                  )}
-                  {showBlessingsBlock && (
-                    <Link href="/blessings">
-                      <Button variant="ghost">{blessingsTitle}</Button>
-                    </Link>
-                  )}
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {showGalleryBlock && (
-            <Card dir="rtl">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-right">
-                  <p className="font-semibold">{guestTitle}</p>
-                  <p className="text-sm text-zinc-600">תמונות מהאורחים.</p>
-                </div>
-                {guestShowAll && (
-                  <Link href="/gallery">
-                    <Button>לכל התמונות</Button>
-                  </Link>
-                )}
-              </div>
-
-              {Array.isArray(guestPreview) && guestPreview.length > 0 && (
-                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  {guestPreview.map((it: any) => (
-                    <div key={it.id} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50">
-                      <img src={it.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                      <div className="flex flex-wrap gap-2">
+                        {settings?.waze_url && (
+                          <a href={settings.waze_url} target="_blank" rel="noreferrer">
+                            <Button>Waze</Button>
+                          </a>
+                        )}
+                        {showGiftBlock && (
+                          <Link href="/gift">
+                            <Button variant="ghost">{giftLabel}</Button>
+                          </Link>
+                        )}
+                        {showGalleryBlock && (
+                          <Link href="/gallery">
+                            <Button variant="ghost">{galleryLabel}</Button>
+                          </Link>
+                        )}
+                        {showBlessingsBlock && (
+                          <Link href="/blessings">
+                            <Button variant="ghost">{blessingsTitle}</Button>
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-          )}
+                  </Card>
+                )
+              }
 
-          {showGalleryBlock && (
-            <Card dir="rtl">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-right">
-                  <p className="font-semibold">{adminTitle}</p>
-                  <p className="text-sm text-zinc-600">תמונות המנהל.</p>
-                </div>
-                {adminShowAll && (
-                  <Link href="/gallery-admin">
-                    <Button>לכל התמונות</Button>
-                  </Link>
-                )}
-              </div>
+              if (type === 'gallery') {
+                return (
+                  <div key={b.id} className="space-y-4">
+                    <Card dir="rtl">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-right">
+                          <p className="font-semibold">{guestTitle}</p>
+                          <p className="text-sm text-zinc-600">תמונות מהאורחים.</p>
+                        </div>
+                        {guestShowAll && (
+                          <Link href="/gallery">
+                            <Button>לכל התמונות</Button>
+                          </Link>
+                        )}
+                      </div>
 
-              {Array.isArray(adminPreview) && adminPreview.length > 0 && (
-                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  {adminPreview.map((it: any) => (
-                    <div key={it.id} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50">
-                      <img src={it.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-          )}
+                      {Array.isArray(guestPreview) && guestPreview.length > 0 && (
+                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                          {guestPreview.map((it: any) => (
+                            <div key={it.id} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50">
+                              <img src={it.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
 
-          {showBlessingsBlock && (
-            <Card dir="rtl">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-right">
-                  <p className="font-semibold">{blessingsTitle}</p>
-                  <p className="text-sm text-zinc-600 text-right">{blessingsSubtitle}</p>
-                </div>
-                <div className="flex gap-2">
-                  {blessingsShowAll && (
-                    <Link href="/blessings">
-                      <Button>שלח ברכה</Button>
-                    </Link>
-                  )}
-                </div>
-              </div>
+                    <Card dir="rtl">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-right">
+                          <p className="font-semibold">{adminTitle}</p>
+                          <p className="text-sm text-zinc-600">תמונות המנהל.</p>
+                        </div>
+                        {adminShowAll && (
+                          <Link href="/gallery/admin">
+                            <Button>לכל התמונות</Button>
+                          </Link>
+                        )}
+                      </div>
 
-              {Array.isArray(blessingsPreview) && blessingsPreview.length > 0 ? (
-                <div className="mt-3 grid gap-3">
-                  {blessingsPreview.slice(0, Math.max(0, blessingsPreviewLimit)).map((p: any) => (
-                    <div key={p.id} className="rounded-2xl border border-zinc-200 p-3">
+                      {Array.isArray(adminPreview) && adminPreview.length > 0 && (
+                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                          {adminPreview.map((it: any) => (
+                            <div key={it.id} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50">
+                              <img src={it.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+                )
+              }
+
+              if (type === 'blessings') {
+                return (
+                  <Card key={b.id} dir="rtl">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
-                        <p className="font-medium">{p.author_name || 'אורח/ת'}</p>
+                        <p className="font-semibold">{blessingsTitle}</p>
+                        <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה ותנו ריאקשן.</p>
                       </div>
-
-                      {/* media (if exists) */}
-                      {(p.video_url || p.media_url) ? (
-                        <div className="mt-3 flex justify-center">
-                          <button
-                            type="button"
-                            className="relative overflow-hidden rounded-2xl bg-zinc-50"
-                            style={{ width: mediaSize, height: mediaSize }}
-                            onClick={() => {
-                              const u = ((p.video_url || p.media_url) as string) || ''
-                              if (!u) return
-                              setLightbox({ url: u, isVideo: Boolean(p.video_url) })
-                            }}
-                            aria-label="פתח מדיה"
-                          >
-                            {p.video_url ? (
-                              <video src={p.video_url} className="h-full w-full object-cover" muted playsInline />
-                            ) : (
-                              <img src={p.media_url as string} alt="תמונה" className="h-full w-full object-cover" loading="lazy" />
-                            )}
-                          </button>
-                        </div>
-                      ) : null}
-
-                      {/* link preview thumb (even if media exists) */}
-                      {linkPreviewEnabled && p.link_url ? (
-                        <div className="mt-3 flex justify-center">
-                          <HomeLinkThumb url={p.link_url} sizePx={mediaSize} />
-                        </div>
-                      ) : null}
-
-                      {p.text && (
-                        <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-800 text-right">{p.text}</p>
-                      )}
-
-                      {p.link_url && linkPreviewEnabled && linkPreviewShowDetails && (
-                        <div className="mt-2 mx-auto" style={{ width: mediaSize }}>
-                          <HomeLinkMeta url={p.link_url} showDetails={true} />
-                        </div>
-                      )}
-
-                      <div className="mt-2 flex items-center gap-2 flex-nowrap overflow-x-auto">
-                        {EMOJIS.map(e => {
-                          const count = Number(p.reaction_counts?.[e] || 0)
-                          const active = Array.isArray(p.my_reactions) && p.my_reactions.includes(e)
-                          return (
-                            <button
-                              key={e}
-                              type="button"
-                              onClick={() => react(p.id, e)}
-                              className={
-                                'rounded-full border px-3 py-1 text-sm ' +
-                                (active ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-700')
-                              }
-                            >
-                              {e} {count > 0 ? count : ''}
-                            </button>
-                          )
-                        })}
-                        {shareEnabled ? (
-                          <button
-                            type="button"
-                            onClick={() => shareBlessing(p)}
-                            className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
-                            title={String(settings?.share_button_label || 'שתף')}
-                          >
-                            🔗
-                          </button>
-                        ) : null}
-                      </div>
+                      <Link href="/blessings">
+                        <Button>לכל הברכות</Button>
+                      </Link>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-zinc-600 text-right">עדיין אין {blessingsTitle}. תהיו הראשונים 💌</p>
-              )}
-            </Card>
-          )}
 
-          {showGiftBlock && (
-            <Card dir="rtl">
-              <div className="flex items-center justify-between">
-                <div className="text-right">
-                  <p className="font-semibold">{giftLabel}</p>
-                  <p className="text-sm text-zinc-600">אפשר להשאיר מתנה בלחיצה.</p>
-                </div>
-                <Link href="/gift">
-                  <Button>ל{giftLabel}</Button>
-                </Link>
-              </div>
-            </Card>
-          )}
+                    {Array.isArray(blessingsPreview) && blessingsPreview.length > 0 ? (
+                      <div className="mt-3 space-y-3">
+                        {blessingsPreview.map((p: any) => (
+                          <div key={p.id} className="rounded-2xl bg-zinc-50 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 text-right">
+                                <div className="text-sm font-semibold">{p.author_name || 'אנונימי'}</div>
+                                {p.text ? <div className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{p.text}</div> : null}
+                                {p.link_url ? (
+                                  <div className="mt-2">
+                                    <HomeLinkThumb url={p.link_url} sizePx={120} />
+                                    <HomeLinkMeta url={p.link_url} />
+                                  </div>
+                                ) : null}
+                              </div>
 
-          {settings?.footer_enabled && (
-            <div className="pt-4 text-center text-sm text-zinc-500">
-              <a href={settings.footer_url || 'https://www.activebar.co.il'} target="_blank" rel="noreferrer">
-                {settings.footer_label || 'Active Bar'}
-              </a>
-            </div>
-          )}
+                              {p.media_url ? (
+                                <button
+                                  type="button"
+                                  className="relative h-20 w-20 flex-none overflow-hidden rounded-2xl bg-zinc-200"
+                                  onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
+                                >
+                                  <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                </button>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap gap-2">
+                                {EMOJIS.map(e => (
+                                  <button
+                                    key={e}
+                                    type="button"
+                                    className={`rounded-full border px-3 py-1 text-sm ${
+                                      (p.my_reactions || []).includes(e) ? 'bg-black text-white' : 'bg-white'
+                                    }`}
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetch('/api/reactions', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ post_id: p.id, emoji: e })
+                                        })
+                                        if (!res.ok) return
+                                        const j = await res.json().catch(() => ({}))
+                                        if (!j?.ok) return
+                                        // update counts locally (simple)
+                                        setData(prev => {
+                                          if (!prev) return prev
+                                          const next = { ...prev }
+                                          next.blessingsPreview = (next.blessingsPreview || []).map((x: any) => {
+                                            if (x.id !== p.id) return x
+                                            return j.post
+                                          })
+                                          return next
+                                        })
+                                      } catch {}
+                                    }}
+                                  >
+                                    {e} {Number(p.reaction_counts?.[e] || 0)}
+                                  </button>
+                                ))}
+                              </div>
+
+                              <Link href="/blessings">
+                                <Button variant="ghost">כתוב ברכה</Button>
+                              </Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-right text-sm text-zinc-600">עדיין אין ברכות. תהיו הראשונים 😊</div>
+                    )}
+                  </Card>
+                )
+              }
+
+              if (type === 'gift') {
+                return (
+                  <Card key={b.id} dir="rtl">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="font-semibold">{giftLabel}</p>
+                        <p className="text-sm text-zinc-600">לתרומה/מתנה באהבה.</p>
+                      </div>
+                      <Link href="/gift">
+                        <Button>{giftLabel}</Button>
+                      </Link>
+                    </div>
+                  </Card>
+                )
+              }
+
+              return null
+            })}
         </div>
-{lightbox && (
+
+        {lightbox && (
   <div className="fixed inset-0 z-50 bg-black/80 p-4" onClick={() => setLightbox(null)}>
     <div className="mx-auto flex h-full max-w-5xl items-center justify-center">
       <div className="w-full" onClick={(e) => e.stopPropagation()}>

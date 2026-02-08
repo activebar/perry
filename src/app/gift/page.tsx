@@ -6,8 +6,9 @@ import { fetchBlocks, fetchSettings, getBlockTitle } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-function isLikelyImageUrl(u?: string | null): u is string {  if (!u) return false
-  const val = u
+function isLikelyImageUrl(u?: string | null) {
+  const val = String(u || '')
+  if (!val) return false
   const base = val.split('?')[0] || ''
   return /\.(png|jpe?g|webp|gif|svg)$/i.test(base)
 }
