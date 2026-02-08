@@ -16,10 +16,14 @@ export async function POST(req: Request) {
     const galleryFromBody = String(fd.get('gallery_id') || '').trim() || null
     if (!file) return NextResponse.json({ error: 'missing file' }, { status: 400 })
 
-    const sb = supabaseServiceRole()// For gallery uploads we require an explicit gallery_id (no implicit defaults)
-let gallery_id: string | null = galleryFromBody
-if (kind === 'gallery') {
-  if (!gallery_id) return NextResponse.json({ error: 'missing gallery_id' }, { status: 400 })
+    const sb = supabaseServiceRole()
+
+    // For gallery uploads we require an explicit gallery_id (no implicit defaults)
+    let gallery_id: string | null = galleryFromBody
+    let galleryRow: any = null
+
+    if (kind === 'gallery') {
+      if (!gallery_id) return NextResponse.json({ error: 'missing gallery_id' }, { status: 400 })
 
   const { data: gRow, error: gErr } = await sb
     .from('galleries')
@@ -28,11 +32,11 @@ if (kind === 'gallery') {
     .eq('id', gallery_id)
     .maybeSingle()
 
-  if (gErr) throw gErr
+      if (gErr) throw gErr
       galleryRow = gRow
-  if (!gRow || gRow.is_active === false) return NextResponse.json({ error: 'gallery not found' }, { status: 404 })
-  if (gRow.upload_enabled === false) return NextResponse.json({ error: 'upload disabled for this gallery' }, { status: 403 })
-}
+      if (!gRow || gRow.is_active === false) return NextResponse.json({ error: 'gallery not found' }, { status: 404 })
+      if (gRow.upload_enabled === false) return NextResponse.json({ error: 'upload disabled for this gallery' }, { status: 403 })
+    }
 
     // NOTE: In newer @types/node, Buffer is generic (Buffer<T extends ArrayBufferLike>).
     // Keep this typed as plain `Buffer` to avoid build-time incompatibilities between
