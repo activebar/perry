@@ -995,7 +995,7 @@ async function loadBlocks() {
           {err && <p className="text-sm text-red-600">{err}</p>}
         </div>
       </Card>
-    );
+    )
   }
 
   /* ===== AUTHENTICATED UI ===== */
@@ -2159,5 +2159,5 @@ async function loadBlocks() {
         </Card>
       )}
     </div>
-  );
+  )
 }

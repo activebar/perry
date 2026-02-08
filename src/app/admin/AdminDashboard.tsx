@@ -11,7 +11,7 @@ function classNames(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(' ')
 }
 
-export default function AdminDashboard({ tab, sub }: { tab: AdminMainTab; sub?: string }) {
+export default function AdminDashboard({ tab }: { tab: AdminMainTab }) {
   
 const tabs = useMemo(
   () =>
@@ -24,35 +24,6 @@ const tabs = useMemo(
     ] as const,
   []
 )
-
-const EVENT_SUBTABS = [
-  { key: 'general', label: 'הגדרות כלליות' },
-  { key: 'hero', label: 'HERO' },
-  { key: 'rotate', label: 'תמונות מתחלפות' },
-  { key: 'footer', label: 'פוטר' }
-] as const
-
-const BLESSINGS_SUBTABS = [
-  { key: 'blessings', label: 'ברכות' },
-  { key: 'content', label: 'ניהול תוכן' },
-  { key: 'qr', label: 'QR & שיתוף' },
-  { key: 'moderation', label: 'אישור תכנים' }
-] as const
-
-
-
-  const subTabs = useMemo(() => {
-    if (tab === 'event') return EVENT_SUBTABS
-    if (tab === 'blessings') return BLESSINGS_SUBTABS
-    return [] as const
-  }, [tab])
-
-  const activeSub = useMemo(() => {
-    const def = tab === 'event' ? 'general' : tab === 'blessings' ? 'blessings' : ''
-    const allowed = new Set(subTabs.map(t => t.key))
-    if (sub && allowed.has(sub as any)) return sub
-    return def
-  }, [tab, sub, subTabs])
 
   const initial = useMemo(() => {
     // מיפוי “טאב עליון” לטאב הפנימי הקיים ב-AdminApp
