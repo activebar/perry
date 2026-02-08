@@ -312,15 +312,11 @@ function parseLinesToArray(s: string) {
 export default function AdminApp({
   initialTab,
   initialPendingKind,
-  embeddedMode,
-  settingsSubTab,
-  blessingsSubTab
+  embeddedMode
 }: {
   initialTab?: Tab
   initialPendingKind?: 'blessing' | 'gallery'
   embeddedMode?: boolean
-  settingsSubTab?: 'general' | 'hero' | 'rotate' | 'footer'
-  blessingsSubTab?: 'blessings' | 'content' | 'qr' | 'moderation'
 } = {}) {
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [tab, setTab] = useState<Tab>(initialTab || 'login')
@@ -338,7 +334,6 @@ export default function AdminApp({
 
   // settings
   const [settings, setSettings] = useState<any | null>(null)
-  const settingsView = settingsSubTab || 'general'
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
@@ -1074,7 +1069,6 @@ async function loadBlocks() {
           </div>
 
           <div className="mt-3 grid gap-3">
-            {settingsView === 'general' && (
             {/* כללי */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">הגדרות כלליות</p>
@@ -1120,10 +1114,8 @@ async function loadBlocks() {
                 placeholder="קישור Waze"
                 dir="ltr"
               />
-            )}
             </div>
 
-            {settingsView === 'hero' && (
             {/* HERO */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
@@ -1148,7 +1140,6 @@ async function loadBlocks() {
                 placeholder="טקסט אחרי האירוע"
                 rows={4}
               />
-            {settingsView === 'rotate' && (
 
               <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
                 <p className="text-sm font-medium">תמונות מתחלפות</p>
@@ -1748,10 +1739,8 @@ async function loadBlocks() {
                   ))
                 )}
               </div>
-            )}
             </div>
 
-            {settingsView === 'footer' && (
             {/* פוטר */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">פוטר</p>
@@ -2170,5 +2159,5 @@ async function loadBlocks() {
         </Card>
       )}
     </div>
-  )
+  );
 }
