@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest, requirePermission } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 
-const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
+const ALLOWED_KINDS = new Set(['blessing', 'gallery'])
 const ALLOWED_STATUS = new Set(['pending', 'approved', 'deleted'])
 
 export async function GET(req: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const kind = (req.nextUrl.searchParams.get('kind') || '').trim()
   // permission gate
   if (admin.role !== 'master') {
-    if (kind === 'gallery' || kind === 'gallery_admin') {
+    if (kind === 'gallery') {
       requirePermission(admin, 'galleries.read')
     } else {
       // default blessing
@@ -54,7 +54,7 @@ export async function PUT(req: NextRequest) {
     if (admin.role !== 'master') {
       const kind = String(body.kind || '')
       const wantStatus = typeof body.status === 'string' ? body.status : ''
-      const isGallery = kind === 'gallery' || kind === 'gallery_admin'
+      const isGallery = kind === 'gallery'
       if (isGallery) {
         if (wantStatus === 'deleted') requirePermission(admin, 'galleries.delete')
         else requirePermission(admin, 'galleries.write')
@@ -78,8 +78,23 @@ export async function PUT(req: NextRequest) {
     if (admin.event_id) uq = uq.eq('event_id', admin.event_id)
 
     const { data, error } = await uq.select('*').single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ ok: true, post: data })
+if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+// If deleted: also delete from storage to avoid orphaned files
+if (patch.status === 'deleted' && (data as any)?.media_path) {
+  const mediaPath = String((data as any).media_path || '')
+  if (mediaPath) {
+    try {
+      await srv.storage.from('uploads').remove([mediaPath])
+    } catch {}
+    try {
+      await srv.from('media_items').update({ deleted_at: new Date().toISOString() }).eq('storage_path', mediaPath)
+    } catch {}
+  }
+}
+
+return NextResponse.json({ ok: true, post: data })
+
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }

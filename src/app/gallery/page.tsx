@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Container, Card, Button } from '@/components/ui'
-import { supabaseAnon } from '@/lib/supabase'
+import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
+import { cookies } from 'next/headers'
 import { fetchBlocks, fetchSettings, getBlockTitle } from '@/lib/db'
 import GalleryClient from './ui'
 import { getEventId } from '@/lib/event-id'
@@ -13,7 +14,7 @@ async function getGalleries() {
   const event_id = getEventId()
   const { data, error } = await supabase
     .from('galleries')
-    .select('id, title, order_index')
+    .select('id, title, order_index, upload_enabled, require_approval')
     .eq('event_id', event_id)
     .eq('is_active', true)
     .order('order_index', { ascending: true })
@@ -22,44 +23,45 @@ async function getGalleries() {
 }
 
 async function getImages(galleryId: string | null) {
-  const supabase = supabaseAnon()
   const event_id = getEventId()
+  const device_id = cookies().get('device_id')?.value || null
+  const srv = supabaseServiceRole()
 
-  // Gallery items are stored in public.media_items (created by /api/upload)
-  // NOTE: media_items schema uses: public_url, storage_path, mime_type, kind, deleted_at, archived_at
-  let q: any = supabase
-    .from('media_items')
-    .select('id, public_url, storage_path, mime_type, created_at')
+  if (!galleryId) return []
+
+  const { data: posts, error } = await srv
+    .from('posts')
+    .select('id, created_at, media_url, video_url, status, device_id, gallery_id')
     .eq('event_id', event_id)
     .eq('kind', 'gallery')
-    .is('deleted_at', null)
-    .is('archived_at', null)
+    .eq('status', 'approved')
+    .eq('gallery_id', galleryId)
     .order('created_at', { ascending: false })
     .limit(200)
 
-  if (galleryId) q = q.eq('gallery_id', galleryId)
-
-  const { data, error } = await q
-
   if (error) return []
 
-  return (data || []).map((row: any) => {
-    const url = String(row.public_url || '')
-    const mime = String(row.mime_type || '')
-    const isVideo = mime.startsWith('video/')
+  const oneHour = 60 * 60 * 1000
+  const now = Date.now()
+
+  return (posts || []).map((p: any) => {
+    const created = new Date(p.created_at).getTime()
+    const isMine = device_id && p.device_id && String(p.device_id) === String(device_id)
+    const within = now - created <= oneHour
     return {
-      id: row.id,
-      created_at: row.created_at,
-      // keep UI contract from GalleryClient
-      media_url: isVideo ? null : url,
-      video_url: isVideo ? url : null,
-      media_path: row.storage_path || null,
-      author_name: null,
-      status: null,
+      id: p.id,
+      created_at: p.created_at,
+      media_url: p.media_url,
+      video_url: p.video_url,
+      status: p.status,
       kind: 'gallery',
+      can_delete: Boolean(isMine && within),
+      can_edit: Boolean(isMine && within),
+      editable_until: new Date(created + oneHour).toISOString()
     }
   })
 }
+
 
 
 export default async function GalleryPage({ searchParams }: { searchParams: { g?: string } }) {

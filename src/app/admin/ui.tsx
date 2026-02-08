@@ -242,15 +242,13 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' |  'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
   blocks: 'בלוקים',
   moderation: 'אישור תכנים',
-  ads: 'פרסומות',
-  admin_gallery: 'גלריית מנהל',
-  diag: 'דיאגנוסטיקה',
+  ads: 'פרסומות',  diag: 'דיאגנוסטיקה',
   permissions: 'הרשאות',
   login: 'התחברות'
 }
@@ -473,7 +471,7 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'diag']
     return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
@@ -760,7 +758,7 @@ async function loadBlocks() {
       const [b, g, ga] = await Promise.all([
         jfetch(`/api/admin/posts?status=pending&kind=blessing`, { method: 'GET', headers: {} as any }),
         jfetch(`/api/admin/posts?status=pending&kind=gallery`, { method: 'GET', headers: {} as any }),
-        jfetch(`/api/admin/posts?status=pending&kind=gallery_admin`, { method: 'GET', headers: {} as any })
+        jfetch(`/api/admin/posts?status=pending&kind=gallery`, { method: 'GET', headers: {} as any })
       ])
 
       const bCount = (b.posts || []).length
@@ -862,7 +860,7 @@ async function loadBlocks() {
   }
 
   async function loadAdminGallery() {
-    const res = await jfetch('/api/admin/posts?status=approved&kind=gallery_admin', { method: 'GET', headers: {} as any })
+    const res = await jfetch('/api/admin/posts?status=approved&kind=gallery', { method: 'GET', headers: {} as any })
     setAdminGallery(res.posts || [])
   }
 
@@ -878,7 +876,7 @@ async function loadBlocks() {
       for (const f of adminFiles) {
         const fd = new FormData()
         fd.set('file', f)
-        fd.set('kind', 'gallery_admin')
+        fd.set('kind', 'gallery')
 
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json().catch(() => ({}))
@@ -888,7 +886,7 @@ async function loadBlocks() {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            kind: 'gallery_admin',
+            kind: 'gallery',
             text: null,
             author_name: null,
             media_path: upJson.path,

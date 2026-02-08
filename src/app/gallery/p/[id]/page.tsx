@@ -19,6 +19,21 @@ type MediaRow = {
 async function getMediaItem(id: string): Promise<MediaRow | null> {
   const sb = supabaseServiceRole();
 
+  // Prefer posts (new gallery system). Fallback to media_items for old links.
+  const { data: post } = await sb
+    .from('posts')
+    .select('id, media_url, video_url')
+    .eq('id', id)
+    .eq('kind', 'gallery')
+    .limit(1)
+    .maybeSingle()
+
+  if (post) {
+    const url = String((post as any).media_url || (post as any).video_url || '')
+    const isVideo = Boolean((post as any).video_url)
+    return { id: String((post as any).id), public_url: url || null, mime_type: isVideo ? 'video/*' : 'image/*', kind: 'gallery' }
+  }
+
   // In some older rows/links, the short code was generated from `post_id` instead of `id`.
   // So we try both to avoid "item not found" for existing uploads.
   const byId = await sb

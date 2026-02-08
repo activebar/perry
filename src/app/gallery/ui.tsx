@@ -99,8 +99,17 @@ export default function GalleryClient({
 }) {
   const [items, setItems] = useState<Post[]>(initialItems || []);
   const [files, setFiles] = useState<File[]>([]);
+
+  const selectedGallery = useMemo(() => {
+    const gid = String(currentGalleryId || '')
+    return (Array.isArray(galleries) ? galleries : []).find((g: any) => String(g?.id || '') === gid) || null
+  }, [galleries, currentGalleryId])
+
+  const uploadEnabled = (selectedGallery as any)?.upload_enabled !== false
+
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ id: string; url: string; type: 'image' | 'video' } | null>(null);
 
   const pickerRef = useRef<HTMLInputElement | null>(null);
@@ -120,6 +129,8 @@ export default function GalleryClient({
   }
 
   async function uploadAll() {
+    if (!uploadEnabled) { setErr('העלאה לגלריה הזו כבויה'); return }
+
     setErr(null);
     if (!files.length) {
       setErr('בחר תמונות/וידאו');
@@ -224,12 +235,13 @@ export default function GalleryClient({
             <Button type="button" variant="ghost" onClick={() => videoRef.current?.click()}>
               צלם וידאו
             </Button>
-            <Button type="button" onClick={uploadAll} disabled={busy || files.length === 0}>
+            <Button type="button" onClick={uploadAll} disabled={!uploadEnabled || busy || files.length === 0}>
               {busy ? 'מעלה…' : 'העלה'}
             </Button>
           </div>
         </div>
 
+        {info && <p className="mt-2 text-sm text-emerald-700">{info}</p>}
         {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
 
         {files.length > 0 && (

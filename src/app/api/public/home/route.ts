@@ -50,22 +50,39 @@ async function fetchGalleryPreviewByGalleryId(gallery_id: string, limit: number,
   const safeLimit = Math.max(0, Math.min(50, Number(limit || 0)))
   if (!safeLimit) return []
 
-  // Fetch a window (latest 200) then sample deterministically server-side.
+  // Fetch a window (latest 200 approved) then sample deterministically server-side.
   const { data, error } = await sb
-    .from('media_items')
-    .select('id, public_url, mime_type, created_at')
+    .from('posts')
+    .select('id, media_url, video_url, created_at')
     .eq('event_id', event_id)
     .eq('kind', 'gallery')
+    .eq('status', 'approved')
     .eq('gallery_id', gallery_id)
-    .is('deleted_at', null)
-    .is('archived_at', null)
     .order('created_at', { ascending: false })
     .limit(200)
 
   if (error) return []
-  const rows = (data || []) as any as GalleryPreviewItem[]
-  return seededSample(rows, safeLimit, seed)
+  const rows = (data || []).map((p: any) => ({
+    id: p.id,
+    created_at: p.created_at,
+    media_url: p.media_url,
+    video_url: p.video_url
+  }))
+
+  // Deterministic sampling based on seed
+  const s = String(seed || '')
+  const hash = (str: string) => {
+    let h = 0
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0
+    return h
+  }
+  const base = hash(s)
+
+  const scored = rows.map((r: any) => ({ r, score: hash(String(r.id)) ^ base }))
+  scored.sort((a: any, b: any) => a.score - b.score)
+  return scored.slice(0, safeLimit).map((x: any) => x.r)
 }
+
 
 async function fetchBlessingsPreview(limit: number, device_id?: string | null) {
   const sb = supabaseAnon()
@@ -182,10 +199,8 @@ export async function GET() {
     const galleryBlocksPreview = await Promise.all(
       (showGalleryBlocks ? galleryBlocks : []).map(async (b: any) => {
         
-const requestedGid = String(b?.config?.gallery_id || '').trim()
-const fallbackGid = galleriesList?.[0]?.id ? String(galleriesList[0].id) : ''
-const gid = requestedGid || fallbackGid
-const limit = Number(b?.config?.preview_limit ?? settings.guest_gallery_preview_limit ?? 6)
+const gid = String(b?.config?.gallery_id || '').trim()
+const limit = Number(b?.config?.preview_limit ?? 6)
 if (!gid) return { block_id: b.id, gallery_id: null, title: String(b?.config?.title || 'גלריה'), items: [] }
 const items = await fetchGalleryPreviewByGalleryId(gid, limit, String(Date.now()))
 const title = String(b?.config?.title || titleById.get(gid) || 'גלריה')

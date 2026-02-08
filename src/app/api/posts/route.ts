@@ -4,7 +4,7 @@ import { supabaseServiceRole } from '@/lib/supabase'
 import { matchContentRules } from '@/lib/contentRules'
 import { getEventId } from '@/lib/event-id'
 
-const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
+const ALLOWED_KINDS = new Set(['blessing', 'gallery'])
 
 function withinOneHour(iso: string) {
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString()
@@ -58,18 +58,42 @@ const device_id = cookies().get('device_id')?.value || null
       }
     }
 
-    const { data: settings, error: serr } = await srv
-      .from('event_settings')
-      .select('require_approval')
-      .eq('event_id', event_id)
-      .order('updated_at', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-    if (serr) throw serr
+    // Approval policy:
+// - blessings: event_settings.require_approval
+// - gallery: per-gallery require_approval (public.galleries.require_approval)
+let baseStatus: 'pending' | 'approved' = 'approved'
 
-    const baseStatus = kind === 'gallery_admin' ? 'approved' : (settings.require_approval ? 'pending' : 'approved')
-    const status = matchedBlock ? 'pending' : baseStatus
+if (kind === 'blessing') {
+  const { data: settings, error: serr } = await srv
+    .from('event_settings')
+    .select('require_approval')
+    .eq('event_id', event_id)
+    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+  if (serr) throw serr
+  baseStatus = settings.require_approval ? 'pending' : 'approved'
+}
+
+if (kind === 'gallery') {
+  const gallery_id = String(body.gallery_id || '').trim()
+  if (!gallery_id) return NextResponse.json({ error: 'missing gallery_id' }, { status: 400 })
+
+  const { data: g, error: gerr } = await srv
+    .from('galleries')
+    .select('id, require_approval, is_active')
+    .eq('event_id', event_id)
+    .eq('id', gallery_id)
+    .maybeSingle()
+  if (gerr) throw gerr
+  if (!g || g.is_active === false) return NextResponse.json({ error: 'gallery not found' }, { status: 404 })
+
+  baseStatus = g.require_approval ? 'pending' : 'approved'
+}
+
+const status = matchedBlock ? 'pending' : baseStatus
+
 
     const insert = {
       event_id,
@@ -80,12 +104,13 @@ const device_id = cookies().get('device_id')?.value || null
       media_url: body.media_url || null,
       video_url: body.video_url || null,
       link_url: body.link_url || null,
+      gallery_id: kind === 'gallery' ? (String(body.gallery_id || '').trim() || null) : null,
       status,
       device_id
     }
 
     const { data, error } = await srv.from('posts').insert(insert).select('*').single()
-    if (error) throw error
+    if (error) throw errorr
 
     if (insert.media_path) {
       await srv
@@ -152,8 +177,20 @@ export async function PUT(req: Request) {
       }
     }
 
+const oldMediaPath = String((post as any)?.media_path || '')
+const newMediaPath = 'media_path' in patch ? String(patch.media_path || '') : oldMediaPath
+
 const { data, error } = await srv.from('posts').update(patch).eq('event_id', event_id).eq('id', id).select('*').single()
-    if (error) throw error
+    if (error) throw errorr
+
+    // If media_path changed: delete old object to avoid storage leftovers
+    if (newMediaPath && oldMediaPath && newMediaPath !== oldMediaPath) {
+      try { await srv.storage.from('uploads').remove([oldMediaPath]) } catch {}
+      try { await srv.from('media_items').update({ deleted_at: new Date().toISOString() }).eq('storage_path', oldMediaPath) } catch {}
+    }
+
+
+    if (error) throw errorr
 
     // attach media_items if a new media_path is provided
     if (patch.media_path) {
@@ -193,7 +230,7 @@ export async function DELETE(req: Request) {
     }
 
     const { error } = await srv.from('posts').update({ status: 'deleted' }).eq('event_id', event_id).eq('id', postId)
-    if (error) throw error
+    if (error) throw errorr
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
