@@ -30,7 +30,8 @@ export default async function AdminGalleryPage() {
         </Card>
 
         <div className="mt-4">
-          <GalleryClient initialItems={items} />
+          {/* גלריית מנהל היא גלריה “וירטואלית” לפי kind, לא לפי gallery_id */}
+          <GalleryClient initialItems={items} galleryId="admin" uploadEnabled={false} />
         </div>
       </Container>
     </main>
