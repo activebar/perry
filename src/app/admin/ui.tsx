@@ -420,6 +420,14 @@ export default function AdminApp({
   const [adminBusy, setAdminBusy] = useState(false)
   const [adminMsg, setAdminMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  // galleries management (new)
+  const [galleries, setGalleries] = useState<any[]>([])
+  const [selectedGalleryId, setSelectedGalleryId] = useState<string>('')
+  const [galleryBusy, setGalleryBusy] = useState(false)
+  const [galleryMsg, setGalleryMsg] = useState<string | null>(null)
+  const [pendingMedia, setPendingMedia] = useState<any[]>([])
+  const [hoursToOpen, setHoursToOpen] = useState<number>(8)
+
 
   async function triggerDownload(url: string) {
     try {
@@ -920,6 +928,78 @@ async function loadBlocks() {
       setAdminMsg(friendlyError(e?.message || 'שגיאה במחיקה'))
     }
   }
+  async function loadGalleries() {
+    try {
+      const res = await jfetch('/api/admin/galleries', { method: 'GET' })
+      const rows = res.galleries || []
+      setGalleries(rows)
+      if (!selectedGalleryId && rows[0]?.id) setSelectedGalleryId(rows[0].id)
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת גלריות'))
+    }
+  }
+
+  async function loadPendingMedia(gid?: string) {
+    const id = gid || selectedGalleryId
+    if (!id) return
+    try {
+      const res = await jfetch(`/api/admin/media-items?status=pending&gallery_id=${encodeURIComponent(id)}`, { method: 'GET' })
+      setPendingMedia(res.items || [])
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת תמונות ממתינות'))
+    }
+  }
+
+  async function updateGallery(id: string, patch: any) {
+    setGalleryMsg(null)
+    setGalleryBusy(true)
+    try {
+      const res = await jfetch('/api/admin/galleries', { method: 'PUT', body: JSON.stringify({ id, ...patch }) })
+      const g = res.gallery
+      setGalleries(prev => prev.map(x => (x.id === id ? g : x)))
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה בעדכון'))
+    } finally {
+      setGalleryBusy(false)
+    }
+  }
+
+  async function openGalleryWindow(id: string) {
+    setGalleryMsg(null)
+    setGalleryBusy(true)
+    try {
+      const res = await jfetch('/api/admin/galleries', { method: 'POST', body: JSON.stringify({ id, hours: hoursToOpen }) })
+      const g = res.gallery
+      setGalleries(prev => prev.map(x => (x.id === id ? g : x)))
+      setGalleryMsg(`✅ פתוח לאוטומט-אישור עד ${new Date(g.auto_approve_until).toLocaleString('he-IL')}`)
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה בפתיחה לזמן מוגבל'))
+    } finally {
+      setGalleryBusy(false)
+    }
+  }
+
+  async function approveMediaItem(id: string) {
+    setGalleryMsg(null)
+    try {
+      await jfetch('/api/admin/media-items', { method: 'PUT', body: JSON.stringify({ id, is_approved: true }) })
+      setPendingMedia(prev => prev.filter(x => x.id !== id))
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה באישור'))
+    }
+  }
+
+  async function deleteMediaItem(id: string) {
+    if (!confirm('למחוק את התמונה?')) return
+    setGalleryMsg(null)
+    try {
+      await jfetch('/api/admin/media-items', { method: 'DELETE', body: JSON.stringify({ id }) })
+      setPendingMedia(prev => prev.filter(x => x.id !== id))
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה במחיקה'))
+    }
+  }
+
 
   async function loadDiag() {
     const d = await jfetch('/api/admin/diag', { method: 'GET', headers: {} as any })
@@ -938,7 +1018,10 @@ async function loadBlocks() {
       loadApprovedBlessings()
     }
     if (tab === 'ads') loadAds()
-    if (tab === 'admin_gallery') loadAdminGallery()
+    if (tab === 'admin_gallery') {
+      loadGalleries()
+      loadPendingMedia()
+    }
     if (tab === 'diag') loadDiag()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, admin, pendingKind])
@@ -2083,69 +2166,157 @@ async function loadBlocks() {
         </Card>
       )}
 
-      {/* ===== ADMIN GALLERY ===== */}
+      {{/* ===== ADMIN GALLERY ===== */}
       {tab === 'admin_gallery' && (
         <Card>
-          <h3 className="font-semibold">גלריית מנהל</h3>
+          <h3 className="font-semibold">גלריות</h3>
+          <p className="mt-1 text-sm text-zinc-600">ניהול גלריות + אישור תמונות לכל גלריה.</p>
 
-          <div className="mt-3 rounded-xl border border-zinc-200 p-3">
-            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
-              <Button
-                onClick={uploadAdminGalleryFiles}
-                disabled={adminBusy || adminFiles.length === 0}
-                className="sm:w-44"
-              >
-                {adminBusy ? 'מעלה...' : `העלה ${adminFiles.length || ''} תמונות`}
-              </Button>
-
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={e => setAdminFiles(Array.from(e.target.files || []))}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
-              />
+          <div className="mt-4 grid gap-4 lg:grid-cols-[260px_1fr]">
+            {/* Left: galleries list */}
+            <div className="rounded-2xl border border-zinc-200 p-3">
+              <div className="text-sm font-medium mb-2 text-right">גלריות</div>
+              <div className="grid gap-2">
+                {galleries.map((g: any) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedGalleryId(g.id)
+                      setGalleryMsg(null)
+                      loadPendingMedia(g.id)
+                    }}
+                    className={
+                      'w-full rounded-xl border px-3 py-2 text-right text-sm ' +
+                      (selectedGalleryId === g.id ? 'border-black bg-zinc-50' : 'border-zinc-200 bg-white')
+                    }
+                  >
+                    {g.title || g.slug || g.id}
+                    {!g.upload_enabled && <span className="mr-2 text-xs text-zinc-500">(סגור)</span>}
+                  </button>
+                ))}
+                {galleries.length === 0 && <p className="text-sm text-zinc-600 text-right">אין גלריות.</p>}
+              </div>
             </div>
 
-            {adminMsg && <p className="mt-2 text-sm text-zinc-700">{adminMsg}</p>}
+            {/* Right: selected gallery */}
+            <div className="rounded-2xl border border-zinc-200 p-4">
+              {(() => {
+                const g = galleries.find((x: any) => x.id === selectedGalleryId)
+                if (!g) return <p className="text-sm text-zinc-600 text-right">בחר גלריה.</p>
+
+                return (
+                  <div className="grid gap-4">
+                    <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
+                      <div className="text-right">
+                        <h4 className="font-semibold">{g.title || 'גלריה'}</h4>
+                        {g.auto_approve_until && (
+                          <p className="text-xs text-zinc-500 mt-1">
+                            אוטומט-אישור עד: {new Date(g.auto_approve_until).toLocaleString('he-IL')}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+                        <div className="flex items-center gap-2 sm:flex-row-reverse">
+                          <label className="text-sm flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!g.upload_enabled}
+                              onChange={e => updateGallery(g.id, { upload_enabled: e.target.checked })}
+                              disabled={galleryBusy}
+                            />
+                            העלאה מותרת
+                          </label>
+
+                          <label className="text-sm flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!g.require_approval}
+                              onChange={e => updateGallery(g.id, { require_approval: e.target.checked })}
+                              disabled={galleryBusy}
+                            />
+                            דורש אישור אחרי הזמן
+                          </label>
+                        </div>
+
+                        <div className="flex items-center gap-2 sm:flex-row-reverse">
+                          <input
+                            type="number"
+                            min={1}
+                            max={72}
+                            value={hoursToOpen}
+                            onChange={e => setHoursToOpen(Number(e.target.value || 8))}
+                            className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                          />
+                          <Button onClick={() => openGalleryWindow(g.id)} disabled={galleryBusy}>
+                            פתח ל-{hoursToOpen || 8} שעות
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {galleryMsg && <p className="text-sm text-zinc-700 text-right">{galleryMsg}</p>}
+
+                    <div className="flex items-center justify-between">
+                      <Button variant="ghost" onClick={() => loadPendingMedia(g.id)} disabled={galleryBusy}>
+                        רענן ממתינות
+                      </Button>
+                      <div className="text-sm text-zinc-600 text-right">
+                        ממתינות לאישור: <b>{pendingMedia.length}</b>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {pendingMedia.map((p: any) => (
+                        <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
+                          <button
+                            className="relative block aspect-square w-full bg-zinc-50"
+                            onClick={() => p.url && setLightbox(p.url)}
+                            type="button"
+                          >
+                            <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                          </button>
+
+                          <div className="p-3 flex gap-2">
+                            <Button variant="ghost" onClick={() => approveMediaItem(p.id)}>
+                              אשר
+                            </Button>
+                            <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
+                              מחק
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {pendingMedia.length === 0 && <p className="text-sm text-zinc-600 text-right">אין תמונות ממתינות.</p>}
+                  </div>
+                )
+              })()}
+            </div>
           </div>
 
           {lightbox && (
-  <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
-    <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-        <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="bg-white/90 text-black shadow hover:bg-white" type="button">הורד תמונה</Button>
-        <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white" type="button">סגור</Button>
-      </div>
-
-      <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
-    </div>
-  </div>
-)}
-
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {adminGallery.map((p: any) => (
-              <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
-                <button className="relative block aspect-square w-full bg-zinc-50" onClick={() => p.media_url && setLightbox(p.media_url)} type="button">
-                  <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                </button>
-
-                <div className="p-3">
-                  <p className="text-xs text-zinc-500">{new Date(p.created_at).toLocaleString('he-IL')}</p>
-                  <div className="mt-2 flex gap-2">
-                    <Button variant="ghost" onClick={() => deleteAdminImage(p.id)}>מחק</Button>
-                    {p.media_url && <a className="text-sm underline" href={p.media_url} target="_blank" rel="noreferrer">פתח</a>}
-                  </div>
+            <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
+              <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+                  <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="bg-white/90 text-black shadow hover:bg-white" type="button">
+                    הורד תמונה
+                  </Button>
+                  <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white" type="button">
+                    סגור
+                  </Button>
                 </div>
-              </div>
-            ))}
-          </div>
 
-          {adminGallery.length === 0 && <p className="mt-3 text-sm text-zinc-600">אין עדיין תמונות בגלריית מנהל.</p>}
+                <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
-      {/* ===== DIAG ===== */}
+      {/* ===== DIAG ===== */}}
       {tab === 'diag' && (
         <Card>
           <h3 className="font-semibold">דיאגנוסטיקה</h3>
