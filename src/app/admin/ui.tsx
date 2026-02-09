@@ -2166,7 +2166,7 @@ async function loadBlocks() {
         </Card>
       )}
 
-      {{/* ===== ADMIN GALLERY ===== */}
+      {/* ===== ADMIN GALLERY ===== */}
       {tab === 'admin_gallery' && (
         <Card>
           <h3 className="font-semibold">גלריות</h3>
@@ -2316,7 +2316,7 @@ async function loadBlocks() {
         </Card>
       )}
 
-      {/* ===== DIAG ===== */}}
+      {/* ===== DIAG ===== */}
       {tab === 'diag' && (
         <Card>
           <h3 className="font-semibold">דיאגנוסטיקה</h3>
