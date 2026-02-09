@@ -15,22 +15,8 @@ async function fetchSettingsAndBlocks() {
   return { settings, blocks: blocks || [] }
 }
 
-async function fetchGalleryPreview(kind: 'gallery' | 'gallery_admin', limit: number) {
-  const sb = supabaseAnon()
-  const safeLimit = Math.max(0, Math.min(50, Number(limit || 0)))
-  if (!safeLimit) return []
-
-  const { data, error } = await sb
-    .from('posts')
-    .select('id, media_url, created_at')
-    .eq('kind', kind)
-    .eq('status', 'approved')
-    .order('created_at', { ascending: false })
-    .limit(safeLimit)
-
-  if (error) return []
-  return data || []
-}
+// Gallery previews are now driven by *gallery blocks* (one block per gallery).
+// We keep /api/public/home focused on settings + blocks + blessings.
 
 async function fetchBlessingsPreview(limit: number, device_id?: string | null) {
   const sb = supabaseAnon()
@@ -122,25 +108,14 @@ export async function GET() {
         .map((b: any) => b.type)
     )
 
-    const showGalleryBlock = visibleTypes.has('gallery')
-
-    const guestPreviewLimit = Number(settings.guest_gallery_preview_limit ?? 6)
-    const adminPreviewLimit = Number(settings.admin_gallery_preview_limit ?? 6)
-
     const blessingsPreviewLimit = Number(settings.blessings_preview_limit ?? 3)
 
-    const [guestPreview, adminPreview, blessingsPreview] = await Promise.all([
-      showGalleryBlock ? fetchGalleryPreview('gallery', guestPreviewLimit) : Promise.resolve([]),
-      showGalleryBlock ? fetchGalleryPreview('gallery_admin', adminPreviewLimit) : Promise.resolve([]),
-      fetchBlessingsPreview(blessingsPreviewLimit, device_id)
-    ])
+    const blessingsPreview = await fetchBlessingsPreview(blessingsPreviewLimit, device_id)
 
     return NextResponse.json({
       ok: true,
       settings,
       blocks,
-      guestPreview,
-      adminPreview,
       blessingsPreview
     })
   } catch (e: any) {
