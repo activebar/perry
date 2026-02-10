@@ -1,31 +1,46 @@
-import { NextResponse } from 'next/server'
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
-import { getAdminFromRequest, requirePermission, requireMaster } from '@/lib/adminSession'
+import { getServerEnv } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
 export async function DELETE(req: NextRequest) {
   try {
     const admin = await getAdminFromRequest(req)
-    if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Permission: master always ok, event-access depends on galleries.delete
-    if (admin.role !== 'master') requirePermission(admin, 'galleries.delete')
-
-    const { id } = await req.json()
-    if (!id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
+    const env = getServerEnv()
+    const body = await req.json().catch(() => ({}))
+    const id = body?.id as string | undefined
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
     const srv = supabaseServiceRole()
 
-    // מוחק את הרשומה (הקובץ ב-storage לא נמחק כאן — אפשר להוסיף בהמשך)
-    let q = srv.from('posts').delete().eq('id', id)
-    if (admin.event_id) q = q.eq('event_id', admin.event_id)
-    const { data, error } = await q.select('id').single()
-    if (error) throw error
+    // Read item first (to know storage_path)
+    const { data: item, error: readErr } = await srv
+      .from('media_items')
+      .select('id, event_id, storage_path')
+      .eq('id', id)
+      .maybeSingle()
 
-    return NextResponse.json({ ok: true, id: data.id })
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
+    if (!item) return NextResponse.json({ ok: true })
+
+    // Safety: only within this event
+    if (String(item.event_id) !== String(env.eventId)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    if (item.storage_path) {
+      // uploads/<event>/<kind>/...
+      await srv.storage.from('uploads').remove([String(item.storage_path)])
+    }
+
+    await srv.from('media_items').delete().eq('id', id)
+
+    return NextResponse.json({ ok: true })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
+    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 })
   }
 }

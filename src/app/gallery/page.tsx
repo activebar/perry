@@ -1,48 +1,58 @@
 import Link from 'next/link'
 
-import { Container, Card } from '@/components/ui'
-import { supabaseServiceRole, supabaseAnon } from '@/lib/supabase'
-import { getEventId } from '@/lib/event-id'
+import { Container } from '@/components/Container'
+import { Card } from '@/components/ui/Card'
+import { supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
 function isGalleryBlockType(t: string) {
-  return t.startsWith('gallery_')
+  return t === 'gallery' || t.startsWith('gallery')
 }
 
 export default async function GalleryIndexPage() {
-  const eventId = getEventId()
+  const env = getServerEnv()
   const srv = supabaseServiceRole()
-  const sb = supabaseAnon()
 
   const { data: blocks } = await srv
     .from('blocks')
     .select('*')
-    .eq('event_id', eventId)
     .eq('is_visible', true)
     .order('order_index', { ascending: true })
 
-  const galleryBlocks = (blocks || []).filter((b: any) => isGalleryBlockType(String(b.type || '')))
+  const galleryBlocks = (blocks || [])
+  const galleryIds = galleryBlocks
+    .map((b: any) => (b?.config as any)?.gallery_id)
+    .filter(Boolean)
 
-  // Fetch preview items for each gallery block (server-side)
-  const previewsByGalleryId: Record<string, any[]> = {}
-  await Promise.all(
-    galleryBlocks.map(async (b: any) => {
-      const galleryId = String(b?.config?.gallery_id || b?.config?.galleryId || '')
-      if (!galleryId) return
-      const limit = Math.max(0, Math.min(6, Number(b?.config?.limit || 6)))
-      const { data: items } = await sb
-        .from('media_items')
-        .select('id, url, thumb_url, created_at')
-        .eq('event_id', eventId)
-        .eq('kind', 'gallery')
-        .eq('gallery_id', galleryId)
-        .eq('is_approved', true)
-        .order('created_at', { ascending: false })
-        .limit(Math.max(limit, 6))
-      previewsByGalleryId[galleryId] = (items || []).slice(0, 6)
-    })
-  )
+  const previewByGalleryId = new Map<string, string[]>()
+
+  if (galleryIds.length) {
+    // Fetch a pool of recent approved items for these galleries and slice per gallery in JS
+    const { data: recent } = await srv
+      .from('media_items')
+      .select('gallery_id, thumb_url, url, created_at, is_approved, kind, event_id')
+      .eq('event_id', env.eventId)
+      .eq('kind', 'gallery')
+      .eq('is_approved', true)
+      .in('gallery_id', galleryIds as any)
+      .order('created_at', { ascending: false })
+      .limit(Math.min(200, galleryIds.length * 40))
+
+    for (const it of recent || []) {
+      const gid = String((it as any).gallery_id || '')
+      if (!gid) continue
+      const u = (it as any).thumb_url || (it as any).url
+      if (!u) continue
+      const arr = previewByGalleryId.get(gid) || []
+      if (arr.length < 4) {
+        arr.push(u)
+        previewByGalleryId.set(gid, arr)
+      }
+    }
+  }
+.filter((b: any) => isGalleryBlockType(String(b.type || '')))
 
   return (
     <main className="py-10">
@@ -59,9 +69,8 @@ export default async function GalleryIndexPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {galleryBlocks.map((b: any) => {
-              const galleryId = String(b?.config?.gallery_id || b?.config?.galleryId || b.id)
-              const title = String(b?.config?.title || b?.config?.label || b?.title || 'גלריה')
-              const items = previewsByGalleryId[galleryId] || []
+              const galleryId = b?.config?.gallery_id || b?.config?.galleryId || b.id
+              const title = b?.config?.title || b?.config?.label || b?.title || 'גלריה'
               return (
                 <Link key={b.id} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">
@@ -71,20 +80,22 @@ export default async function GalleryIndexPage() {
                         <p className="text-sm text-zinc-600">לצפייה בכל התמונות</p>
                       </div>
                       <span className="text-sm font-medium">פתיחה</span>
-                    </div>
-
-                    {Array.isArray(items) && items.length > 0 ? (
-                      <div className="mt-3 grid grid-cols-6 gap-2">
-                        {items.slice(0, 6).map((it: any) => {
-                          const url = String(it.thumb_url || it.url || '')
-                          return (
-                            <div key={String(it.id)} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-200">
-                              {url ? <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
-                            </div>
-                          )
-                        })}
                       </div>
-                    ) : null}
+                      {(() => {
+                        const previews = previewByGalleryId.get(String(galleryId)) || []
+                        if (!previews.length) return null
+                        return (
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            {previews.slice(0, 4).map((u, idx) => (
+                              <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={u} alt="" className="h-full w-full object-cover" />
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </div>
                   </Card>
                 </Link>
               )

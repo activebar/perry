@@ -1,4 +1,33 @@
-'use client'
+'
+  // Gallery previews (approved only)
+  const galleryBlocks = (orderedBlocks || []).filter((b: any) => String(b.type).startsWith('gallery'))
+  const galleryIds = galleryBlocks.map((b: any) => (b?.config as any)?.gallery_id).filter(Boolean)
+  const previewByGalleryId = new Map<string, string[]>()
+
+  if (galleryIds.length) {
+    const { data: recent } = await supabase
+      .from('media_items')
+      .select('gallery_id, thumb_url, url, created_at, is_approved, kind')
+      .eq('event_id', env.eventId)
+      .eq('kind', 'gallery')
+      .eq('is_approved', true)
+      .in('gallery_id', galleryIds as any)
+      .order('created_at', { ascending: false })
+      .limit(Math.min(200, galleryIds.length * 40))
+
+    for (const it of recent || []) {
+      const gid = String((it as any).gallery_id || '')
+      if (!gid) continue
+      const u = (it as any).thumb_url || (it as any).url
+      if (!u) continue
+      const arr = previewByGalleryId.get(gid) || []
+      if (arr.length < 4) {
+        arr.push(u)
+        previewByGalleryId.set(gid, arr)
+      }
+    }
+  }
+use client'
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
@@ -208,8 +237,7 @@ export default function HomePage() {
 
   const showHero = visibleTypes.has('hero')
   const showMenu = visibleTypes.has('menu')
- const showGalleryBlock = Array.from(visibleTypes).some(
-  (t) => t === 'gallery' || (typeof t === 'string' && t.startsWith('gallery')))
+  const showGalleryBlock = Array.from(visibleTypes).some((t) => t === 'gallery' || t.startsWith('gallery'))
   const showBlessingsBlock = visibleTypes.has('blessings')
   const showGiftBlock = visibleTypes.has('gift')
 
@@ -426,11 +454,9 @@ export default function HomePage() {
               if (type.startsWith('gallery_')) {
                 const cfg = (b as any)?.config || {}
                 const galleryId = String(cfg.gallery_id || cfg.galleryId || b.id)
-                const title = String(cfg.title || b.title || cfg.label || cfg.name || b.type || 'גלריה')
+                const title = String(cfg.title || cfg.label || cfg.name || b.type || 'גלריה')
                 const subtitle = String(cfg.subtitle || cfg.description || 'תמונות מהאירוע.')
                 const buttonLabel = String(cfg.button_label || 'לכל התמונות')
-
-                const previews: any[] = (data as any)?.galleryPreviews?.[galleryId] || []
 
                 return (
                   <Card key={b.id} dir="rtl">
@@ -443,26 +469,26 @@ export default function HomePage() {
                         <Button>{buttonLabel}</Button>
                       </Link>
                     </div>
-
-                    {previews.length === 0 ? (
-                      <div className="mt-3 rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-600">אין תמונות עדיין.</div>
-                    ) : (
-                      <div className="mt-3 grid grid-cols-3 gap-2">
-                        {previews.slice(0, 9).map((it: any) => {
-                          const url = String(it.thumb_url || it.url || '')
-                          return (
-                            <button
-                              key={String(it.id)}
-                              type="button"
-                              className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-200"
-                              onClick={() => url && setLightbox({ url: String(it.url || url), isVideo: false })}
-                            >
-                              {url ? <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
+                    {(() => {
+                      const previews = previewByGalleryId.get(String(galleryId)) || []
+                      if (!previews.length) {
+                        return (
+                          <div className="mt-3 rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-600">
+                            אין תמונות עדיין.
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          {previews.slice(0, 4).map((u, idx) => (
+                            <div key={idx} className="aspect-square overflow-hidden rounded-2xl bg-zinc-100">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={u} alt="" className="h-full w-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </Card>
                 )
               }
