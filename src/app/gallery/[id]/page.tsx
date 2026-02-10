@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Container, Card } from '@/components/ui'
 import { supabaseAnon } from '@/lib/supabase'
 
-import { GalleryClient } from '../ui'
+import GalleryClient from '../ui'
 
 export const dynamic = 'force-dynamic'
 

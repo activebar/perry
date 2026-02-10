@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import AdminApp from './ui'
 import type { AdminMainTab } from './page'
 
-type InnerTab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
+type InnerTab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'galleries' | 'diag' | 'permissions'
 
 function classNames(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(' ')
@@ -39,7 +39,7 @@ const tabs = useMemo(
       pendingKind = 'blessing'
     } else if (tab === 'galleries') {
       // שלד “גלריות” – מתחילים מגלריית מנהל (קיים), ומאישור תכנים לגלריה
-      initialTab = 'admin_gallery'
+      initialTab = 'galleries'
       pendingKind = 'gallery'
     } else if (tab === 'design') {
       initialTab = 'blocks'
