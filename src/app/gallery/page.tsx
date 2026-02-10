@@ -1,7 +1,6 @@
 import Link from 'next/link'
 
-import { Container } from '@/components/Container'
-import { Card } from '@/components/ui/Card'
+import { Container, Card } from '@/components/ui'
 import { supabaseServiceRole, supabaseAnon } from '@/lib/supabase'
 import { getEventId } from '@/lib/event-id'
 
