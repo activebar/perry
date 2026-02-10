@@ -208,7 +208,8 @@ export default function HomePage() {
 
   const showHero = visibleTypes.has('hero')
   const showMenu = visibleTypes.has('menu')
-  const showGalleryBlock = Array.from(visibleTypes).some((t) => t === 'gallery' || t.startsWith('gallery'))
+ const showGalleryBlock = Array.from(visibleTypes).some(
+  (t) => t === 'gallery' || (typeof t === 'string' && t.startsWith('gallery')))
   const showBlessingsBlock = visibleTypes.has('blessings')
   const showGiftBlock = visibleTypes.has('gift')
 
