@@ -12,8 +12,9 @@ type HomePayload = {
   ok: boolean
   settings: any
   blocks: any[]
-  guestPreview: any[]
-  adminPreview: any[]
+  // legacy fields (older API) - optional
+  guestPreview?: any[]
+  adminPreview?: any[]
   blessingsPreview: any[]
 }
 
@@ -177,7 +178,7 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const { settings, blocks, guestPreview, adminPreview, blessingsPreview } = data || ({} as any)
+  const { settings, blocks, blessingsPreview } = data || ({} as any)
 
   const phase = useMemo(() => {
     if (!settings?.start_at) return 'pre'
@@ -207,7 +208,7 @@ export default function HomePage() {
 
   const showHero = visibleTypes.has('hero')
   const showMenu = visibleTypes.has('menu')
-  const showGalleryBlock = visibleTypes.has('gallery')
+  const showGalleryBlock = Array.from(visibleTypes).some((t) => t === 'gallery' || t.startsWith('gallery'))
   const showBlessingsBlock = visibleTypes.has('blessings')
   const showGiftBlock = visibleTypes.has('gift')
 
@@ -420,57 +421,48 @@ export default function HomePage() {
                 )
               }
 
-              if (type === 'gallery') {
+              // Home shows ONLY gallery blocks defined in `blocks` (gallery_1/2/3...). Legacy types like `gallery`/`gallery_admin` are ignored.
+              if (type.startsWith('gallery_')) {
+                const cfg = (b as any)?.config || {}
+                const galleryId = String(cfg.gallery_id || cfg.galleryId || b.id)
+                const title = String(cfg.title || b.title || cfg.label || cfg.name || b.type || 'גלריה')
+                const subtitle = String(cfg.subtitle || cfg.description || 'תמונות מהאירוע.')
+                const buttonLabel = String(cfg.button_label || 'לכל התמונות')
+
+                const previews: any[] = (data as any)?.galleryPreviews?.[galleryId] || []
+
                 return (
-                  <div key={b.id} className="space-y-4">
-                    <Card dir="rtl">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="text-right">
-                          <p className="font-semibold">{guestTitle}</p>
-                          <p className="text-sm text-zinc-600">תמונות מהאורחים.</p>
-                        </div>
-                        {guestShowAll && (
-                          <Link href="/gallery">
-                            <Button>לכל התמונות</Button>
-                          </Link>
-                        )}
+                  <Card key={b.id} dir="rtl">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="font-semibold">{title}</p>
+                        <p className="text-sm text-zinc-600">{subtitle}</p>
                       </div>
+                      <Link href={`/gallery/${encodeURIComponent(galleryId)}`}>
+                        <Button>{buttonLabel}</Button>
+                      </Link>
+                    </div>
 
-                      {Array.isArray(guestPreview) && guestPreview.length > 0 && (
-                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                          {guestPreview.map((it: any) => (
-                            <div key={it.id} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50">
-                              <img src={it.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </Card>
-
-                    <Card dir="rtl">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="text-right">
-                          <p className="font-semibold">{adminTitle}</p>
-                          <p className="text-sm text-zinc-600">תמונות המנהל.</p>
-                        </div>
-                        {adminShowAll && (
-                          <Link href="/gallery/admin">
-                            <Button>לכל התמונות</Button>
-                          </Link>
-                        )}
+                    {previews.length === 0 ? (
+                      <div className="mt-3 rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-600">אין תמונות עדיין.</div>
+                    ) : (
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        {previews.slice(0, 9).map((it: any) => {
+                          const url = String(it.thumb_url || it.url || '')
+                          return (
+                            <button
+                              key={String(it.id)}
+                              type="button"
+                              className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-200"
+                              onClick={() => url && setLightbox({ url: String(it.url || url), isVideo: false })}
+                            >
+                              {url ? <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
+                            </button>
+                          )
+                        })}
                       </div>
-
-                      {Array.isArray(adminPreview) && adminPreview.length > 0 && (
-                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                          {adminPreview.map((it: any) => (
-                            <div key={it.id} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-50">
-                              <img src={it.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </Card>
-                  </div>
+                    )}
+                  </Card>
                 )
               }
 

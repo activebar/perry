@@ -1,78 +1,97 @@
 import Link from 'next/link'
-import { Container, Card, Button } from '@/components/ui'
-import { supabaseAnon } from '@/lib/supabase'
-import { fetchBlocks, fetchSettings, getBlockTitle } from '@/lib/db'
+
+import { Container } from '@/components/Container'
+import { Card } from '@/components/ui/Card'
+import { supabaseServiceRole, supabaseAnon } from '@/lib/supabase'
+import { getEventId } from '@/lib/event-id'
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
 
-async function getGalleries() {
-  const supabase = supabaseAnon()
-  const { data, error } = await supabase
-    .from('galleries')
-    .select('id, title, order_index, upload_enabled, require_approval')
-    .order('order_index', { ascending: true })
-    .limit(100)
-  if (error) return []
-  return data || []
+function isGalleryBlockType(t: string) {
+  return t.startsWith('gallery_')
 }
 
-export default async function GalleriesIndexPage() {
-  const [galleries, settings, blocks] = await Promise.all([getGalleries(), fetchSettings(), fetchBlocks()])
+export default async function GalleryIndexPage() {
+  const eventId = getEventId()
+  const srv = supabaseServiceRole()
+  const sb = supabaseAnon()
 
-  const blessingsTitle = getBlockTitle(blocks, 'blessings', (String((settings as any)?.blessings_title || '').trim() || 'ברכות'))
-  const giftTitle = getBlockTitle(blocks, 'gift', 'מתנה')
-  const galleryTitle = getBlockTitle(blocks, 'gallery', 'גלריה')
+  const { data: blocks } = await srv
+    .from('blocks')
+    .select('*')
+    .eq('event_id', eventId)
+    .eq('is_visible', true)
+    .order('order_index', { ascending: true })
+
+  const galleryBlocks = (blocks || []).filter((b: any) => isGalleryBlockType(String(b.type || '')))
+
+  // Fetch preview items for each gallery block (server-side)
+  const previewsByGalleryId: Record<string, any[]> = {}
+  await Promise.all(
+    galleryBlocks.map(async (b: any) => {
+      const galleryId = String(b?.config?.gallery_id || b?.config?.galleryId || '')
+      if (!galleryId) return
+      const limit = Math.max(0, Math.min(6, Number(b?.config?.limit || 6)))
+      const { data: items } = await sb
+        .from('media_items')
+        .select('id, url, thumb_url, created_at')
+        .eq('event_id', eventId)
+        .eq('kind', 'gallery')
+        .eq('gallery_id', galleryId)
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false })
+        .limit(Math.max(limit, 6))
+      previewsByGalleryId[galleryId] = (items || []).slice(0, 6)
+    })
+  )
 
   return (
-    <main>
+    <main className="py-10">
       <Container>
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Link href="/"><Button variant="ghost">← חזרה לדף הבית</Button></Link>
+        <div dir="rtl" className="mb-6 text-right">
+          <h1 className="text-2xl font-semibold">גלריות</h1>
+          <p className="mt-1 text-sm text-zinc-600">בחרו גלריה כדי לצפות בכל התמונות.</p>
+        </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Link href="/"><Button variant="ghost">בית</Button></Link>
-              <Link href="/gallery"><Button>{galleryTitle}</Button></Link>
-              <Link href="/blessings"><Button variant="ghost">{blessingsTitle}</Button></Link>
-              {settings.gift_enabled && (
-                <Link href="/gift"><Button variant="ghost">{giftTitle}</Button></Link>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        <div className="mt-4">
-          <Card>
-            <h2 className="text-xl font-bold">{galleryTitle}</h2>
-            <p className="text-sm text-zinc-600">בחרו גלריה לצפייה / העלאה.</p>
+        {galleryBlocks.length === 0 ? (
+          <Card dir="rtl">
+            <div className="text-right text-sm text-zinc-600">אין גלריות מוגדרות בדף הבית.</div>
           </Card>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {(galleries || []).map((g: any) => (
-            <Link key={g.id} href={`/gallery/${g.id}`} className="block">
-              <Card>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-lg font-semibold">{g.title || 'גלריה'}</div>
-                    <div className="mt-1 text-xs text-zinc-600">
-                      {g.upload_enabled ? 'העלאה פתוחה' : 'צפייה בלבד'}
-                      {g.require_approval ? ' · דורש אישור מנהל' : ''}
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {galleryBlocks.map((b: any) => {
+              const galleryId = String(b?.config?.gallery_id || b?.config?.galleryId || b.id)
+              const title = String(b?.config?.title || b?.config?.label || b?.title || 'גלריה')
+              const items = previewsByGalleryId[galleryId] || []
+              return (
+                <Link key={b.id} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
+                  <Card dir="rtl" className="hover:shadow-sm transition-shadow">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="font-semibold">{title}</p>
+                        <p className="text-sm text-zinc-600">לצפייה בכל התמונות</p>
+                      </div>
+                      <span className="text-sm font-medium">פתיחה</span>
                     </div>
-                  </div>
-                  <Button>פתח</Button>
-                </div>
-              </Card>
-            </Link>
-          ))}
 
-          {(!galleries || galleries.length === 0) && (
-            <Card>
-              <p className="text-sm text-zinc-600">עדיין לא נוצרו גלריות. מנהל יכול ליצור גלריה בטאב “גלריות”.</p>
-            </Card>
-          )}
-        </div>
+                    {Array.isArray(items) && items.length > 0 ? (
+                      <div className="mt-3 grid grid-cols-6 gap-2">
+                        {items.slice(0, 6).map((it: any) => {
+                          const url = String(it.thumb_url || it.url || '')
+                          return (
+                            <div key={String(it.id)} className="relative aspect-square overflow-hidden rounded-xl bg-zinc-200">
+                              {url ? <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : null}
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        )}
       </Container>
     </main>
   )

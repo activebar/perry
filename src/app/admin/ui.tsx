@@ -242,14 +242,14 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'galleries' | 'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
   blocks: 'בלוקים',
   moderation: 'אישור תכנים',
   ads: 'פרסומות',
-  admin_gallery: 'גלריית מנהל',
+  galleries: 'גלריות',
   diag: 'דיאגנוסטיקה',
   permissions: 'הרשאות',
   login: 'התחברות'
@@ -481,7 +481,7 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'galleries', 'diag']
     return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
@@ -979,6 +979,20 @@ async function loadBlocks() {
     }
   }
 
+  async function cloneGallery() {
+    setGalleryMsg(null)
+    setGalleryBusy(true)
+    try {
+      await jfetch('/api/admin/galleries/clone', { method: 'POST', body: JSON.stringify({}) })
+      await loadGalleries()
+      setGalleryMsg('✅ נוספה גלריה חדשה')
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה בהוספת גלריה'))
+    } finally {
+      setGalleryBusy(false)
+    }
+  }
+
   async function approveMediaItem(id: string) {
     setGalleryMsg(null)
     try {
@@ -1018,7 +1032,7 @@ async function loadBlocks() {
       loadApprovedBlessings()
     }
     if (tab === 'ads') loadAds()
-    if (tab === 'admin_gallery') {
+    if (tab === 'galleries') {
       loadGalleries()
       loadPendingMedia()
     }
@@ -1875,14 +1889,15 @@ async function loadBlocks() {
               const typeLabel: Record<string, string> = {
                 hero: 'כותרת עליונה (Hero)',
                 menu: 'תפריט / ניווט',
-                gallery: 'גלריה',
+                // gallery blocks are gallery_1/2/3... and get their label from config.title
                 blessings: 'ברכות',
                 gift: 'מתנה / תשלום',
                 qr: 'QR ושיתוף',
               }
 
               return blocks.map((b: any, idx: number) => {
-                const title = (b?.config?.title || typeLabel[String(b.type)] || String(b.type)) as string
+                const isGallery = String(b.type || '').startsWith('gallery_')
+                const title = (b?.config?.title || b?.title || (isGallery ? 'גלריה' : typeLabel[String(b.type)]) || String(b.type)) as string
                 const canUp = idx > 0
                 const canDown = idx < blocks.length - 1
 
@@ -1942,6 +1957,17 @@ async function loadBlocks() {
                     }}
                     placeholder="שם בלוק לתצוגה (רשות)"
                   />
+
+                  {isGallery && (
+                    <Input
+                      value={String(b?.config?.button_label || '')}
+                      onChange={e => {
+                        const v = e.target.value
+                        updateBlock({ id: b.id, config: { ...(b.config || {}), button_label: v } })
+                      }}
+                      placeholder="טקסט כפתור (למשל: לכל התמונות)"
+                    />
+                  )}
 
                   {/* בקרוב: cta_label / cta_action */}
                 </div>
@@ -2167,7 +2193,7 @@ async function loadBlocks() {
       )}
 
       {/* ===== ADMIN GALLERY ===== */}
-      {tab === 'admin_gallery' && (
+      {tab === 'galleries' && (
         <Card>
           <h3 className="font-semibold">גלריות</h3>
           <p className="mt-1 text-sm text-zinc-600">ניהול גלריות + אישור תמונות לכל גלריה.</p>
@@ -2175,7 +2201,12 @@ async function loadBlocks() {
           <div className="mt-4 grid gap-4 lg:grid-cols-[260px_1fr]">
             {/* Left: galleries list */}
             <div className="rounded-2xl border border-zinc-200 p-3">
-              <div className="text-sm font-medium mb-2 text-right">גלריות</div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="text-sm font-medium text-right">גלריות</div>
+                <Button onClick={cloneGallery} disabled={galleryBusy}>
+                  הוסף גלריה
+                </Button>
+              </div>
               <div className="grid gap-2">
                 {galleries.map((g: any) => (
                   <button

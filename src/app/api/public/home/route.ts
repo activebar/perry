@@ -1,14 +1,23 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
+import { getEventId } from '@/lib/event-id'
 
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
 async function fetchSettingsAndBlocks() {
   const sb = supabaseAnon()
+  const eventId = getEventId()
   const [{ data: settings, error: sErr }, { data: blocks, error: bErr }] = await Promise.all([
-    sb.from('event_settings').select('*').order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(1).single(),
-    sb.from('blocks').select('*').order('order_index', { ascending: true })
+    sb
+      .from('event_settings')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single(),
+    sb.from('blocks').select('*').eq('event_id', eventId).order('order_index', { ascending: true })
   ])
   if (sErr) throw sErr
   if (bErr) throw bErr
@@ -20,29 +29,19 @@ async function fetchSettingsAndBlocks() {
 
 async function fetchBlessingsPreview(limit: number, device_id?: string | null) {
   const sb = supabaseAnon()
+  const eventId = getEventId()
   const safeLimit = Math.max(0, Math.min(20, Number(limit || 0)))
   if (!safeLimit) return []
 
-  // Prefer server-side random order via RPC (if exists)
-const { data: rpcPosts, error: rpcErr } = await sb.rpc('get_home_posts_random', { p_limit: safeLimit })
-const posts = (rpcErr ? null : (rpcPosts as any[] | null)) || null
-const error = rpcErr || null
-
-// Fallback: latest first if RPC not installed yet
-const fallback = async () => {
-  const { data, error } = await sb
+  // Simple + reliable: latest approved blessings for THIS event.
+  const { data: postsFinal, error: errFinal } = await sb
     .from('posts')
     .select('id, author_name, text, media_url, link_url, created_at')
+    .eq('event_id', eventId)
     .eq('kind', 'blessing')
     .eq('status', 'approved')
     .order('created_at', { ascending: false })
     .limit(safeLimit)
-  return { data, error }
-}
-
-const final = !posts ? await fallback() : { data: posts, error: null }
-const postsFinal = final.data as any[] | null
-const errFinal = final.error
 
   if (errFinal || !postsFinal || postsFinal.length === 0) return []
 
@@ -81,6 +80,37 @@ const errFinal = final.error
   }))
 }
 
+async function fetchGalleryPreviews(blocks: any[]) {
+  const sb = supabaseAnon()
+  const eventId = getEventId()
+
+  const galleryBlocks = (blocks || []).filter((b: any) => String(b?.type || '').startsWith('gallery_'))
+  if (galleryBlocks.length === 0) return {}
+
+  // Fetch a small pool per gallery, then sample client-side.
+  // NOTE: Requires media_items columns: url, thumb_url, is_approved, kind.
+  const out: Record<string, any[]> = {}
+  await Promise.all(
+    galleryBlocks.map(async (b: any) => {
+      const cfg = b?.config || {}
+      const galleryId = String(cfg.gallery_id || cfg.galleryId || '')
+      if (!galleryId) return
+      const limit = Math.max(0, Math.min(24, Number(cfg.limit || 12)))
+      const { data } = await sb
+        .from('media_items')
+        .select('id, url, thumb_url, created_at')
+        .eq('event_id', eventId)
+        .eq('kind', 'gallery')
+        .eq('gallery_id', galleryId)
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false })
+        .limit(Math.max(limit, 12))
+      out[galleryId] = (data || []).slice(0, limit)
+    })
+  )
+  return out
+}
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -111,12 +141,14 @@ export async function GET() {
     const blessingsPreviewLimit = Number(settings.blessings_preview_limit ?? 3)
 
     const blessingsPreview = await fetchBlessingsPreview(blessingsPreviewLimit, device_id)
+    const galleryPreviews = await fetchGalleryPreviews(blocks)
 
     return NextResponse.json({
       ok: true,
       settings,
       blocks,
-      blessingsPreview
+      blessingsPreview,
+      galleryPreviews
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })

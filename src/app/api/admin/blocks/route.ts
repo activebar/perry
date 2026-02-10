@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest, requireMaster } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getEventId } from '@/lib/event-id'
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
@@ -11,7 +12,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
   }
   const srv = supabaseServiceRole()
-  const { data, error } = await srv.from('blocks').select('*').order('order_index', { ascending: true })
+  const eventId = getEventId()
+  const { data, error } = await srv
+    .from('blocks')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('order_index', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, blocks: data })
 }
@@ -27,8 +33,38 @@ export async function PUT(req: NextRequest) {
   const patch = await req.json()
   if (!patch?.id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
   const srv = supabaseServiceRole()
-  const { data, error } = await srv.from('blocks').update(patch).eq('id', patch.id).select('*').single()
+  const eventId = getEventId()
+
+  // Load existing block for conditional side-effects (gallery title sync)
+  const { data: existing } = await srv
+    .from('blocks')
+    .select('type, config')
+    .eq('id', patch.id)
+    .eq('event_id', eventId)
+    .maybeSingle()
+  const { data, error } = await srv
+    .from('blocks')
+    .update(patch)
+    .eq('id', patch.id)
+    .eq('event_id', eventId)
+    .select('*')
+    .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Keep galleries.title in sync with the block display name (used across the site).
+  // Only applies to our gallery blocks: gallery_1/2/3...
+  try {
+    const t = String((existing as any)?.type || (data as any)?.type || '')
+    if (t.startsWith('gallery_')) {
+      const cfgNew = (patch as any)?.config || (data as any)?.config || {}
+      const galleryId = String(cfgNew.gallery_id || cfgNew.galleryId || ((existing as any)?.config || {})?.gallery_id || '')
+      const title = String(cfgNew.title || cfgNew.label || (patch as any)?.title || (data as any)?.title || '')
+      if (galleryId && title) {
+        await srv.from('galleries').update({ title }).eq('id', galleryId).eq('event_id', eventId)
+      }
+    }
+  } catch {}
+
   return NextResponse.json({ ok: true, block: data })
 }
 
@@ -43,6 +79,7 @@ export async function POST(req: NextRequest) {
   const { ids } = await req.json()
   if (!Array.isArray(ids) || ids.length === 0) return NextResponse.json({ error: 'missing ids' }, { status: 400 })
   const srv = supabaseServiceRole()
+  const eventId = getEventId()
 
   // IMPORTANT:
   // We must NOT use upsert() here.
@@ -51,7 +88,7 @@ export async function POST(req: NextRequest) {
   // Instead, update existing rows only.
   const updates = ids.map((id: string, idx: number) => ({ id, order_index: idx + 1 }))
   const results = await Promise.all(
-    updates.map(u => srv.from('blocks').update({ order_index: u.order_index }).eq('id', u.id))
+    updates.map(u => srv.from('blocks').update({ order_index: u.order_index }).eq('id', u.id).eq('event_id', eventId))
   )
   const firstErr = results.find(r => (r as any)?.error)?.error
   if (firstErr) return NextResponse.json({ error: firstErr.message }, { status: 500 })
