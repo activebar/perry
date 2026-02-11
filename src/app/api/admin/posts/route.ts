@@ -79,6 +79,19 @@ export async function PUT(req: NextRequest) {
 
     const { data, error } = await uq.select('*').single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // When an admin deletes a post, also remove its uploaded file from storage
+    if (patch.status === 'deleted') {
+      const mediaPath = String((data as any)?.media_path || '').trim()
+      if (mediaPath) {
+        try {
+          await srv.storage.from('uploads').remove([mediaPath])
+        } catch {
+          // ignore
+        }
+        await srv.from('media_items').update({ deleted_at: new Date().toISOString() }).eq('storage_path', mediaPath)
+      }
+    }
     return NextResponse.json({ ok: true, post: data })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })

@@ -1,6 +1,5 @@
 import { supabaseAnon } from './supabase'
 import { unstable_noStore as noStore } from 'next/cache'
-import { getEventId } from './event-id'
 
 export type EventSettings = {
   id?: string
@@ -76,12 +75,10 @@ export function getBlockTitle(blocks: Block[] | null | undefined, type: string, 
  */
 export async function fetchSettings(): Promise<EventSettings> {
   noStore()
-  const eventId = getEventId()
   const sb = supabaseAnon()
   const { data, error } = await sb
     .from('event_settings')
     .select('*')
-    .eq('event_id', eventId)
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)
@@ -93,13 +90,8 @@ export async function fetchSettings(): Promise<EventSettings> {
 
 export async function fetchBlocks(): Promise<Block[]> {
   noStore()
-  const eventId = getEventId()
   const sb = supabaseAnon()
-  const { data, error } = await sb
-    .from('blocks')
-    .select('*')
-    .eq('event_id', eventId)
-    .order('order_index', { ascending: true })
+  const { data, error } = await sb.from('blocks').select('*').order('order_index', { ascending: true })
   if (error) throw error
   return (data || []) as any
 }

@@ -34,6 +34,14 @@ export async function PUT(req: NextRequest) {
   if (!patch?.id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
   const srv = supabaseServiceRole()
   const eventId = getEventId()
+
+  // Load existing block for conditional side-effects (gallery title sync)
+  const { data: existing } = await srv
+    .from('blocks')
+    .select('type, config')
+    .eq('id', patch.id)
+    .eq('event_id', eventId)
+    .maybeSingle()
   const { data, error } = await srv
     .from('blocks')
     .update(patch)
@@ -42,6 +50,21 @@ export async function PUT(req: NextRequest) {
     .select('*')
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Keep galleries.title in sync with the block display name (used across the site).
+  // Only applies to our gallery blocks: gallery_1/2/3...
+  try {
+    const t = String((existing as any)?.type || (data as any)?.type || '')
+    if (t.startsWith('gallery_')) {
+      const cfgNew = (patch as any)?.config || (data as any)?.config || {}
+      const galleryId = String(cfgNew.gallery_id || cfgNew.galleryId || ((existing as any)?.config || {})?.gallery_id || '')
+      const title = String(cfgNew.title || cfgNew.label || (patch as any)?.title || (data as any)?.title || '')
+      if (galleryId && title) {
+        await srv.from('galleries').update({ title }).eq('id', galleryId).eq('event_id', eventId)
+      }
+    }
+  } catch {}
+
   return NextResponse.json({ ok: true, block: data })
 }
 

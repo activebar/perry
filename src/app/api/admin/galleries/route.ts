@@ -21,10 +21,30 @@ export async function GET(req: NextRequest) {
   const eventId = admin.event_id || getEventId()
 
   const sb = supabaseServiceRole()
+
+  // Enforce: galleries that are not referenced by `blocks` are treated as "not existing".
+  // We list only galleries referenced by visible gallery blocks (gallery_1/2/3...).
+  const { data: gBlocks } = await sb
+    .from('blocks')
+    .select('id, type, config, order_index, is_visible')
+    .eq('event_id', eventId)
+    .eq('is_visible', true)
+    .order('order_index', { ascending: true })
+
+  const galleryIds = (gBlocks || [])
+    .filter((b: any) => String(b.type || '').startsWith('gallery_'))
+    .map((b: any) => String((b.config || {}).gallery_id || (b.config || {}).galleryId || ''))
+    .filter(Boolean)
+
+  if (galleryIds.length === 0) {
+    return NextResponse.json({ ok: true, galleries: [] })
+  }
+
   const { data, error } = await sb
     .from('galleries')
     .select('*')
     .eq('event_id', eventId)
+    .in('id', galleryIds)
     .order('order_index', { ascending: true })
   if (error) return jsonError(error.message, 500)
   return NextResponse.json({ ok: true, galleries: data || [] })
