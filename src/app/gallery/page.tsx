@@ -1,7 +1,6 @@
 import Link from 'next/link'
 
-import { Container } from '@/components/Container'
-import { Card } from '@/components/ui/Card'
+import { Container, Card } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
 
@@ -21,10 +20,9 @@ export default async function GalleryIndexPage() {
     .eq('is_visible', true)
     .order('order_index', { ascending: true })
 
-  const galleryBlocks = (blocks || [])
+  const galleryBlocks = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
   const galleryIds = galleryBlocks
     .map((b: any) => (b?.config as any)?.gallery_id)
-    .filter(Boolean)
 
   const previewByGalleryId = new Map<string, string[]>()
 
@@ -52,7 +50,6 @@ export default async function GalleryIndexPage() {
       }
     }
   }
-.filter((b: any) => isGalleryBlockType(String(b.type || '')))
 
   return (
     <main className="py-10">
