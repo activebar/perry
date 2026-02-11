@@ -71,13 +71,15 @@ export default async function GalleryIndexPage() {
               return (
                 <Link key={b.id} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-right">
-                        <p className="font-semibold">{title}</p>
-                        <p className="text-sm text-zinc-600">לצפייה בכל התמונות</p>
+                    <div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-right">
+                          <p className="font-semibold">{title}</p>
+                          <p className="text-sm text-zinc-600">לצפייה בכל התמונות</p>
+                        </div>
+                        <span className="text-sm font-medium">פתיחה</span>
                       </div>
-                      <span className="text-sm font-medium">פתיחה</span>
-                      </div>
+
                       {(() => {
                         const previews = previewByGalleryId.get(String(galleryId)) || []
                         if (!previews.length) return null
