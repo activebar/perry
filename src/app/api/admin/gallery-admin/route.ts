@@ -28,7 +28,8 @@ export async function DELETE(req: NextRequest) {
     if (!item) return NextResponse.json({ ok: true })
 
     // Safety: only within this event
-    if (String(item.event_id) !== String(env.eventId)) {
+    const scopeEventId = (admin as any).event_id || (admin as any).eventId || (env as any).EVENT_SLUG
+    if (scopeEventId && String(item.event_id) !== String(scopeEventId)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
