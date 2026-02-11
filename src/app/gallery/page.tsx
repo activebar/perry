@@ -31,7 +31,7 @@ export default async function GalleryIndexPage() {
     const { data: recent } = await srv
       .from('media_items')
       .select('gallery_id, thumb_url, url, created_at, is_approved, kind, event_id')
-      .eq('event_id', env.eventId)
+      .eq('event_id', env.EVENT_SLUG)
       .eq('kind', 'gallery')
       .eq('is_approved', true)
       .in('gallery_id', galleryIds as any)
