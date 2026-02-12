@@ -22,11 +22,10 @@ export async function GET(req: NextRequest) {
   const sb = supabaseServiceRole()
   let q = sb
     .from('media_items')
-      .eq('event_id', admin.event_id)
     .select('id, url, thumb_url, kind, gallery_id, is_approved, editable_until, storage_path, created_at, uploader_device_id')
+    .eq('event_id', admin.event_id)
     .eq('kind', 'gallery')
     .order('created_at', { ascending: false })
-    .limit(500)
 
   if (gallery_id) q = q.eq('gallery_id', gallery_id)
 
@@ -53,8 +52,13 @@ export async function PUT(req: NextRequest) {
   if (!id) return jsonError('missing id', 400)
 
   const sb = supabaseServiceRole()
-  const { data, error } = await sb.from('media_items')
-      .eq('event_id', admin.event_id).update({ is_approved }).eq('id', id).select('*').single()
+  const { data, error } = await sb
+    .from('media_items')
+    .update({ is_approved })
+    .eq('event_id', admin.event_id)
+    .eq('id', id)
+    .select('*')
+    .single()
   if (error) return jsonError(error.message, 500)
   return NextResponse.json({ ok: true, item: data })
 }
@@ -72,8 +76,12 @@ export async function DELETE(req: NextRequest) {
   if (!id) return jsonError('missing id', 400)
 
   const sb = supabaseServiceRole()
-  const { data: row, error: rerr } = await sb.from('media_items')
-      .eq('event_id', admin.event_id).select('id, storage_path').eq('id', id).single()
+  const { data: row, error: rerr } = await sb
+    .from('media_items')
+    .select('id, storage_path')
+    .eq('event_id', admin.event_id)
+    .eq('id', id)
+    .single()
   if (rerr) return jsonError(rerr.message, 500)
 
   // delete storage file first (best-effort)
@@ -83,7 +91,11 @@ export async function DELETE(req: NextRequest) {
   }
 
   const { error } = await sb.from('media_items')
-      .eq('event_id', admin.event_id).delete().eq('id', id)
+  const { error: derr } = await sb
+    .from('media_items')
+    .delete()
+    .eq('event_id', admin.event_id)
+    .eq('id', id)
   if (error) return jsonError(error.message, 500)
 
   return NextResponse.json({ ok: true })
