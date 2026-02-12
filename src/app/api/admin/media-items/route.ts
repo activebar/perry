@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest, requireAnyPermission } from '@/lib/adminSession'
+import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 
 function jsonError(msg: string, status = 400) {
@@ -9,7 +9,11 @@ function jsonError(msg: string, status = 400) {
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return jsonError('unauthorized', 401)
-  if (!requireAnyPermission(admin, ['galleries.read', 'galleries.manage', 'site.manage'])) return jsonError('forbidden', 403)
+  // NOTE: requireAnyPermission() throws on forbidden (returns void), so we use a boolean check here.
+  const canRead =
+    admin.role === 'master' ||
+    ['galleries.read', 'galleries.manage', 'site.manage'].some((p) => !!(admin as any).permissions?.[p])
+  if (!canRead) return jsonError('forbidden', 403)
 
   const sp = req.nextUrl.searchParams
   const status = (sp.get('status') || 'pending').toLowerCase()
@@ -37,7 +41,10 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return jsonError('unauthorized', 401)
-  if (!requireAnyPermission(admin, ['galleries.manage', 'site.manage'])) return jsonError('forbidden', 403)
+  const canManage =
+    admin.role === 'master' ||
+    ['galleries.manage', 'site.manage'].some((p) => !!(admin as any)?.permissions?.[p])
+  if (!canManage) return jsonError('forbidden', 403)
 
   const body = await req.json().catch(() => ({}))
   const id = String(body.id || '').trim()
@@ -55,7 +62,10 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return jsonError('unauthorized', 401)
-  if (!requireAnyPermission(admin, ['galleries.manage', 'site.manage'])) return jsonError('forbidden', 403)
+  const canManage =
+    admin.role === 'master' ||
+    ['galleries.manage', 'site.manage'].some((p) => !!(admin as any)?.permissions?.[p])
+  if (!canManage) return jsonError('forbidden', 403)
 
   const body = await req.json().catch(() => ({}))
   const id = String(body.id || '').trim()
