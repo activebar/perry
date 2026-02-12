@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   if (status === 'approved') q = q.eq('is_approved', true)
 
   const { data, error } = await q
-  if (derr) return jsonError(derr.message, 500)
+  if (error) return jsonError(error.message, 500)
   return NextResponse.json({ ok: true, items: data || [] })
 }
 
@@ -59,7 +59,7 @@ export async function PUT(req: NextRequest) {
     .eq('id', id)
     .select('*')
     .single()
-  if (derr) return jsonError(derr.message, 500)
+  if (error) return jsonError(error.message, 500)
   return NextResponse.json({ ok: true, item: data })
 }
 
@@ -95,7 +95,7 @@ export async function DELETE(req: NextRequest) {
     .delete()
     .eq('event_id', admin.event_id)
     .eq('id', id)
-  if (derr) return jsonError(derr.message, 500)
+  if (error) return jsonError(error.message, 500)
 
   return NextResponse.json({ ok: true })
 }
