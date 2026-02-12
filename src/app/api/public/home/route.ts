@@ -155,8 +155,7 @@ export async function GET() {
         .map((b: any) => b.type)
     )
 
-    const blessingsPreview,
-      galleryPreviewsLimit = Number(settings.blessings_preview_limit ?? 3)
+    const blessingsPreviewLimit = Number(settings.blessings_preview_limit ?? 3)
 
     const blessingsPreview = await fetchBlessingsPreview(blessingsPreviewLimit, device_id)
     const galleryPreviews = await fetchGalleryPreviews(blocks)
@@ -165,7 +164,8 @@ export async function GET() {
       ok: true,
       settings,
       blocks,
-      blessingsPreview
+      blessingsPreview,
+      galleryPreviews
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
