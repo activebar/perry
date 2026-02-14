@@ -428,19 +428,7 @@ async function saveEdit() {
   return (
     <main dir="rtl" className="text-right">
       <Container>
-        {showHeader && (
-          <Card>
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-right">
-                <h2 className="text-xl font-bold">{blessingTitle}</h2>
-                <p className="text-sm text-zinc-600">{blessingSubtitle}</p>
-              </div>
-              <Link href="/"><Button variant="ghost">← בית</Button></Link>
-            </div>
-          </Card>
-        )}
-
-        <Card>
+<Card>
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
@@ -506,15 +494,19 @@ async function saveEdit() {
           {items.map(p => (
             <Card key={p.id} id={`post-${p.id}`} className="scroll-mt-24">
               <div className="text-right">
-                <div className="grid grid-cols-2 items-center gap-2">
+                <div className="flex items-start justify-between gap-3">
                   <p className="font-semibold text-right">{p.author_name || 'אורח/ת'}</p>
-
-                  <div className="flex flex-col items-start">
-                    <p className="text-xs text-zinc-500 text-left" dir="ltr">
-                      {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
-                    </p>
-                  </div>
+                  <p className="text-xs text-zinc-500 text-left shrink-0" dir="ltr">
+                    {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
+                  </p>
                 </div>
+
+                {/* link preview thumb (no media -> below name) */}
+                {linkPreviewEnabled && p.link_url && !(p.video_url || p.media_url) && (
+                  <div className="mt-3 flex justify-center">
+                    <LinkPreviewThumb url={p.link_url} size={mediaSize} />
+                  </div>
+                )}
 
                 {/* media (centered) */}
                 {(() => {
@@ -541,13 +533,14 @@ async function saveEdit() {
                 })()}
 
                 {/* link preview thumb (centered) */}
-                {linkPreviewEnabled && p.link_url && (
+{p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
+
+                {/* link preview thumb (has media -> below text; if no text -> will show below media) */}
+                {linkPreviewEnabled && p.link_url && (p.video_url || p.media_url) && (
                   <div className="mt-3 flex justify-center">
                     <LinkPreviewThumb url={p.link_url} size={mediaSize} />
                   </div>
                 )}
-
-                {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
                 {/* link meta/details (single line, below text) */}
                 {/* When "show details" is ON we show the meta line (title/domain). */}
