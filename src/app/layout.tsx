@@ -50,6 +50,9 @@ let eventName: string | undefined = undefined
   let footerEnabled: boolean | undefined = undefined
   let footerLabel: string | null | undefined = undefined
   let footerUrl: string | null | undefined = undefined
+  let footerLine2Enabled: boolean | null | undefined = undefined
+  let footerLine2Label: string | null | undefined = undefined
+  let footerLine2Url: string | null | undefined = undefined
 try {
   const s: any = await fetchSettings()
   eventName = s?.event_name ? String(s.event_name) : undefined
@@ -58,12 +61,15 @@ try {
       footerEnabled = undefined
       footerLabel = undefined
       footerUrl = undefined
+      footerLine2Enabled = undefined
+      footerLine2Label = undefined
+      footerLine2Url = undefined
 }
 
   return (
     <html lang="he">
       <body>
-        <SiteChrome eventName={eventName} footerEnabled={footerEnabled} footerLabel={footerLabel} footerUrl={footerUrl}>{children}</SiteChrome>
+        <SiteChrome eventName={eventName} footerEnabled={footerEnabled} footerLabel={footerLabel} footerUrl={footerUrl} footerLine2Enabled={footerLine2Enabled} footerLine2Label={footerLine2Label} footerLine2Url={footerLine2Url}>{children}</SiteChrome>
       </body>
     </html>
   )
