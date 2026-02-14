@@ -2,6 +2,7 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { fetchSettings } from '@/lib/db'
 import { getSiteUrl, toAbsoluteUrl } from '@/lib/site-url'
+import SiteChrome from '@/components/SiteChrome'
 
 export async function generateMetadata(): Promise<Metadata> {
   try {
@@ -47,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he">
       <body>
-        <div className="min-h-screen">{children}</div>
+        <SiteChrome eventName={eventName}>{children}</SiteChrome>
       </body>
     </html>
   )
