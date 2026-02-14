@@ -242,11 +242,10 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'blessings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
-  blessings: 'ברכות',
   blocks: 'בלוקים',
   moderation: 'אישור תכנים',
   ads: 'פרסומות',
@@ -483,7 +482,7 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    const baseTabs: Tab[] = ['settings', 'blessings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
     return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
@@ -963,6 +962,7 @@ async function loadBlocks() {
     }
   }
 
+
   async function updateGallery(id: string, patch: any) {
     setGalleryMsg(null)
     setGalleryBusy(true)
@@ -997,7 +997,6 @@ async function loadBlocks() {
     try {
       await jfetch('/api/admin/media-items', { method: 'PUT', body: JSON.stringify({ id, is_approved: true }) })
       setPendingMedia(prev => prev.filter(x => x.id !== id))
-      await loadApprovedMedia()
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה באישור'))
     }
@@ -1009,7 +1008,6 @@ async function loadBlocks() {
     try {
       await jfetch('/api/admin/media-items', { method: 'DELETE', body: JSON.stringify({ id }) })
       setPendingMedia(prev => prev.filter(x => x.id !== id))
-      setApprovedMedia(prev => prev.filter(x => x.id !== id))
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה במחיקה'))
     }
@@ -1027,7 +1025,8 @@ async function loadBlocks() {
       loadSettings()
       loadContentRules()
     }
-    if (tab === 'blessings') {
+    if (tab === 'admin_gallery') {
+      // We show "Gallery Settings" inside the Galleries tab, so we must load settings here too
       loadSettings()
     }
     if (tab === 'blocks') loadBlocks()
@@ -1037,7 +1036,6 @@ async function loadBlocks() {
     }
     if (tab === 'ads') loadAds()
     if (tab === 'admin_gallery') {
-      loadSettings()
       loadGalleries()
       loadPendingMedia()
       loadApprovedMedia()
@@ -1154,14 +1152,140 @@ async function loadBlocks() {
   <PermissionsPanel eventId={activeEventId} />
 )}
 
-
-      {/* ===== BLESSINGS ===== */}
-      {tab === 'blessings' && settings && (
+      {/* ===== SETTINGS ===== */}
+      {tab === 'settings' && settings && (
         <Card>
-          <h3 className="font-semibold">ברכות</h3>
+          <h3 className="font-semibold">הגדרות</h3>
 
           <div className="mt-2 grid gap-2" dir="rtl">
-{/* ברכות */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-right text-xs text-zinc-600">
+                {savedMsg ? <span className="text-green-700">{savedMsg}</span> : null}
+                {!savedMsg && err ? <span className="text-red-600">{err}</span> : null}
+              </div>
+              <Button onClick={() => saveSettings()} disabled={saving}>
+                {saving ? 'שומר...' : 'שמור'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-3">
+            {/* כללי */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">הגדרות כלליות</p>
+
+              <Input
+                value={settings.event_name || ''}
+                onChange={e => setSettings({ ...settings, event_name: e.target.value })}
+                placeholder="שם אירוע"
+              />
+
+              <div className="grid gap-1">
+                <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
+                <input
+                  type="datetime-local"
+                  value={startAtLocal}
+                  onChange={e => setStartAtLocal(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 px-3 py-2"
+                />
+              </div>
+
+              <Input
+                value={settings.location_text || ''}
+                onChange={e => setSettings({ ...settings, location_text: e.target.value })}
+                placeholder="אולם / כתובת"
+              />
+
+
+<div className="grid gap-1">
+  <label className="text-xs text-zinc-500">תיאור לשיתוף (meta_description)</label>
+  <textarea
+    rows={3}
+    value={(settings as any).meta_description || ''}
+    onChange={(e) => setSettings({ ...(settings as any), meta_description: e.target.value })}
+    placeholder="מופיע בתצוגה המקדימה בווצאפ/פייסבוק"
+    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+  />
+</div>
+
+
+              <Input
+                value={settings.waze_url || ''}
+                onChange={e => setSettings({ ...settings, waze_url: e.target.value })}
+                placeholder="קישור Waze"
+                dir="ltr"
+              />
+            </div>
+
+            {/* HERO */}
+            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+              <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
+
+              <Textarea
+                value={settings.hero_pre_text || ''}
+                onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
+                placeholder="טקסט לפני האירוע (עד 30 דק׳ אחרי start_at)"
+                rows={4}
+              />
+
+              <Textarea
+                value={settings.hero_live_text || ''}
+                onChange={e => setSettings({ ...settings, hero_live_text: e.target.value })}
+                placeholder="טקסט בזמן האירוע (אחרי 30 דק׳ ועד יום אחרי)"
+                rows={3}
+              />
+
+              <Textarea
+                value={settings.hero_post_text || ''}
+                onChange={e => setSettings({ ...settings, hero_post_text: e.target.value })}
+                placeholder="טקסט אחרי האירוע"
+                rows={4}
+              />
+
+              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
+                <p className="text-sm font-medium">תמונות מתחלפות</p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="file" accept="image/*" multiple onChange={e => setHeroFiles(Array.from(e.target.files || []))} />
+                  <Button onClick={uploadHeroImages} disabled={heroBusy || heroFiles.length === 0}>
+                    {heroBusy ? 'מעלה...' : `העלה ${heroFiles.length || ''} תמונות`}
+                  </Button>
+                </div>
+
+                {heroMsg && <p className="text-sm text-zinc-700">{heroMsg}</p>}
+
+                <div className="grid gap-2">
+                  <label className="text-xs text-zinc-500">מהירות החלפה (שניות)</label>
+                  <Input
+                    value={String(settings.hero_rotate_seconds ?? 5)}
+                    onChange={e => setSettings({ ...settings, hero_rotate_seconds: Number(e.target.value) })}
+                    placeholder="למשל 5"
+                  />
+                </div>
+
+                {Array.isArray(settings.hero_images) && settings.hero_images.length > 0 && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {settings.hero_images.map((u: string) => (
+                      <div key={u} className="overflow-hidden rounded-2xl border border-zinc-200">
+                        <div className="relative aspect-[16/9] bg-zinc-50">
+                          <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                        </div>
+                        <div className="p-2 flex items-center justify-between gap-2">
+                          <Button variant="ghost" onClick={() => removeHeroImage(u)}>הסר</Button>
+                          <a className="text-xs underline" href={u} target="_blank" rel="noreferrer">פתח</a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(!Array.isArray(settings.hero_images) || settings.hero_images.length === 0) && (
+                  <p className="text-xs text-zinc-500">אין עדיין תמונות HERO.</p>
+                )}
+              </div>
+            </div>
+
+            {/* ברכות */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
               <p className="text-sm font-medium text-right">ברכות</p>
 
@@ -1682,148 +1806,6 @@ async function loadBlocks() {
                 )}
               </div>
             </div>
-            <Button onClick={() => saveSettings()} disabled={saving}>
-              {saving ? 'שומר...' : 'שמור'}
-            </Button>
-
-            {savedMsg && <p className="text-sm text-green-700">{savedMsg}</p>}
-            {err && <p className="text-sm text-red-600">{err}</p>}
-          </div>
-        </Card>
-      )}
-
-      {/* ===== SETTINGS ===== */}
-      {tab === 'settings' && settings && (
-        <Card>
-          <h3 className="font-semibold">הגדרות</h3>
-
-          <div className="mt-2 grid gap-2" dir="rtl">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-right text-xs text-zinc-600">
-                {savedMsg ? <span className="text-green-700">{savedMsg}</span> : null}
-                {!savedMsg && err ? <span className="text-red-600">{err}</span> : null}
-              </div>
-              <Button onClick={() => saveSettings()} disabled={saving}>
-                {saving ? 'שומר...' : 'שמור'}
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-3 grid gap-3">
-            {/* כללי */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">הגדרות כלליות</p>
-
-              <Input
-                value={settings.event_name || ''}
-                onChange={e => setSettings({ ...settings, event_name: e.target.value })}
-                placeholder="שם אירוע"
-              />
-
-              <div className="grid gap-1">
-                <label className="text-xs text-zinc-500">תאריך ושעה (start_at)</label>
-                <input
-                  type="datetime-local"
-                  value={startAtLocal}
-                  onChange={e => setStartAtLocal(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 px-3 py-2"
-                />
-              </div>
-
-              <Input
-                value={settings.location_text || ''}
-                onChange={e => setSettings({ ...settings, location_text: e.target.value })}
-                placeholder="אולם / כתובת"
-              />
-
-
-<div className="grid gap-1">
-  <label className="text-xs text-zinc-500">תיאור לשיתוף (meta_description)</label>
-  <textarea
-    rows={3}
-    value={(settings as any).meta_description || ''}
-    onChange={(e) => setSettings({ ...(settings as any), meta_description: e.target.value })}
-    placeholder="מופיע בתצוגה המקדימה בווצאפ/פייסבוק"
-    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-  />
-</div>
-
-
-              <Input
-                value={settings.waze_url || ''}
-                onChange={e => setSettings({ ...settings, waze_url: e.target.value })}
-                placeholder="קישור Waze"
-                dir="ltr"
-              />
-            </div>
-
-            {/* HERO */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
-
-              <Textarea
-                value={settings.hero_pre_text || ''}
-                onChange={e => setSettings({ ...settings, hero_pre_text: e.target.value })}
-                placeholder="טקסט לפני האירוע (עד 30 דק׳ אחרי start_at)"
-                rows={4}
-              />
-
-              <Textarea
-                value={settings.hero_live_text || ''}
-                onChange={e => setSettings({ ...settings, hero_live_text: e.target.value })}
-                placeholder="טקסט בזמן האירוע (אחרי 30 דק׳ ועד יום אחרי)"
-                rows={3}
-              />
-
-              <Textarea
-                value={settings.hero_post_text || ''}
-                onChange={e => setSettings({ ...settings, hero_post_text: e.target.value })}
-                placeholder="טקסט אחרי האירוע"
-                rows={4}
-              />
-
-              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-                <p className="text-sm font-medium">תמונות מתחלפות</p>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <input type="file" accept="image/*" multiple onChange={e => setHeroFiles(Array.from(e.target.files || []))} />
-                  <Button onClick={uploadHeroImages} disabled={heroBusy || heroFiles.length === 0}>
-                    {heroBusy ? 'מעלה...' : `העלה ${heroFiles.length || ''} תמונות`}
-                  </Button>
-                </div>
-
-                {heroMsg && <p className="text-sm text-zinc-700">{heroMsg}</p>}
-
-                <div className="grid gap-2">
-                  <label className="text-xs text-zinc-500">מהירות החלפה (שניות)</label>
-                  <Input
-                    value={String(settings.hero_rotate_seconds ?? 5)}
-                    onChange={e => setSettings({ ...settings, hero_rotate_seconds: Number(e.target.value) })}
-                    placeholder="למשל 5"
-                  />
-                </div>
-
-                {Array.isArray(settings.hero_images) && settings.hero_images.length > 0 && (
-                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {settings.hero_images.map((u: string) => (
-                      <div key={u} className="overflow-hidden rounded-2xl border border-zinc-200">
-                        <div className="relative aspect-[16/9] bg-zinc-50">
-                          <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                        </div>
-                        <div className="p-2 flex items-center justify-between gap-2">
-                          <Button variant="ghost" onClick={() => removeHeroImage(u)}>הסר</Button>
-                          <a className="text-xs underline" href={u} target="_blank" rel="noreferrer">פתח</a>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {(!Array.isArray(settings.hero_images) || settings.hero_images.length === 0) && (
-                  <p className="text-xs text-zinc-500">אין עדיין תמונות HERO.</p>
-                )}
-              </div>
-            </div>
 
             {/* פוטר */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
@@ -2173,89 +2155,39 @@ async function loadBlocks() {
           <h3 className="font-semibold">גלריות</h3>
           <p className="mt-1 text-sm text-zinc-600">ניהול גלריות + אישור תמונות לכל גלריה.</p>
 
-          {/* הגדרות גלריות (הועברו מטאב "אירוע" כדי שיופיעו תחת "גלריות") */}
           {settings && (
-            <div className="mt-4 grid gap-3 rounded-2xl border border-zinc-200 p-4">
-              <div className="grid gap-2">
-                <p className="text-sm font-medium text-right">טקסטים וכפתורים</p>
+            <div className="mt-4 grid gap-2 rounded-2xl border border-zinc-200 p-4">
+              <p className="text-sm font-medium text-right">הגדרות גלריות</p>
 
-                <Input
-                  value={settings.guest_gallery_title || ''}
-                  onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
-                  placeholder="כותרת גלריית אורחים"
+              <Input
+                value={settings.guest_gallery_title || ''}
+                onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
+                placeholder="כותרת גלריית אורחים"
+              />
+
+              <label className="text-sm flex items-center gap-2 justify-end flex-row-reverse">
+                <input
+                  type="checkbox"
+                  checked={settings.guest_gallery_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
                 />
+                להציג כפתור “לכל התמונות” בגלריית אורחים
+              </label>
 
-                <label className="text-sm flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={settings.guest_gallery_show_all_button !== false}
-                    onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
-                  />
-                  להציג כפתור “לכל התמונות” בגלריית אורחים
-                </label>
+              <Input
+                value={settings.admin_gallery_title || ''}
+                onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
+                placeholder="כותרת גלריית מנהל"
+              />
 
-                <Input
-                  value={settings.admin_gallery_title || ''}
-                  onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
-                  placeholder="כותרת גלריית מנהל"
+              <label className="text-sm flex items-center gap-2 justify-end flex-row-reverse">
+                <input
+                  type="checkbox"
+                  checked={settings.admin_gallery_show_all_button !== false}
+                  onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
                 />
-
-                <label className="text-sm flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={settings.admin_gallery_show_all_button !== false}
-                    onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
-                  />
-                  להציג כפתור “לכל התמונות” בגלריית מנהל
-                </label>
-              </div>
-
-              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
-                <p className="text-sm font-medium text-right">פריוויו גלריות בדף הבית</p>
-
-                <label className="text-xs text-zinc-500 text-right">פריסה</label>
-                <select
-                  className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-right"
-                  value={`${Number(settings.home_gallery_preview_cols ?? 3)}x${Number(settings.home_gallery_preview_limit ?? 6)}`}
-                  onChange={e => {
-                    const v = String(e.target.value || '')
-                    const [c, l] = v.split('x').map(n => Number(n))
-                    setSettings({
-                      ...settings,
-                      home_gallery_preview_cols: Number.isFinite(c) ? c : 3,
-                      home_gallery_preview_limit: Number.isFinite(l) ? l : 6
-                    })
-                  }}
-                >
-                  <option value="3x6">3x2 (6 תמונות)</option>
-                  <option value="3x9">3x3 (9 תמונות)</option>
-                  <option value="4x8">4x2 (8 תמונות)</option>
-                </select>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="grid gap-1">
-                    <label className="text-xs text-zinc-500 text-right">עמודות (cols)</label>
-                    <Input
-                      className="text-right"
-                      dir="rtl"
-                      value={String(settings.home_gallery_preview_cols ?? 3)}
-                      onChange={e => setSettings({ ...settings, home_gallery_preview_cols: Number(e.target.value) })}
-                      placeholder="3"
-                    />
-                  </div>
-
-                  <div className="grid gap-1">
-                    <label className="text-xs text-zinc-500 text-right">כמות תמונות (limit)</label>
-                    <Input
-                      className="text-right"
-                      dir="rtl"
-                      value={String(settings.home_gallery_preview_limit ?? 6)}
-                      onChange={e => setSettings({ ...settings, home_gallery_preview_limit: Number(e.target.value) })}
-                      placeholder="6"
-                    />
-                  </div>
-                </div>
-              </div>
+                להציג כפתור “לכל התמונות” בגלריית מנהל
+              </label>
 
               <div className="flex items-center justify-end">
                 <Button onClick={() => saveSettings()} disabled={saving}>
@@ -2361,44 +2293,6 @@ async function loadBlocks() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <Button variant="ghost" onClick={() => loadApprovedMedia(g.id)} disabled={galleryBusy}>
-                        רענן מאושרות
-                      </Button>
-                      <div className="text-sm text-zinc-600 text-right">
-                        מאושרות: <b>{approvedMedia.length}</b>
-                      </div>
-                    </div>
-
-                    {/* Approved media */}
-                    {approvedMedia.length > 0 && (
-                      <div>
-                        <p className="mt-1 text-sm font-medium text-right">תמונות מאושרות</p>
-                        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                          {approvedMedia.map((p: any) => (
-                            <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
-                              <button
-                                className="relative block aspect-square w-full bg-zinc-50"
-                                onClick={() => p.url && setLightbox(p.url)}
-                                type="button"
-                              >
-                                <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                              </button>
-
-                              <div className="p-3 flex gap-2">
-                                <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
-                                  מחק
-                                </Button>
-                                <a className="text-sm underline" href={p.url} target="_blank" rel="noreferrer">
-                                  פתח
-                                </a>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {pendingMedia.map((p: any) => (
                         <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
@@ -2423,6 +2317,39 @@ async function loadBlocks() {
                     </div>
 
                     {pendingMedia.length === 0 && <p className="text-sm text-zinc-600 text-right">אין תמונות ממתינות.</p>}
+
+                    <div className="mt-6 border-t border-zinc-200 pt-4">
+                      <div className="flex items-center justify-between">
+                        <Button variant="ghost" onClick={() => loadApprovedMedia(g.id)} disabled={galleryBusy}>
+                          רענן מאושרות
+                        </Button>
+                        <div className="text-sm text-zinc-600 text-right">
+                          מאושרות: <b>{approvedMedia.length}</b>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {approvedMedia.map((p: any) => (
+                          <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
+                            <button
+                              className="relative block aspect-square w-full bg-zinc-50"
+                              onClick={() => p.url && setLightbox(p.url)}
+                              type="button"
+                            >
+                              <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                            </button>
+
+                            <div className="p-3 flex gap-2 justify-end">
+                              <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
+                                מחק
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {approvedMedia.length === 0 && <p className="text-sm text-zinc-600 text-right mt-2">אין תמונות מאושרות.</p>}
+                    </div>
                   </div>
                 )
               })()}
