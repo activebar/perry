@@ -286,7 +286,7 @@ export function GalleryClient({
           <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
             <button
               className="relative block aspect-square w-full bg-zinc-50"
-              onClick={() => setLightbox(it.url)}
+              onClick={() => setLightbox(it)}
               type="button"
             >
               <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
