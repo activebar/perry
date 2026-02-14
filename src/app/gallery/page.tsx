@@ -6,8 +6,23 @@ import { getServerEnv } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
+
+async function getLatestSettingsRow() {
+  const srv = supabaseServiceRole()
+  const { data, error } = await srv
+    .from('event_settings')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error) throw error
+  return data as any
+}
+
 function isGalleryBlockType(t: string) {
-  return t === 'gallery' || t.startsWith('gallery')
+  return t === 'gallery'
 }
 
 export default async function GalleryIndexPage() {
@@ -21,8 +36,14 @@ export default async function GalleryIndexPage() {
     .order('order_index', { ascending: true })
 
   const galleryBlocks = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
-  const galleryIds = galleryBlocks
-    .map((b: any) => (b?.config as any)?.gallery_id)
+  const galleryIds = Array.from(
+    new Set(
+      galleryBlocks
+        .map((b: any) => (b?.config as any)?.gallery_id)
+        .filter(Boolean)
+        .map((x: any) => String(x))
+    )
+  )
 
   const previewByGalleryId = new Map<string, string[]>()
 
@@ -36,7 +57,7 @@ export default async function GalleryIndexPage() {
       .eq('is_approved', true)
       .in('gallery_id', galleryIds as any)
       .order('created_at', { ascending: false })
-      .limit(Math.min(200, galleryIds.length * 40))
+      .limit(Math.min(400, galleryIds.length * Math.max(20, perGalleryLimit * 3)))
 
     for (const it of recent || []) {
       const gid = String((it as any).gallery_id || '')
@@ -44,7 +65,7 @@ export default async function GalleryIndexPage() {
       const u = (it as any).thumb_url || (it as any).url
       if (!u) continue
       const arr = previewByGalleryId.get(gid) || []
-      if (arr.length < 4) {
+      if (arr.length < perGalleryLimit) {
         arr.push(u)
         previewByGalleryId.set(gid, arr)
       }
@@ -84,8 +105,9 @@ export default async function GalleryIndexPage() {
                         const previews = previewByGalleryId.get(String(galleryId)) || []
                         if (!previews.length) return null
                         return (
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            {previews.slice(0, 4).map((u, idx) => (
+                          <div className="mt-3 grid gap-2"
+                            style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
+                            {previews.slice(0, perGalleryLimit).map((u, idx) => (
                               <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={u} alt="" className="h-full w-full object-cover" />
