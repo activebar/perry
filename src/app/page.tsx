@@ -446,8 +446,8 @@ export default function HomePage() {
                     {previews.length === 0 ? (
                       <div className="mt-3 rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-600">אין תמונות עדיין.</div>
                     ) : (
-                      <div className="mt-3 grid grid-cols-3 gap-2">
-                        {previews.slice(0, 9).map((it: any) => {
+                      <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(1, Number(settings?.home_gallery_preview_cols || 3))}, minmax(0, 1fr))` }}>
+                        {previews.slice(0, Math.max(1, Number(settings?.home_gallery_preview_limit || 6))).map((it: any) => {
                           const url = String(it.thumb_url || it.url || '')
                           return (
                             <button
