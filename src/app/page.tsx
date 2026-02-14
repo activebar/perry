@@ -498,7 +498,8 @@ export default function HomePage() {
                               {p.media_url ? (
                                 <button
                                   type="button"
-                                  className="relative h-20 w-20 flex-none overflow-hidden rounded-2xl bg-zinc-200"
+                                  className="relative flex-none overflow-hidden rounded-2xl bg-zinc-200"
+                                  style={{ width: Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160))), height: Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160))) }}
                                   onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
                                 >
                                   <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -510,31 +511,34 @@ export default function HomePage() {
                               <div className="flex flex-wrap gap-2">
                                 {EMOJIS.map(e => (
                                   <button
-                                    key={e}
+                                    key={e} {((p.reaction_counts || {}) as any)[e] ? ((p.reaction_counts || {}) as any)[e] : ''}
                                     type="button"
                                     className={`rounded-full border px-3 py-1 text-sm ${
                                       (p.my_reactions || []).includes(e) ? 'bg-black text-white' : 'bg-white'
                                     }`}
                                     onClick={async () => {
                                       try {
-                                        const res = await fetch('/api/reactions', {
+                                        const res = await fetch('/api/reactions/toggle', {
                                           method: 'POST',
                                           headers: { 'Content-Type': 'application/json' },
                                           body: JSON.stringify({ post_id: p.id, emoji: e })
                                         })
                                         if (!res.ok) return
                                         const j = await res.json().catch(() => ({}))
-                                        if (!j?.ok) return
-                                        // update counts locally (simple)
-                                        setData(prev => {
-                                          if (!prev) return prev
-                                          const next = { ...prev }
-                                          next.blessingsPreview = (next.blessingsPreview || []).map((x: any) => {
-                                            if (x.id !== p.id) return x
-                                            return j.post
-                                          })
-                                          return next
-                                        })
+                                        // response from /api/reactions/toggle -> {counts, my}
+setData(prev => {
+  if (!prev) return prev
+  const next = { ...prev }
+  next.blessingsPreview = (next.blessingsPreview || []).map((x: any) => {
+    if (x.id !== p.id) return x
+    return {
+      ...x,
+      reaction_counts: j.counts || x.reaction_counts || {},
+      my_reactions: j.my || x.my_reactions || [],
+    }
+  })
+  return next
+})
                                       } catch {}
                                     }}
                                   >

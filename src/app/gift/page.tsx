@@ -34,19 +34,7 @@ export default async function GiftPage() {
   return (
     <main>
       <Container>
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Link href="/"><Button variant="ghost">← חזרה לדף הבית</Button></Link>
-            <div className="flex flex-wrap gap-2">
-              <Link href="/"><Button variant="ghost">בית</Button></Link>
-              <Link href="/gallery"><Button variant="ghost">{galleryTitle}</Button></Link>
-              <Link href="/blessings"><Button variant="ghost">{blessingsTitle}</Button></Link>
-              <Link href="/gift"><Button>{giftTitle}</Button></Link>
-            </div>
-          </div>
-        </Card>
-
-        {!s.gift_enabled ? (
+{!s.gift_enabled ? (
           <div className="mt-4">
             <Card>
               <h2 className="text-xl font-bold">{giftTitle} לא זמינה כרגע</h2>

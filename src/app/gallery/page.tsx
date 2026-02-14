@@ -32,20 +32,32 @@ export default async function GalleryIndexPage() {
   const { data: blocks } = await srv
     .from('blocks')
     .select('*')
+    .eq('event_id', env.EVENT_SLUG)
     .eq('is_visible', true)
     .order('order_index', { ascending: true })
 
-  const galleryBlocks = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
-  const galleryIds = Array.from(
+  const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
+  // only blocks that point to a real gallery
+  const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
+    const galleryIds = Array.from(
     new Set(
       galleryBlocks
-        .map((b: any) => (b?.config as any)?.gallery_id)
+        .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
         .filter(Boolean)
         .map((x: any) => String(x))
     )
   )
 
   const previewByGalleryId = new Map<string, string[]>()
+
+const titlesById = new Map<string, string>()
+if (galleryIds.length) {
+  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
+  for (const g of gs || []) {
+    titlesById.set(String((g as any).id), String((g as any).title || '').trim())
+  }
+}
+
 
 // Settings-driven preview for gallery cards (same controls as Home)
 let settings: any = null
