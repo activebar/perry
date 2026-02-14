@@ -511,7 +511,7 @@ export default function HomePage() {
                               <div className="flex flex-wrap gap-2">
                                 {EMOJIS.map(e => (
                                   <button
-                                    key={e}) as any)[e] ? ((p.reaction_counts || {}) as any)[e] : ''}
+                                    key={e}
                                     type="button"
                                     className={`rounded-full border px-3 py-1 text-sm ${
                                       (p.my_reactions || []).includes(e) ? 'bg-black text-white' : 'bg-white'
@@ -521,28 +521,27 @@ export default function HomePage() {
                                         const res = await fetch('/api/reactions/toggle', {
                                           method: 'POST',
                                           headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ post_id: p.id, emoji: e })
+                                          body: JSON.stringify({ post_id: p.id, emoji: e }),
                                         })
                                         if (!res.ok) return
-                                        const j = await res.json().catch(() => ({}))
-                                        // response from /api/reactions/toggle -> {counts, my}
-setData(prev => {
-  if (!prev) return prev
-  const next = { ...prev }
-  next.blessingsPreview = (next.blessingsPreview || []).map((x: any) => {
-    if (x.id !== p.id) return x
-    return {
-      ...x,
-      reaction_counts: j.counts || x.reaction_counts || {},
-      my_reactions: j.my || x.my_reactions || [],
-    }
-  })
-  return next
-})
+                                        const j = await res.json().catch(() => ({} as any))
+                                        setData(prev => {
+                                          if (!prev) return prev
+                                          const next = { ...prev } as any
+                                          next.blessingsPreview = (next.blessingsPreview || []).map((x: any) => {
+                                            if (x.id !== p.id) return x
+                                            return {
+                                              ...x,
+                                              reaction_counts: j.counts || x.reaction_counts || {},
+                                              my_reactions: j.my || x.my_reactions || [],
+                                            }
+                                          })
+                                          return next
+                                        })
                                       } catch {}
                                     }}
                                   >
-                                    {e} {Number(p.reaction_counts?.[e] || 0)}
+                                    {e} {Number((p.reaction_counts || ({} as any))[e] || 0)}
                                   </button>
                                 ))}
                               </div>
