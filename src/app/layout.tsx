@@ -88,7 +88,7 @@ if (!giftBlock?.is_visible) {
       footerLine2Enabled = undefined
       footerLine2Label = undefined
       footerLine2Url = undefined
-      showGiftNavButton = undefined
+      showGiftNavButton = false
       giftNavLabel = undefined
 }
 

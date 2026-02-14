@@ -56,6 +56,7 @@ export default function SiteChrome({
   const isHome = pathname === '/'
   const isGalleries = pathname === '/gallery' || pathname.startsWith('/gallery/')
   const isBlessings = pathname === '/blessings' || pathname.startsWith('/blessings/')
+  const isGift = pathname === '/gift' || pathname.startsWith('/gift/')
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -74,16 +75,16 @@ export default function SiteChrome({
     <NavButton href="/gallery" label="גלריות" active={isGalleries} />
     <NavButton href="/blessings" label="ברכות" active={isBlessings} />
     {showGiftNavButton ? (
-      <Link
-        href="/gift"
-        className={[
-          'rounded-full px-4 py-2 text-sm transition',
-          'bg-black text-white hover:opacity-90',
-        ].join(' ')}
-      >
-        {giftNavLabel || 'מתנה'}
-      </Link>
-    ) : null}
+  <Link
+    href="/gift"
+    className={[
+      'rounded-full px-4 py-2 text-sm transition',
+      isGift ? 'bg-black text-white' : 'bg-white text-zinc-900 hover:bg-zinc-100',
+    ].join(' ')}
+  >
+    {giftNavLabel || 'מתנה'}
+  </Link>
+) : null}
   </div>
 </nav>
 
@@ -104,9 +105,7 @@ export default function SiteChrome({
           ) : (
             <span>{footerLabel || 'צור קשר'}</span>
           )
-        ) : (
-          <span className="opacity-70"> </span>
-        )}
+        ) : null}
       </div>
 
       <div>
@@ -118,13 +117,16 @@ export default function SiteChrome({
           ) : (
             <span>{footerLine2Label || ''}</span>
           )
-        ) : (
-          <span className="opacity-70"> </span>
-        )}
+        ) : null}
       </div>
+
+      {!footerEnabled && !footerLine2Enabled ? (
+        <div className="opacity-70">{eventName ? `${eventName} • ` : ''}מופעל ע״י ActiveBar</div>
+      ) : null}
     </div>
   </div>
 </footer>
+
 
 
     </div>
