@@ -31,18 +31,12 @@ export default function SiteChrome({
   footerEnabled,
   footerLabel,
   footerUrl,
-  footerLine2Enabled,
-  footerLine2Label,
-  footerLine2Url,
 }: {
   children: React.ReactNode
   eventName?: string
   footerEnabled?: boolean
   footerLabel?: string | null
   footerUrl?: string | null
-  footerLine2Enabled?: boolean | null
-  footerLine2Label?: string | null
-  footerLine2Url?: string | null
 }) {
   const pathname = usePathname() || '/'
 
@@ -75,38 +69,19 @@ export default function SiteChrome({
 
       <footer className="mt-10 border-t border-zinc-200 bg-white">
   <div className="mx-auto w-full max-w-3xl px-4 py-6 text-center text-sm text-zinc-500">
-    <div className="space-y-2">
-      <div>
-        {footerEnabled ? (
-          footerUrl ? (
-            <a href={footerUrl} className="underline decoration-zinc-300 underline-offset-4">
-              {footerLabel || 'צור קשר'}
-            </a>
-          ) : (
-            <span>{footerLabel || 'צור קשר'}</span>
-          )
-        ) : (
-          <span className="opacity-70"> </span>
-        )}
-      </div>
-
-      <div>
-        {footerLine2Enabled ? (
-          footerLine2Url ? (
-            <a href={String(footerLine2Url)} className="underline decoration-zinc-300 underline-offset-4">
-              {footerLine2Label || ''}
-            </a>
-          ) : (
-            <span>{footerLine2Label || ''}</span>
-          )
-        ) : (
-          <span className="opacity-70"> </span>
-        )}
-      </div>
-    </div>
+    {footerEnabled ? (
+      footerUrl ? (
+        <a href={footerUrl} className="underline decoration-zinc-300 underline-offset-4">
+          {footerLabel || 'צור קשר'}
+        </a>
+      ) : (
+        <span>{footerLabel || 'צור קשר'}</span>
+      )
+    ) : (
+      <span className="opacity-70"> </span>
+    )}
   </div>
 </footer>
-
 
     </div>
   )

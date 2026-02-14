@@ -1825,39 +1825,6 @@ async function loadBlocks() {
 
               <Input
                 value={settings.footer_url || ''}
-<div className="mt-6 rounded-xl border border-zinc-200 bg-white p-4">
-  <div className="mb-3 text-sm font-semibold">פוטר – שורה 2</div>
-  <label className="flex items-center gap-2 text-sm">
-    <input
-      type="checkbox"
-      checked={Boolean((settings as any)?.footer_line2_enabled)}
-      onChange={(e) => setSettings((s: any) => ({ ...s, footer_line2_enabled: e.target.checked }))}
-    />
-    להציג שורה 2 בפוטר
-  </label>
-
-  <div className="mt-3 grid gap-3 md:grid-cols-2">
-    <div>
-      <div className="mb-1 text-xs text-zinc-500">מלל שורה 2</div>
-      <input
-        className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
-        value={String((settings as any)?.footer_line2_label || '')}
-        onChange={(e) => setSettings((s: any) => ({ ...s, footer_line2_label: e.target.value }))}
-        placeholder="למשל: לכל שאלה – שלחו הודעה"
-      />
-    </div>
-    <div>
-      <div className="mb-1 text-xs text-zinc-500">קישור שורה 2 (אופציונלי)</div>
-      <input
-        className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm ltr"
-        value={String((settings as any)?.footer_line2_url || '')}
-        onChange={(e) => setSettings((s: any) => ({ ...s, footer_line2_url: e.target.value }))}
-        placeholder="tel:050-1234567 / https://..."
-      />
-    </div>
-  </div>
-</div>
-
                 onChange={e => setSettings({ ...settings, footer_url: e.target.value })}
                 placeholder="קישור פוטר"
                 dir="ltr"

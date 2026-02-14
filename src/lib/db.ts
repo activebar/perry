@@ -30,11 +30,6 @@ export type EventSettings = {
   footer_label: string | null
   footer_url: string | null
 
-  // footer line 2
-  footer_line2_enabled?: boolean | null
-  footer_line2_label?: string | null
-  footer_line2_url?: string | null
-
   // hero
   hero_pre_text?: string | null
   hero_live_text?: string | null
