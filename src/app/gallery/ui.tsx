@@ -44,48 +44,6 @@ async function shareUrl(url: string) {
   } catch {
     window.open(clean, '_blank', 'noopener,noreferrer')
   }
-
-}
-
-async function ensureGalleryShareLink(mediaId: string) {
-  const id = String(mediaId || '').trim()
-  if (!id) return ''
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const code = id.slice(0, 8)
-
-  // Ensure short link exists so /gl/{code} can resolve (and still fallback to permalink)
-  try {
-    await fetch('/api/short-links', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        kind: 'gl',
-        postId: id,
-        code,
-        targetPath: `/gallery/p/${id}`,
-      }),
-    })
-  } catch {
-    // ignore
-  }
-
-  // Prefer sharing the permalink (best for OG crawlers), but keep short link for copy/share
-  const permalink = `${origin}/gallery/p/${id}`
-  const shortlink = `${origin}/gl/${code}`
-  return permalink || shortlink
-}
-
-function openWhatsAppShare(url: string) {
-  const clean = String(url || '').trim()
-  if (!clean) return
-  const wa = `https://wa.me/?text=${encodeURIComponent(clean)}`
-  window.open(wa, '_blank', 'noopener,noreferrer')
-}
-
-async function shareGalleryItem(mediaId: string) {
-  const url = await ensureGalleryShareLink(mediaId)
-  if (!url) return
-  await shareUrl(url)
 }
 
 async function fileToImageBitmap(file: File) {
@@ -152,7 +110,7 @@ export function GalleryClient({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<Item | null>(null)
+  const [lightbox, setLightbox] = useState<string | null>(null)
 
   const pickerRef = useRef<HTMLInputElement | null>(null)
 
@@ -243,7 +201,7 @@ export function GalleryClient({
             <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
               <Button
                 variant="ghost"
-                onClick={() => downloadUrl(lightbox.url)}
+                onClick={() => downloadUrl(lightbox)}
                 className="bg-white/90 text-black shadow hover:bg-white"
                 type="button"
               >
@@ -251,21 +209,12 @@ export function GalleryClient({
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => shareGalleryItem(lightbox.id)}
+                onClick={() => shareUrl(lightbox)}
                 className="bg-white/90 text-black shadow hover:bg-white"
                 type="button"
               >
                 שתף
               </Button>
-              <Button
-                variant="ghost"
-                onClick={() => openWhatsAppShare(`${window.location.origin}/gallery/p/${lightbox.id}`)}
-                className="bg-white/90 text-black shadow hover:bg-white"
-                type="button"
-              >
-                וואטסאפ
-              </Button>
-
               <Button
                 variant="ghost"
                 onClick={() => setLightbox(null)}
@@ -276,7 +225,7 @@ export function GalleryClient({
               </Button>
             </div>
 
-            <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
+            <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
           </div>
         </div>
       )}
@@ -286,7 +235,7 @@ export function GalleryClient({
           <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
             <button
               className="relative block aspect-square w-full bg-zinc-50"
-              onClick={() => setLightbox(it)}
+              onClick={() => setLightbox(it.url)}
               type="button"
             >
               <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
