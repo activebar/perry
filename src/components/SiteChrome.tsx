@@ -58,10 +58,10 @@ export default function SiteChrome({
           </div>
 
           <nav className="flex shrink-0 items-center gap-2">
-            <NavButton href="/" label="בית" active={isHome} />
             <NavButton href="/gallery" label="גלריות" active={isGalleries} />
             <NavButton href="/blessings" label="ברכות" active={isBlessings} />
-          </nav>
+            <NavButton href="/" label="בית" active={isHome} />
+   </nav>
         </div>
       </header>
 
