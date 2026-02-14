@@ -44,7 +44,16 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+// Public site chrome title (event name) – safe fallback
+let eventName: string | undefined = undefined
+try {
+  const s: any = await fetchSettings()
+  eventName = s?.event_name ? String(s.event_name) : undefined
+} catch {
+  eventName = undefined
+}
+
   return (
     <html lang="he">
       <body>
