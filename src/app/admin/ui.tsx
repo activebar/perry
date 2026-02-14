@@ -1032,6 +1032,7 @@ async function loadBlocks() {
     }
     if (tab === 'ads') loadAds()
     if (tab === 'admin_gallery') {
+      loadSettings()
       loadGalleries()
       loadPendingMedia()
       loadApprovedMedia()
