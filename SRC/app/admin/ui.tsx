@@ -427,6 +427,7 @@ export default function AdminApp({
   const [galleryBusy, setGalleryBusy] = useState(false)
   const [galleryMsg, setGalleryMsg] = useState<string | null>(null)
   const [pendingMedia, setPendingMedia] = useState<any[]>([])
+  const [approvedMedia, setApprovedMedia] = useState<any[]>([])
   const [hoursToOpen, setHoursToOpen] = useState<number>(8)
 
 
@@ -951,6 +952,17 @@ async function loadBlocks() {
     }
   }
 
+  async function loadApprovedMedia(gid?: string) {
+    const id = gid || selectedGalleryId
+    if (!id) return
+    try {
+      const res = await jfetch(`/api/admin/media-items?status=approved&gallery_id=${encodeURIComponent(id)}`, { method: 'GET' })
+      setApprovedMedia(res.items || [])
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת תמונות מאושרות'))
+    }
+  }
+
   async function updateGallery(id: string, patch: any) {
     setGalleryMsg(null)
     setGalleryBusy(true)
@@ -985,6 +997,7 @@ async function loadBlocks() {
     try {
       await jfetch('/api/admin/media-items', { method: 'PUT', body: JSON.stringify({ id, is_approved: true }) })
       setPendingMedia(prev => prev.filter(x => x.id !== id))
+      await loadApprovedMedia()
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה באישור'))
     }
@@ -996,6 +1009,7 @@ async function loadBlocks() {
     try {
       await jfetch('/api/admin/media-items', { method: 'DELETE', body: JSON.stringify({ id }) })
       setPendingMedia(prev => prev.filter(x => x.id !== id))
+      setApprovedMedia(prev => prev.filter(x => x.id !== id))
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה במחיקה'))
     }
@@ -1023,8 +1037,10 @@ async function loadBlocks() {
     }
     if (tab === 'ads') loadAds()
     if (tab === 'admin_gallery') {
+      loadSettings()
       loadGalleries()
       loadPendingMedia()
+      loadApprovedMedia()
     }
     if (tab === 'diag') loadDiag()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1809,90 +1825,6 @@ async function loadBlocks() {
               </div>
             </div>
 
-            {/* גלריות */}
-            <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
-              <p className="text-sm font-medium">גלריות</p>
-
-              <Input
-                value={settings.guest_gallery_title || ''}
-                onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
-                placeholder="כותרת גלריית אורחים"
-              />
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.guest_gallery_show_all_button !== false}
-                  onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
-                />
-                להציג כפתור “לכל התמונות” בגלריית אורחים
-              </label>
-
-              <Input
-                value={settings.admin_gallery_title || ''}
-                onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
-                placeholder="כותרת גלריית מנהל"
-              />
-
-              <label className="text-sm flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.admin_gallery_show_all_button !== false}
-                  onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
-                />
-                להציג כפתור “לכל התמונות” בגלריית מנהל
-              </label>
-
-              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
-                <p className="text-sm font-medium text-right">פריוויו גלריות בדף הבית</p>
-
-                <label className="text-xs text-zinc-500 text-right">פריסה</label>
-                <select
-                  className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-right"
-                  value={`${Number(settings.home_gallery_preview_cols ?? 3)}x${Number(settings.home_gallery_preview_limit ?? 6)}`}
-                  onChange={e => {
-                    const v = String(e.target.value || '')
-                    // values encoded as "<cols>x<limit>"
-                    const [c, l] = v.split('x').map(n => Number(n))
-                    setSettings({
-                      ...settings,
-                      home_gallery_preview_cols: Number.isFinite(c) ? c : 3,
-                      home_gallery_preview_limit: Number.isFinite(l) ? l : 6
-                    })
-                  }}
-                >
-                  <option value="3x6">3x2 (6 תמונות)</option>
-                  <option value="3x9">3x3 (9 תמונות)</option>
-                  <option value="4x8">4x2 (8 תמונות)</option>
-                </select>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="grid gap-1">
-                    <label className="text-xs text-zinc-500 text-right">עמודות (cols)</label>
-                    <Input
-                      className="text-right"
-                      dir="rtl"
-                      value={String(settings.home_gallery_preview_cols ?? 3)}
-                      onChange={e => setSettings({ ...settings, home_gallery_preview_cols: Number(e.target.value) })}
-                      placeholder="3"
-                    />
-                  </div>
-
-                  <div className="grid gap-1">
-                    <label className="text-xs text-zinc-500 text-right">כמות תמונות (limit)</label>
-                    <Input
-                      className="text-right"
-                      dir="rtl"
-                      value={String(settings.home_gallery_preview_limit ?? 6)}
-                      onChange={e => setSettings({ ...settings, home_gallery_preview_limit: Number(e.target.value) })}
-                      placeholder="6"
-                    />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
             {/* פוטר */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">פוטר</p>
@@ -2241,6 +2173,98 @@ async function loadBlocks() {
           <h3 className="font-semibold">גלריות</h3>
           <p className="mt-1 text-sm text-zinc-600">ניהול גלריות + אישור תמונות לכל גלריה.</p>
 
+          {/* הגדרות גלריות (הועברו מטאב "אירוע" כדי שיופיעו תחת "גלריות") */}
+          {settings && (
+            <div className="mt-4 grid gap-3 rounded-2xl border border-zinc-200 p-4">
+              <div className="grid gap-2">
+                <p className="text-sm font-medium text-right">טקסטים וכפתורים</p>
+
+                <Input
+                  value={settings.guest_gallery_title || ''}
+                  onChange={e => setSettings({ ...settings, guest_gallery_title: e.target.value })}
+                  placeholder="כותרת גלריית אורחים"
+                />
+
+                <label className="text-sm flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={settings.guest_gallery_show_all_button !== false}
+                    onChange={e => setSettings({ ...settings, guest_gallery_show_all_button: e.target.checked })}
+                  />
+                  להציג כפתור “לכל התמונות” בגלריית אורחים
+                </label>
+
+                <Input
+                  value={settings.admin_gallery_title || ''}
+                  onChange={e => setSettings({ ...settings, admin_gallery_title: e.target.value })}
+                  placeholder="כותרת גלריית מנהל"
+                />
+
+                <label className="text-sm flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={settings.admin_gallery_show_all_button !== false}
+                    onChange={e => setSettings({ ...settings, admin_gallery_show_all_button: e.target.checked })}
+                  />
+                  להציג כפתור “לכל התמונות” בגלריית מנהל
+                </label>
+              </div>
+
+              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+                <p className="text-sm font-medium text-right">פריוויו גלריות בדף הבית</p>
+
+                <label className="text-xs text-zinc-500 text-right">פריסה</label>
+                <select
+                  className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-right"
+                  value={`${Number(settings.home_gallery_preview_cols ?? 3)}x${Number(settings.home_gallery_preview_limit ?? 6)}`}
+                  onChange={e => {
+                    const v = String(e.target.value || '')
+                    const [c, l] = v.split('x').map(n => Number(n))
+                    setSettings({
+                      ...settings,
+                      home_gallery_preview_cols: Number.isFinite(c) ? c : 3,
+                      home_gallery_preview_limit: Number.isFinite(l) ? l : 6
+                    })
+                  }}
+                >
+                  <option value="3x6">3x2 (6 תמונות)</option>
+                  <option value="3x9">3x3 (9 תמונות)</option>
+                  <option value="4x8">4x2 (8 תמונות)</option>
+                </select>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-1">
+                    <label className="text-xs text-zinc-500 text-right">עמודות (cols)</label>
+                    <Input
+                      className="text-right"
+                      dir="rtl"
+                      value={String(settings.home_gallery_preview_cols ?? 3)}
+                      onChange={e => setSettings({ ...settings, home_gallery_preview_cols: Number(e.target.value) })}
+                      placeholder="3"
+                    />
+                  </div>
+
+                  <div className="grid gap-1">
+                    <label className="text-xs text-zinc-500 text-right">כמות תמונות (limit)</label>
+                    <Input
+                      className="text-right"
+                      dir="rtl"
+                      value={String(settings.home_gallery_preview_limit ?? 6)}
+                      onChange={e => setSettings({ ...settings, home_gallery_preview_limit: Number(e.target.value) })}
+                      placeholder="6"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end">
+                <Button onClick={() => saveSettings()} disabled={saving}>
+                  {saving ? 'שומר...' : 'שמור הגדרות גלריות'}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 grid gap-4 lg:grid-cols-[260px_1fr]">
             {/* Left: galleries list */}
             <div className="rounded-2xl border border-zinc-200 p-3">
@@ -2254,6 +2278,7 @@ async function loadBlocks() {
                       setSelectedGalleryId(g.id)
                       setGalleryMsg(null)
                       loadPendingMedia(g.id)
+                      loadApprovedMedia(g.id)
                     }}
                     className={
                       'w-full rounded-xl border px-3 py-2 text-right text-sm ' +
@@ -2335,6 +2360,44 @@ async function loadBlocks() {
                         ממתינות לאישור: <b>{pendingMedia.length}</b>
                       </div>
                     </div>
+
+                    <div className="flex items-center justify-between">
+                      <Button variant="ghost" onClick={() => loadApprovedMedia(g.id)} disabled={galleryBusy}>
+                        רענן מאושרות
+                      </Button>
+                      <div className="text-sm text-zinc-600 text-right">
+                        מאושרות: <b>{approvedMedia.length}</b>
+                      </div>
+                    </div>
+
+                    {/* Approved media */}
+                    {approvedMedia.length > 0 && (
+                      <div>
+                        <p className="mt-1 text-sm font-medium text-right">תמונות מאושרות</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                          {approvedMedia.map((p: any) => (
+                            <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
+                              <button
+                                className="relative block aspect-square w-full bg-zinc-50"
+                                onClick={() => p.url && setLightbox(p.url)}
+                                type="button"
+                              >
+                                <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                              </button>
+
+                              <div className="p-3 flex gap-2">
+                                <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
+                                  מחק
+                                </Button>
+                                <a className="text-sm underline" href={p.url} target="_blank" rel="noreferrer">
+                                  פתח
+                                </a>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {pendingMedia.map((p: any) => (
