@@ -47,17 +47,23 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
 // Public site chrome title (event name) – safe fallback
 let eventName: string | undefined = undefined
+  let footerEnabled: boolean | undefined = undefined
+  let footerLabel: string | null | undefined = undefined
+  let footerUrl: string | null | undefined = undefined
 try {
   const s: any = await fetchSettings()
   eventName = s?.event_name ? String(s.event_name) : undefined
 } catch {
   eventName = undefined
+      footerEnabled = undefined
+      footerLabel = undefined
+      footerUrl = undefined
 }
 
   return (
     <html lang="he">
       <body>
-        <SiteChrome eventName={eventName}>{children}</SiteChrome>
+        <SiteChrome eventName={eventName} footerEnabled={footerEnabled} footerLabel={footerLabel} footerUrl={footerUrl}>{children}</SiteChrome>
       </body>
     </html>
   )
