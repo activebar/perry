@@ -47,6 +47,23 @@ export default async function GalleryIndexPage() {
 
   const previewByGalleryId = new Map<string, string[]>()
 
+// Settings-driven preview for gallery cards (same controls as Home)
+let settings: any = null
+try {
+  settings = await getLatestSettingsRow()
+} catch {
+  settings = null
+}
+
+const previewLimitRaw = Number(settings?.home_gallery_preview_limit ?? 6)
+const previewColsRaw = Number(settings?.home_gallery_preview_cols ?? 3)
+
+const previewLimit = Math.max(1, Math.min(30, Number.isFinite(previewLimitRaw) && previewLimitRaw > 0 ? previewLimitRaw : 6))
+const previewCols = Math.max(1, Math.min(6, Number.isFinite(previewColsRaw) && previewColsRaw > 0 ? previewColsRaw : 3))
+
+// Per-gallery limit for the preview grid inside each card
+const perGalleryLimit = previewLimit
+
   if (galleryIds.length) {
     // Fetch a pool of recent approved items for these galleries and slice per gallery in JS
     const { data: recent } = await srv
