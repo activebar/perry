@@ -57,6 +57,15 @@ let eventName: string | undefined = undefined
   let giftNavLabel: string | undefined = undefined
 try {
   const s: any = await fetchSettings()
+// Footer (admin controlled)
+footerEnabled = Boolean(s?.footer_enabled)
+footerLabel = (s?.footer_label ?? null) as any
+footerUrl = (s?.footer_url ?? null) as any
+footerLine2Enabled = Boolean(s?.footer_line2_enabled)
+footerLine2Label = (s?.footer_line2_label ?? null) as any
+footerLine2Url = (s?.footer_line2_url ?? null) as any
+
+
 const blocks: any[] = await fetchBlocks()
 
 // Gift nav button should behave like Hero gift button:
