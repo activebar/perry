@@ -123,6 +123,8 @@ export default function SiteChrome({
       {!footerEnabled && !footerLine2Enabled ? (
         <div className="opacity-70">{eventName ? `${eventName} • ` : ''}מופעל ע״י ActiveBar</div>
       ) : null}
+      <div className="mt-2 text-[10px] opacity-40" dir="ltr">build v13.21</div>
+
     </div>
   </div>
 </footer>
