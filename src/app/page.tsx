@@ -511,7 +511,7 @@ export default function HomePage() {
                               <div className="flex flex-wrap gap-2">
                                 {EMOJIS.map(e => (
                                   <button
-                                    key={e} {((p.reaction_counts || {}) as any)[e] ? ((p.reaction_counts || {}) as any)[e] : ''}
+                                    key={e}) as any)[e] ? ((p.reaction_counts || {}) as any)[e] : ''}
                                     type="button"
                                     className={`rounded-full border px-3 py-1 text-sm ${
                                       (p.my_reactions || []).includes(e) ? 'bg-black text-white' : 'bg-white'
