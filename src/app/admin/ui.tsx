@@ -93,7 +93,7 @@ function youtubeThumb(u: string) {
     const url = new URL(u)
     const host = url.hostname.replace(/^www\./, '')
     let id = ''
-    if (host === 'youtu.be') id = url.pathname.replace(/^\//, '')
+    if (host === 'youtu.be') id = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname
     else if (host.endsWith('youtube.com')) {
       if (url.pathname === '/watch') id = url.searchParams.get('v') || ''
       else if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2] || ''
