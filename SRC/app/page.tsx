@@ -431,13 +431,6 @@ export default function HomePage() {
 
                 const previews: any[] = (data as any)?.galleryPreviews?.[galleryId] || []
 
-                // Home gallery preview layout (defaults to 3x2 = 6)
-                const galleryPreviewCols = Math.max(2, Math.min(4, Number(settings?.home_gallery_preview_cols ?? 3)))
-                const galleryPreviewLimit = Math.max(1, Math.min(24, Number(settings?.home_gallery_preview_limit ?? 6)))
-
-                const gridColsClass =
-                  galleryPreviewCols === 4 ? 'grid-cols-4' : galleryPreviewCols === 2 ? 'grid-cols-2' : 'grid-cols-3'
-
                 return (
                   <Card key={b.id} dir="rtl">
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -453,8 +446,8 @@ export default function HomePage() {
                     {previews.length === 0 ? (
                       <div className="mt-3 rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-600">אין תמונות עדיין.</div>
                     ) : (
-                      <div className={`mt-3 grid ${gridColsClass} gap-2`}>
-                        {previews.slice(0, galleryPreviewLimit).map((it: any) => {
+                      <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(1, Number(settings?.home_gallery_preview_cols || 3))}, minmax(0, 1fr))` }}>
+                        {previews.slice(0, Math.max(1, Number(settings?.home_gallery_preview_limit || 6))).map((it: any) => {
                           const url = String(it.thumb_url || it.url || '')
                           return (
                             <button

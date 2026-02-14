@@ -1025,10 +1025,6 @@ async function loadBlocks() {
       loadSettings()
       loadContentRules()
     }
-    if (tab === 'admin_gallery') {
-      // We show "Gallery Settings" inside the Galleries tab, so we must load settings here too
-      loadSettings()
-    }
     if (tab === 'blocks') loadBlocks()
     if (tab === 'moderation') {
       loadPending()
@@ -1036,6 +1032,7 @@ async function loadBlocks() {
     }
     if (tab === 'ads') loadAds()
     if (tab === 'admin_gallery') {
+      loadSettings()
       loadGalleries()
       loadPendingMedia()
       loadApprovedMedia()
@@ -2189,7 +2186,56 @@ async function loadBlocks() {
                 להציג כפתור “לכל התמונות” בגלריית מנהל
               </label>
 
-              <div className="flex items-center justify-end">
+              
+
+              <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-3">
+                <p className="mb-2 text-sm font-semibold text-zinc-700 text-right">פריוויו גלריות בדף הבית</p>
+
+                <div className="grid gap-3">
+                  <div className="grid gap-2">
+                    <label className="text-xs text-zinc-500 text-right">פריסה</label>
+                    <select
+                      className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-right"
+                      value={`${Number(settings?.home_gallery_preview_cols || 3)}x${Math.ceil(Number(settings?.home_gallery_preview_limit || 6) / Number(settings?.home_gallery_preview_cols || 3))}`}
+                      onChange={e => {
+                        const v = e.target.value
+                        if (v === '3x2') setSettings({ ...settings, home_gallery_preview_cols: 3, home_gallery_preview_limit: 6 })
+                        else if (v === '4x2') setSettings({ ...settings, home_gallery_preview_cols: 4, home_gallery_preview_limit: 8 })
+                        else if (v === '3x3') setSettings({ ...settings, home_gallery_preview_cols: 3, home_gallery_preview_limit: 9 })
+                      }}
+                    >
+                      <option value="3x2">3x2 (6 תמונות)</option>
+                      <option value="4x2">4x2 (8 תמונות)</option>
+                      <option value="3x3">3x3 (9 תמונות)</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <label className="text-xs text-zinc-500 text-right">כמות תמונות (limit)</label>
+                      <Input
+                        type="number"
+                        value={Number(settings?.home_gallery_preview_limit || 6)}
+                        onChange={e => setSettings({ ...settings, home_gallery_preview_limit: Number(e.target.value || 0) })}
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <label className="text-xs text-zinc-500 text-right">עמודות (cols)</label>
+                      <Input
+                        type="number"
+                        value={Number(settings?.home_gallery_preview_cols || 3)}
+                        onChange={e => setSettings({ ...settings, home_gallery_preview_cols: Number(e.target.value || 0) })}
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-zinc-500 text-right">
+                    ברירת מחדל מומלצת: 3x2 (6 תמונות).
+                  </p>
+                </div>
+              </div>
+<div className="flex items-center justify-end">
                 <Button onClick={() => saveSettings()} disabled={saving}>
                   {saving ? 'שומר...' : 'שמור הגדרות גלריות'}
                 </Button>
