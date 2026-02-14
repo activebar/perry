@@ -38,6 +38,9 @@ export type EventSettings = {
   hero_rotate_seconds?: number | null
 
   // galleries config
+  home_gallery_preview_limit?: number | null
+  home_gallery_preview_cols?: number | null
+
   guest_gallery_title?: string | null
   guest_gallery_preview_limit?: number | null
   guest_gallery_show_all_button?: boolean | null

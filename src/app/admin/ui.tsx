@@ -1300,6 +1300,55 @@ async function loadBlocks() {
                 />
                 להציג כפתור “לכל התמונות” בגלריית מנהל
               </label>
+
+              <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
+                <p className="text-sm font-medium text-right">פריוויו גלריות בדף הבית</p>
+
+                <label className="text-xs text-zinc-500 text-right">פריסה</label>
+                <select
+                  className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-right"
+                  value={`${Number(settings.home_gallery_preview_cols ?? 3)}x${Number(settings.home_gallery_preview_limit ?? 6)}`}
+                  onChange={e => {
+                    const v = String(e.target.value || '')
+                    // values encoded as "<cols>x<limit>"
+                    const [c, l] = v.split('x').map(n => Number(n))
+                    setSettings({
+                      ...settings,
+                      home_gallery_preview_cols: Number.isFinite(c) ? c : 3,
+                      home_gallery_preview_limit: Number.isFinite(l) ? l : 6
+                    })
+                  }}
+                >
+                  <option value="3x6">3x2 (6 תמונות)</option>
+                  <option value="3x9">3x3 (9 תמונות)</option>
+                  <option value="4x8">4x2 (8 תמונות)</option>
+                </select>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-1">
+                    <label className="text-xs text-zinc-500 text-right">עמודות (cols)</label>
+                    <Input
+                      className="text-right"
+                      dir="rtl"
+                      value={String(settings.home_gallery_preview_cols ?? 3)}
+                      onChange={e => setSettings({ ...settings, home_gallery_preview_cols: Number(e.target.value) })}
+                      placeholder="3"
+                    />
+                  </div>
+
+                  <div className="grid gap-1">
+                    <label className="text-xs text-zinc-500 text-right">כמות תמונות (limit)</label>
+                    <Input
+                      className="text-right"
+                      dir="rtl"
+                      value={String(settings.home_gallery_preview_limit ?? 6)}
+                      onChange={e => setSettings({ ...settings, home_gallery_preview_limit: Number(e.target.value) })}
+                      placeholder="6"
+                    />
+                  </div>
+                </div>
+              </div>
+
             </div>
 
             {/* ברכות */}
