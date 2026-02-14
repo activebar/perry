@@ -1,6 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
-import { fetchSettings } from '@/lib/db'
+import { fetchBlocks, fetchSettings } from '@/lib/db'
 import { getSiteUrl, toAbsoluteUrl } from '@/lib/site-url'
 import SiteChrome from '@/components/SiteChrome'
 
@@ -53,8 +53,32 @@ let eventName: string | undefined = undefined
   let footerLine2Enabled: boolean | null | undefined = undefined
   let footerLine2Label: string | null | undefined = undefined
   let footerLine2Url: string | null | undefined = undefined
+  let showGiftNavButton: boolean | undefined = undefined
+  let giftNavLabel: string | undefined = undefined
 try {
   const s: any = await fetchSettings()
+const blocks: any[] = await fetchBlocks()
+
+// Gift nav button should behave like Hero gift button:
+// shown only if the 'gift' block is visible and not auto-hidden by time.
+const giftBlock = (blocks || []).find((b: any) => String(b?.type) === 'gift')
+giftNavLabel = String(giftBlock?.config?.title || '').trim() || 'מתנה'
+if (!giftBlock?.is_visible) {
+  showGiftNavButton = false
+} else if (giftBlock?.config?.auto_hide_after_hours) {
+  const hours = Number(giftBlock.config.auto_hide_after_hours)
+  if (Number.isFinite(hours) && hours > 0 && s?.start_at) {
+    const start = new Date(String(s.start_at))
+    const hideAt = new Date(start.getTime() + hours * 60 * 60 * 1000)
+    showGiftNavButton = new Date() <= hideAt
+  } else {
+    showGiftNavButton = true
+  }
+} else {
+  showGiftNavButton = true
+}
+
+
   eventName = s?.event_name ? String(s.event_name) : undefined
 } catch {
   eventName = undefined
@@ -64,12 +88,14 @@ try {
       footerLine2Enabled = undefined
       footerLine2Label = undefined
       footerLine2Url = undefined
+      showGiftNavButton = undefined
+      giftNavLabel = undefined
 }
 
   return (
     <html lang="he">
       <body>
-        <SiteChrome eventName={eventName} footerEnabled={footerEnabled} footerLabel={footerLabel} footerUrl={footerUrl} footerLine2Enabled={footerLine2Enabled} footerLine2Label={footerLine2Label} footerLine2Url={footerLine2Url}>{children}</SiteChrome>
+        <SiteChrome eventName={eventName} footerEnabled={footerEnabled} footerLabel={footerLabel} footerUrl={footerUrl} footerLine2Enabled={footerLine2Enabled} footerLine2Label={footerLine2Label} footerLine2Url={footerLine2Url} showGiftNavButton={showGiftNavButton} giftNavLabel={giftNavLabel}>{children}</SiteChrome>
       </body>
     </html>
   )

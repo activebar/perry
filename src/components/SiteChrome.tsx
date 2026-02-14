@@ -34,6 +34,8 @@ export default function SiteChrome({
   footerLine2Enabled,
   footerLine2Label,
   footerLine2Url,
+  showGiftNavButton,
+  giftNavLabel,
 }: {
   children: React.ReactNode
   eventName?: string
@@ -43,6 +45,8 @@ export default function SiteChrome({
   footerLine2Enabled?: boolean | null
   footerLine2Label?: string | null
   footerLine2Url?: string | null
+  showGiftNavButton?: boolean
+  giftNavLabel?: string
 }) {
   const pathname = usePathname() || '/'
 
@@ -64,10 +68,25 @@ export default function SiteChrome({
           </div>
 
           <nav className="flex shrink-0 items-center gap-2">
-            <NavButton href="/" label="בית" active={isHome} />
-            <NavButton href="/gallery" label="גלריות" active={isGalleries} />
-            <NavButton href="/blessings" label="ברכות" active={isBlessings} />
-          </nav>
+  {/* RTL: keep 'בית' visually on the right */}
+  <div className="flex flex-row-reverse items-center gap-2">
+    <NavButton href="/" label="בית" active={isHome} />
+    <NavButton href="/gallery" label="גלריות" active={isGalleries} />
+    <NavButton href="/blessings" label="ברכות" active={isBlessings} />
+    {showGiftNavButton ? (
+      <Link
+        href="/gift"
+        className={[
+          'rounded-full px-4 py-2 text-sm transition',
+          'bg-black text-white hover:opacity-90',
+        ].join(' ')}
+      >
+        {giftNavLabel || 'מתנה'}
+      </Link>
+    ) : null}
+  </div>
+</nav>
+
         </div>
       </header>
 
