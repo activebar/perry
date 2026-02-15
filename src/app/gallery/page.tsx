@@ -39,9 +39,9 @@ export default async function GalleryIndexPage() {
   const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
   // only blocks that point to a real gallery
   const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
-    const galleryIds = Array.from(
+      const galleryIds = Array.from(
     new Set(
-      galleryBlocks
+      (galleryBlocks || [])
         .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
         .filter(Boolean)
         .map((x: any) => String(x))
