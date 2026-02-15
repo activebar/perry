@@ -51,9 +51,9 @@ export default async function GalleryIndexPage() {
   const previewByGalleryId = new Map<string, string[]>()
 
 const titlesById = new Map<string, string>()
+let galleriesNav: { id: string; title: string; upload_enabled: boolean }[] = []
 if (galleryIds.length) {
   const { data: gs } = await srv.from('galleries').select('id,title,is_active,upload_enabled').eq('event_id', env.EVENT_SLUG).eq('is_active', true).in('id', galleryIds as any)
-  let galleriesNav: any[] = []
   for (const g of gs || []) {
     const id = String((g as any).id)
     titlesById.set(id, String((g as any).title || '').trim())
