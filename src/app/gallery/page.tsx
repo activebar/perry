@@ -39,7 +39,7 @@ export default async function GalleryIndexPage() {
   const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
   // only blocks that point to a real gallery
   const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
-      const galleryIds = Array.from(
+  const galleryIds = Array.from(
     new Set(
       (galleryBlocks || [])
         .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
@@ -115,11 +115,12 @@ const perGalleryLimit = previewLimit
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {galleryBlocks.map((b: any) => {
-              const galleryId = b?.config?.gallery_id || b?.config?.galleryId || b.id
-              const title = b?.config?.title || b?.config?.label || b?.title || 'גלריה'
+            {galleryIds.map((gid: string) => {
+              const b = (galleryBlocks || []).find((x: any) => String((x?.config as any)?.gallery_id || (x?.config as any)?.galleryId) === String(gid))
+              const galleryId = gid
+              const title = titlesById.get(String(galleryId)) || b?.config?.title || b?.config?.label || b?.title || 'גלריה'
               return (
-                <Link key={b.id} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
+                <Link key={String(galleryId)} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">
                     <div>
                       <div className="flex items-center justify-between gap-3">
