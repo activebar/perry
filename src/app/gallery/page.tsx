@@ -22,7 +22,7 @@ async function getLatestSettingsRow() {
 }
 
 function isGalleryBlockType(t: string) {
-  return t === 'gallery'
+  return t === 'gallery' || t.startsWith('gallery_')
 }
 
 export default async function GalleryIndexPage() {
@@ -39,7 +39,7 @@ export default async function GalleryIndexPage() {
   const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
   // only blocks that point to a real gallery
   const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
-  const galleryIds = Array.from(
+      const galleryIds = Array.from(
     new Set(
       (galleryBlocks || [])
         .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
@@ -51,12 +51,21 @@ export default async function GalleryIndexPage() {
   const previewByGalleryId = new Map<string, string[]>()
 
 const titlesById = new Map<string, string>()
+let activeGalleryIds: string[] = []
 if (galleryIds.length) {
-  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
+  const { data: gs } = await srv
+    .from('galleries')
+    .select('id,title,is_active')
+    .eq('event_id', env.EVENT_SLUG)
+    .eq('is_active', true)
+    .in('id', galleryIds as any)
   for (const g of gs || []) {
-    titlesById.set(String((g as any).id), String((g as any).title || '').trim())
+    const id = String((g as any).id)
+    titlesById.set(id, String((g as any).title || '').trim())
+    activeGalleryIds.push(id)
   }
 }
+activeGalleryIds = Array.from(new Set(activeGalleryIds))
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
@@ -115,9 +124,9 @@ const perGalleryLimit = previewLimit
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {galleryIds.map((gid: string) => {
-              const b = (galleryBlocks || []).find((x: any) => String((x?.config as any)?.gallery_id || (x?.config as any)?.galleryId) === String(gid))
-              const galleryId = gid
+            {activeGalleryIds.map((galleryId: string) => {
+              const b = (galleryBlocks || []).find((x: any) => String((x?.config as any)?.gallery_id || (x?.config as any)?.galleryId) === String(galleryId))
+              // galleryId comes from activeGalleryIds
               const title = titlesById.get(String(galleryId)) || b?.config?.title || b?.config?.label || b?.title || 'גלריה'
               return (
                 <Link key={String(galleryId)} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
