@@ -1,7 +1,8 @@
 import Link from 'next/link'
 
 import { Container, Card } from '@/components/ui'
-import { supabaseAnon } from '@/lib/supabase'
+import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
 
 import GalleryClient from '../ui'
 
@@ -16,7 +17,7 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   const sb = supabaseAnon()
 
   // gallery settings (upload gating + auto approve window handled in API)
-  const { data: g } = await sb.from('galleries').select('id, title, upload_enabled').eq('id', galleryId).maybeSingle()
+  const { data: g } = await sb.from('galleries').select('id, title, upload_enabled, event_id').eq('event_id', env.EVENT_SLUG).eq('id', galleryId).maybeSingle()
 
   const uploadEnabled = !!(g as any)?.upload_enabled
 
@@ -34,11 +35,29 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   return (
     <main className="py-10">
       <Container>
-        <div dir="rtl" className="mb-6 flex items-center justify-between gap-3">
-          <div className="text-right">
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            <p className="mt-1 text-sm text-zinc-600">כל התמונות המאושרות בגלריה זו.</p>
-          </div>
+        <div dir="rtl" className="mb-4 text-center">
+          <h1 className="text-2xl font-semibold">{title}</h1>
+        </div>
+
+<div dir="rtl" className="mb-4">
+  <div className="flex gap-2 overflow-x-auto pb-1">
+    {galleriesNav.map((x: any) => {
+      const active = String(x.id) === String(galleryId)
+      return (
+        <Link
+          key={String(x.id)}
+          href={`/gallery/${encodeURIComponent(String(x.id))}`}
+          className={[
+            'whitespace-nowrap rounded-full border px-4 py-2 text-sm transition',
+            active ? 'bg-black text-white border-black' : 'bg-white text-zinc-900 border-zinc-200 hover:bg-zinc-50',
+          ].join(' ')}
+        >
+          {String(x.title || 'גלריה')}
+        </Link>
+      )
+    })}
+  </div>
+</div>
           <Link href="/" className="text-sm font-medium underline">
             חזרה לדף הבית
           </Link>

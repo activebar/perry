@@ -426,7 +426,7 @@ export default function HomePage() {
                 const cfg = (b as any)?.config || {}
                 const galleryId = String(cfg.gallery_id || cfg.galleryId || b.id)
                 const title = String(cfg.title || b.title || cfg.label || cfg.name || b.type || 'גלריה')
-                const subtitle = String(cfg.subtitle || cfg.description || 'תמונות מהאירוע.')
+                const subtitle = (cfg.subtitle ?? cfg.description ?? 'תמונות מהאירוע') as any
                 const buttonLabel = String(cfg.button_label || 'לכל התמונות')
 
                 const previews: any[] = (data as any)?.galleryPreviews?.[galleryId] || []

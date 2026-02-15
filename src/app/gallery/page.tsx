@@ -51,21 +51,15 @@ export default async function GalleryIndexPage() {
   const previewByGalleryId = new Map<string, string[]>()
 
 const titlesById = new Map<string, string>()
-let activeGalleryIds: string[] = []
 if (galleryIds.length) {
-  const { data: gs } = await srv
-    .from('galleries')
-    .select('id,title,is_active')
-    .eq('event_id', env.EVENT_SLUG)
-    .eq('is_active', true)
-    .in('id', galleryIds as any)
+  const { data: gs } = await srv.from('galleries').select('id,title,is_active,upload_enabled').eq('event_id', env.EVENT_SLUG).eq('is_active', true).in('id', galleryIds as any)
+  let galleriesNav: any[] = []
   for (const g of gs || []) {
     const id = String((g as any).id)
     titlesById.set(id, String((g as any).title || '').trim())
-    activeGalleryIds.push(id)
+    galleriesNav.push({ id, title: String((g as any).title || '').trim(), upload_enabled: !!(g as any).upload_enabled })
   }
 }
-activeGalleryIds = Array.from(new Set(activeGalleryIds))
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
@@ -118,44 +112,39 @@ const perGalleryLimit = previewLimit
           <p className="mt-1 text-sm text-zinc-600">בחרו גלריה כדי לצפות בכל התמונות.</p>
         </div>
 
-        {galleryBlocks.length === 0 ? (
+        {galleriesNav.length === 0 ? (
           <Card dir="rtl">
             <div className="text-right text-sm text-zinc-600">אין גלריות מוגדרות בדף הבית.</div>
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {activeGalleryIds.map((galleryId: string) => {
-              const b = (galleryBlocks || []).find((x: any) => String((x?.config as any)?.gallery_id || (x?.config as any)?.galleryId) === String(galleryId))
-              // galleryId comes from activeGalleryIds
-              const title = titlesById.get(String(galleryId)) || b?.config?.title || b?.config?.label || b?.title || 'גלריה'
+            {galleriesNav.map((g: any) => {
+              const galleryId = String(g.id)
+              const title = String(g.title || titlesById.get(galleryId) || 'גלריה')
+              const uploadsOpen = Boolean(g.upload_enabled)
               return (
-                <Link key={String(galleryId)} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
+                <Link key={galleryId} href={`/gallery/${encodeURIComponent(galleryId)}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">
-                    <div>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-right">
-                          <p className="font-semibold">{title}</p>
-                          <p className="text-sm text-zinc-600">לצפייה בכל התמונות</p>
-                        </div>
-                        <span className="text-sm font-medium">פתיחה</span>
-                      </div>
-
-                      {(() => {
-                        const previews = previewByGalleryId.get(String(galleryId)) || []
-                        if (!previews.length) return null
-                        return (
-                          <div className="mt-3 grid gap-2"
-                            style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
-                            {previews.slice(0, perGalleryLimit).map((u, idx) => (
-                              <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={u} alt="" className="h-full w-full object-cover" />
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      })()}
+                    <div className="text-center">
+                      <p className="text-lg font-semibold">{title}</p>
+                      <p className="mt-1 text-sm text-zinc-600">
+                        {uploadsOpen ? 'העלו תמונות כדי לשתף את כולם 🥳' : 'צפייה בתמונות המאושרות'}
+                      </p>
                     </div>
+
+                    {(() => {
+                      const previews = previewByGalleryId.get(String(galleryId)) || []
+                      if (!previews.length) return null
+                      return (
+                        <div className="mt-4 grid gap-2" style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
+                          {previews.slice(0, perGalleryLimit).map((u, idx) => (
+                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
+                              <img src={u} alt="" className="h-full w-full object-cover" />
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </Card>
                 </Link>
               )
