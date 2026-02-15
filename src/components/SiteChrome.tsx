@@ -91,7 +91,8 @@ export default function SiteChrome({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl px-4 py-6">{children}</main>
+      {/* Pages generally add their own spacing via <Container>. Keep chrome padding minimal. */}
+      <main className="mx-auto w-full max-w-3xl px-4 py-2">{children}</main>
 
       <footer className="mt-10 border-t border-zinc-200 bg-white">
   <div className="mx-auto w-full max-w-3xl px-4 py-6 text-center text-sm text-zinc-500">

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { Container, Card } from '@/components/ui'
+import { GalleryTabs } from '@/components/GalleryTabs'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
 
@@ -22,7 +23,7 @@ async function getLatestSettingsRow() {
 }
 
 function isGalleryBlockType(t: string) {
-  return t === 'gallery' || t.startsWith('gallery_')
+  return t === 'gallery'
 }
 
 export default async function GalleryIndexPage() {
@@ -51,15 +52,20 @@ export default async function GalleryIndexPage() {
   const previewByGalleryId = new Map<string, string[]>()
 
 const titlesById = new Map<string, string>()
-let galleriesNav: { id: string; title: string; upload_enabled: boolean }[] = []
 if (galleryIds.length) {
-  const { data: gs } = await srv.from('galleries').select('id,title,is_active,upload_enabled').eq('event_id', env.EVENT_SLUG).eq('is_active', true).in('id', galleryIds as any)
+  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
   for (const g of gs || []) {
-    const id = String((g as any).id)
-    titlesById.set(id, String((g as any).title || '').trim())
-    galleriesNav.push({ id, title: String((g as any).title || '').trim(), upload_enabled: !!(g as any).upload_enabled })
+    titlesById.set(String((g as any).id), String((g as any).title || '').trim())
   }
 }
+
+  // tabs in the same order as the gallery blocks
+  const tabs = (galleryBlocks || [])
+    .map((b: any) => String((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId || ''))
+    .filter(Boolean)
+    .map((id: string) => ({ id, label: titlesById.get(id) || 'גלריה' }))
+    // de-dup while preserving order
+    .filter((t, idx, arr) => arr.findIndex((x) => x.id === t.id) === idx)
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
@@ -105,46 +111,55 @@ const perGalleryLimit = previewLimit
   }
 
   return (
-    <main className="py-10">
+    <main className="py-4">
       <Container>
         <div dir="rtl" className="mb-6 text-right">
           <h1 className="text-2xl font-semibold">גלריות</h1>
           <p className="mt-1 text-sm text-zinc-600">בחרו גלריה כדי לצפות בכל התמונות.</p>
         </div>
 
-        {galleriesNav.length === 0 ? (
+        {/* navigation pills between gallery blocks */}
+        <div className="mb-6">
+          <GalleryTabs tabs={tabs} />
+        </div>
+
+        {galleryBlocks.length === 0 ? (
           <Card dir="rtl">
             <div className="text-right text-sm text-zinc-600">אין גלריות מוגדרות בדף הבית.</div>
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {galleriesNav.map((g: any) => {
-              const galleryId = String(g.id)
-              const title = String(g.title || titlesById.get(galleryId) || 'גלריה')
-              const uploadsOpen = Boolean(g.upload_enabled)
+            {galleryBlocks.map((b: any) => {
+              const galleryId = b?.config?.gallery_id || b?.config?.galleryId || b.id
+              const title = b?.config?.title || b?.config?.label || b?.title || 'גלריה'
               return (
-                <Link key={galleryId} href={`/gallery/${encodeURIComponent(galleryId)}`} className="block">
+                <Link key={b.id} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">
-                    <div className="text-center">
-                      <p className="text-lg font-semibold">{title}</p>
-                      <p className="mt-1 text-sm text-zinc-600">
-                        {uploadsOpen ? 'העלו תמונות כדי לשתף את כולם 🥳' : 'צפייה בתמונות המאושרות'}
-                      </p>
-                    </div>
-
-                    {(() => {
-                      const previews = previewByGalleryId.get(String(galleryId)) || []
-                      if (!previews.length) return null
-                      return (
-                        <div className="mt-4 grid gap-2" style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
-                          {previews.slice(0, perGalleryLimit).map((u, idx) => (
-                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
-                              <img src={u} alt="" className="h-full w-full object-cover" />
-                            </div>
-                          ))}
+                    <div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-right">
+                          <p className="font-semibold">{title}</p>
+                          <p className="text-sm text-zinc-600">לצפייה בכל התמונות</p>
                         </div>
-                      )
-                    })()}
+                        <span className="text-sm font-medium">פתיחה</span>
+                      </div>
+
+                      {(() => {
+                        const previews = previewByGalleryId.get(String(galleryId)) || []
+                        if (!previews.length) return null
+                        return (
+                          <div className="mt-3 grid gap-2"
+                            style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
+                            {previews.slice(0, perGalleryLimit).map((u, idx) => (
+                              <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={u} alt="" className="h-full w-full object-cover" />
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </div>
                   </Card>
                 </Link>
               )
