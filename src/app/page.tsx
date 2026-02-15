@@ -481,62 +481,33 @@ export default function HomePage() {
 
                     {Array.isArray(blessingsPreview) && blessingsPreview.length > 0 ? (
                       <div className="mt-3 space-y-3">
-                        {blessingsPreview.map((p: any) => {
-  const hasMedia = Boolean(p.media_url)
-  const showLinkThumb = linkPreviewEnabled && Boolean(p.link_url)
-  const showLinkMeta = showLinkThumb && linkPreviewShowDetails
-  const mediaPx = Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160)))
+                        {blessingsPreview.map((p: any) => (
+                          <div key={p.id} className="rounded-2xl bg-zinc-50 p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 text-right">
+                                <div className="text-sm font-semibold">{p.author_name || 'אנונימי'}</div>
+                                {p.text ? <div className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{p.text}</div> : null}
+                                {p.link_url ? (
+                                  <div className="mt-2">
+                                    <HomeLinkThumb url={p.link_url} sizePx={120} />
+                                    <HomeLinkMeta url={p.link_url} />
+                                  </div>
+                                ) : null}
+                              </div>
 
-  return (
-    <div key={p.id} className="rounded-2xl bg-zinc-50 p-3" dir="rtl">
-      {/* name (right) + time (left) */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 text-right">
-          <div className="text-sm font-semibold">{p.author_name || 'אנונימי'}</div>
+                              {p.media_url ? (
+                                <button
+                                  type="button"
+                                  className="relative flex-none overflow-hidden rounded-2xl bg-zinc-200"
+                                  style={{ width: Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160))), height: Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160))) }}
+                                  onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
+                                >
+                                  <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                </button>
+                              ) : null}
+                            </div>
 
-          {/* link thumb under name when there is NO media */}
-          {showLinkThumb && !hasMedia ? (
-            <div className="mt-2 flex justify-center">
-              <HomeLinkThumb url={p.link_url} sizePx={mediaPx} />
-            </div>
-          ) : null}
-        </div>
-
-        <div className="text-xs text-zinc-500 shrink-0 text-left" dir="ltr">
-          {new Date(p.created_at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}
-        </div>
-      </div>
-
-      {/* media centered */}
-      {hasMedia ? (
-        <div className="mt-3 flex justify-center">
-          <button
-            type="button"
-            className="relative overflow-hidden rounded-2xl bg-zinc-200"
-            style={{ width: mediaPx, height: mediaPx }}
-            onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          </button>
-        </div>
-      ) : null}
-
-      {/* text right */}
-      {p.text ? <div className="mt-3 whitespace-pre-wrap text-sm text-zinc-700 text-right">{p.text}</div> : null}
-
-      {/* link thumb below text when there IS media */}
-      {showLinkThumb && hasMedia ? (
-        <div className="mt-2 flex justify-center">
-          <HomeLinkThumb url={p.link_url} sizePx={mediaPx} />
-        </div>
-      ) : null}
-
-      {/* link meta (title/domain) optional via admin toggle, thumb always */}
-      {showLinkMeta ? <HomeLinkMeta url={p.link_url} showDetails /> : null}
-
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-<div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                               <div className="flex flex-wrap gap-2">
                                 {EMOJIS.map(e => (
                                   <button
