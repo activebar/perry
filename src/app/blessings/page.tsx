@@ -137,7 +137,33 @@ export default async function BlessingsPage() {
   return (
     <main>
       <Container>
-{/* במקום Card className */}
+        {/* ניווט עליון */}
+        <Card dir="rtl">
+          <div className="flex flex-wrap items-center justify-between gap-2" dir="rtl">
+            <Link href="/">
+              <Button variant="ghost">← חזרה לדף הבית</Button>
+            </Link>
+
+            <div className="flex flex-wrap gap-2">
+              <Link href="/">
+                <Button variant="ghost">בית</Button>
+              </Link>
+              <Link href="/gallery">
+                <Button variant="ghost">{galleryTitle}</Button>
+              </Link>
+              <Link href="/blessings">
+                <Button>{blessingsTitle}</Button>
+              </Link>
+              {settings.gift_enabled && (
+                <Link href="/gift">
+                  <Button variant="ghost">{giftTitle}</Button>
+                </Link>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* במקום Card className */}
         <div className="mt-4">
           <Card dir="rtl">
             <div className="text-right">

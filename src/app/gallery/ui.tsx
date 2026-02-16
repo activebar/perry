@@ -88,15 +88,6 @@ async function compressToJpeg(file: File, maxDim: number, maxBytes: number): Pro
   return finalBlob
 }
 
-function shuffle<T>(arr: T[]) {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
 export function GalleryClient({
   initialItems,
   galleryId,
@@ -107,7 +98,7 @@ export function GalleryClient({
   uploadEnabled: boolean
 }) {
   const [items, setItems] = useState<Item[]>(
-    shuffle((initialItems || [])).map((x: any) => ({
+    (initialItems || []).map((x: any) => ({
       id: x.id,
       url: x.url || x.media_url || x.public_url || '',
       created_at: x.created_at,
@@ -176,7 +167,6 @@ export function GalleryClient({
 
   return (
     <div dir="rtl" className="grid gap-4">
-      {uploadEnabled ? (
       <Card>
         <div className="flex flex-col gap-3 sm:flex-row-reverse sm:items-center sm:justify-between">
           <div className="text-right">
@@ -204,7 +194,6 @@ export function GalleryClient({
         {msg && <p className="mt-2 text-sm text-zinc-700">{msg}</p>}
         {!uploadEnabled && <p className="mt-2 text-xs text-zinc-500">העלאה סגורה כעת.</p>}
       </Card>
-      ) : null}
 
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
