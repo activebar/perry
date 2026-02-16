@@ -71,20 +71,18 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   const title = (g as any)?.title || 'גלריה'
 
   return (
-    <main className="py-4">
+    <main className="py-3">
       <Container>
-        <div dir="rtl" className="mb-6 flex items-center justify-between gap-3">
+        <div dir="rtl" className="mb-4">
           <div className="text-right">
             <h1 className="text-2xl font-semibold">{title}</h1>
             <p className="mt-1 text-sm text-zinc-600">כל התמונות המאושרות בגלריה זו.</p>
           </div>
-          <Link href="/" className="text-sm font-medium text-zinc-700">
-            חזרה לדף הבית
-          </Link>
-        </div>
 
-        <div className="mb-6">
-          <GalleryTabs tabs={tabs} activeId={galleryId} />
+          {/* Gallery-to-gallery navigation (based on enabled gallery blocks) */}
+          <div className="mt-3">
+            <GalleryTabs tabs={tabs} activeId={galleryId} />
+          </div>
         </div>
 
         {(items || []).length === 0 ? (
