@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { Container, Card } from '@/components/ui'
+import { GalleryTabs } from '@/components/GalleryTabs'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
 
@@ -22,7 +23,8 @@ async function getLatestSettingsRow() {
 }
 
 function isGalleryBlockType(t: string) {
-  // Blocks use: gallery, gallery_1, gallery_2, ...
+  // We support multiple gallery blocks: "gallery", "gallery_1", "gallery_2"...
+  // (Some DB seeds / admin UIs store them as gallery_N.)
   return t === 'gallery' || t.startsWith('gallery_')
 }
 
@@ -38,28 +40,34 @@ export default async function GalleryIndexPage() {
     .order('order_index', { ascending: true })
 
   const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
-  // Only blocks that point to a real gallery (config.gallery_id). Keep order_index order and de-dupe.
-  const seen = new Set<string>()
-  const galleryBlocks: any[] = []
-  const galleryIds: string[] = []
+  // only blocks that point to a real gallery
+  const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
+      const galleryIds = Array.from(
+    new Set(
+      (galleryBlocks || [])
+        .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
+        .filter(Boolean)
+        .map((x: any) => String(x))
+    )
+  )
 
-  for (const blk of galleryBlocksRaw as any[]) {
-    const gid = String((blk?.config as any)?.gallery_id || (blk?.config as any)?.galleryId || '')
-    if (!gid) continue
-    if (seen.has(gid)) continue
-    seen.add(gid)
-    galleryBlocks.push(blk)
-    galleryIds.push(gid)
-  }
-
-  const titlesById = new Map<string, string>()
   const previewByGalleryId = new Map<string, string[]>()
+
+const titlesById = new Map<string, string>()
 if (galleryIds.length) {
   const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
   for (const g of gs || []) {
     titlesById.set(String((g as any).id), String((g as any).title || '').trim())
   }
 }
+
+  // tabs in the same order as the gallery blocks
+  const tabs = (galleryBlocks || [])
+    .map((b: any) => String((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId || ''))
+    .filter(Boolean)
+    .map((id: string) => ({ id, label: titlesById.get(id) || 'גלריה' }))
+    // de-dup while preserving order
+    .filter((t, idx, arr) => arr.findIndex((x) => x.id === t.id) === idx)
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
@@ -105,11 +113,16 @@ const perGalleryLimit = previewLimit
   }
 
   return (
-    <main className="py-10">
+    <main className="py-4">
       <Container>
         <div dir="rtl" className="mb-6 text-right">
           <h1 className="text-2xl font-semibold">גלריות</h1>
           <p className="mt-1 text-sm text-zinc-600">בחרו גלריה כדי לצפות בכל התמונות.</p>
+        </div>
+
+        {/* navigation pills between gallery blocks */}
+        <div className="mb-6">
+          <GalleryTabs tabs={tabs} />
         </div>
 
         {galleryBlocks.length === 0 ? (
@@ -119,8 +132,8 @@ const perGalleryLimit = previewLimit
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {galleryBlocks.map((b: any) => {
-              const galleryId = String((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId || '')
-              const title = titlesById.get(galleryId) || b?.title || 'גלריה'
+              const galleryId = b?.config?.gallery_id || b?.config?.galleryId || b.id
+              const title = b?.config?.title || b?.config?.label || b?.title || 'גלריה'
               return (
                 <Link key={b.id} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">
