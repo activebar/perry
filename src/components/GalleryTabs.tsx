@@ -31,7 +31,7 @@ export function GalleryTabs({
             key={t.id}
             href={`/gallery/${t.id}`}
             className={
-              'rounded-full px-4 py-2 text-sm font-medium transition ' +
+              'no-underline rounded-full px-4 py-2 text-sm font-medium transition ' +
               (isActive
                 ? 'bg-black text-white'
                 : 'bg-white text-zinc-900 ring-1 ring-zinc-200')

@@ -21,13 +21,18 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   // tabs from enabled gallery blocks (so you can jump between galleries)
   const { data: blocks } = await sb
     .from('blocks')
-    .select('id,type,enabled,order_index,config')
+    .select('id,type,is_visible,enabled,order_index,config')
     .eq('event_id', env.EVENT_SLUG)
-    .eq('type', 'gallery')
-    .eq('enabled', true)
+    // Support multiple gallery blocks stored as: gallery, gallery_1, gallery_2...
+    .ilike('type', 'gallery%')
     .order('order_index', { ascending: true })
 
-  const tabIds = (blocks || [])
+    const tabIds = (blocks || [])
+    .filter((b: any) => {
+      const t = String(b?.type || '')
+      const visible = (b as any).enabled ?? (b as any).is_visible ?? true
+      return visible && (t === 'gallery' || t.startsWith('gallery_'))
+    })
     .map((b: any) => String((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId || ''))
     .filter(Boolean)
 
@@ -35,8 +40,9 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   if (tabIds.length) {
     const { data: gs } = await sb
       .from('galleries')
-      .select('id,title')
+      .select('id,title,is_active')
       .eq('event_id', env.EVENT_SLUG)
+      .eq('is_active', true)
       .in('id', tabIds as any)
 
     for (const g of gs || []) {
