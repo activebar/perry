@@ -19,27 +19,51 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   const sb = supabaseAnon()
 
 
-  // Tabs: jump between all active galleries (every new gallery automatically appears)
-  const { data: activeGalleries, error: gErr } = await sb
-    .from('galleries')
-    .select('id,title,order_index,is_active')
-    .eq('event_id', env.EVENT_SLUG)
-    .eq('is_active', true)
-    .order('order_index', { ascending: true })
+// Tabs should follow the visible gallery blocks only (if a block is hidden, its tab should not appear)
+const { data: blocks, error: bErr } = await sb
+  .from('blocks')
+  .select('id,type,is_visible,order_index,config')
+  .eq('event_id', eventId)
+  .eq('is_visible', true)
 
-  if (gErr) {
-    console.error('galleries load error', gErr)
-  }
+if (bErr) console.error('Failed to load blocks for gallery tabs', bErr)
 
-  const tabs = (activeGalleries || []).map((gg: any) => ({
-    id: String(gg.id),
-    label: String(gg.title || 'גלריה'),
-    href: `/gallery/${String(gg.id)}`,
-  }))
+const galleryBlocks = (blocks || [])
+  .filter((b: any) => b.type === 'gallery' && b.is_visible)
+  .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
 
-  // Gallery settings (upload gating + auto-approve window handled in API)
-  const { data: g } = await sb.from('galleries').select('id, title, upload_enabled').eq('id', galleryId).maybeSingle()
+const galleryIdsFromBlocks = Array.from(
+  new Set(
+    galleryBlocks
+      .map((b: any) => String((b as any)?.config?.gallery_id || ''))
+      .filter(Boolean)
+  )
+)
 
+const { data: galleriesForTabs, error: gErr } = galleryIdsFromBlocks.length
+  ? await sb
+      .from('galleries')
+      .select('id,title,is_active')
+      .eq('event_id', eventId)
+      .in('id', galleryIdsFromBlocks)
+      .eq('is_active', true)
+  : { data: [], error: null as any }
+
+if (gErr) console.error('Failed to load galleries for tabs', gErr)
+
+const gMap = new Map((galleriesForTabs || []).map((g: any) => [String(g.id), g]))
+
+const tabs: { id: string; label: string; href: string }[] = []
+const seen = new Set<string>()
+for (const b of galleryBlocks as any[]) {
+  const cfg = (b as any)?.config || {}
+  const gid = String(cfg?.gallery_id || '')
+  if (!gid || seen.has(gid)) continue
+  const g = gMap.get(gid)
+  if (!g) continue
+  tabs.push({ id: gid, label: String(cfg?.title || g.title || 'גלריה'), href: `/gallery/${gid}` })
+  seen.add(gid)
+}
   const uploadEnabled = !!(g as any)?.upload_enabled
 
   const { data: items } = await sb

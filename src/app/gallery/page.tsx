@@ -47,27 +47,39 @@ export default async function GalleryIndexPage() {
     return gid && gid !== 'null' && gid !== 'undefined'
   })
 
-  // Tabs should follow all active galleries (so every new gallery that is added will automatically appear)
-  const { data: activeGalleries, error: gErr } = await srv
-    .from('galleries')
-    .select('id,title,order_index,is_active')
-    .eq('event_id', env.EVENT_SLUG)
-    .eq('is_active', true)
-    .order('order_index', { ascending: true })
+// Tabs should follow the visible gallery blocks only (if a block is hidden, its tab should not appear)
+const galleryIdsFromBlocks = Array.from(
+  new Set(
+    galleryBlocks
+      .map((b: any) => String((b as any)?.config?.gallery_id || ''))
+      .filter(Boolean)
+  )
+)
 
-  if (gErr) {
-    console.error('galleries load error', gErr)
-  }
+const { data: galleriesForTabs, error: gErr } = galleryIdsFromBlocks.length
+  ? await srv
+      .from('galleries')
+      .select('id,title,is_active')
+      .eq('event_id', env.EVENT_SLUG)
+      .in('id', galleryIdsFromBlocks)
+      .eq('is_active', true)
+  : { data: [], error: null as any }
 
-  const tabs = (activeGalleries || []).map((g: any) => ({
-    id: String(g.id),
-    label: String(g.title || 'גלריה'),
-    href: `/gallery/${String(g.id)}`,
-  }))
+if (gErr) console.error('Failed to load galleries for tabs', gErr)
 
-  // Use active galleries for previews so the page stays consistent even if blocks change
-  const galleryIds = (activeGalleries || []).map((g: any) => String(g.id)).filter(Boolean)
+const gMap = new Map((galleriesForTabs || []).map((g: any) => [String(g.id), g]))
 
+const tabs: { id: string; label: string; href: string }[] = []
+const seen = new Set<string>()
+for (const b of galleryBlocks as any[]) {
+  const cfg = (b as any)?.config || {}
+  const gid = String(cfg?.gallery_id || '')
+  if (!gid || seen.has(gid)) continue
+  const g = gMap.get(gid)
+  if (!g) continue
+  tabs.push({ id: gid, label: String(cfg?.title || g.title || 'גלריה'), href: `/gallery/${gid}` })
+  seen.add(gid)
+}
   const previewByGalleryId = new Map<string, string[]>()
 
 
