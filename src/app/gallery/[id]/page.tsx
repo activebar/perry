@@ -23,7 +23,7 @@ export default async function GalleryByIdPage({ params }: PageProps) {
 const { data: blocks, error: bErr } = await sb
   .from('blocks')
   .select('id,type,is_visible,order_index,config')
-  .eq('event_id', eventId)
+  .eq('event_id', env.EVENT_SLUG)
   .eq('is_visible', true)
 
 if (bErr) console.error('Failed to load blocks for gallery tabs', bErr)
@@ -44,7 +44,7 @@ const { data: galleriesForTabs, error: gErr } = galleryIdsFromBlocks.length
   ? await sb
       .from('galleries')
       .select('id,title,is_active')
-      .eq('event_id', eventId)
+      .eq('event_id', env.EVENT_SLUG)
       .in('id', galleryIdsFromBlocks)
       .eq('is_active', true)
   : { data: [], error: null as any }
