@@ -18,43 +18,27 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   const galleryId = decodeURIComponent(params.id)
   const sb = supabaseAnon()
 
-  // tabs from enabled gallery blocks (so you can jump between galleries)
-  const { data: blocks } = await sb
-    .from('blocks')
-    .select('id,type,is_visible,enabled,order_index,config')
+
+  // Tabs: jump between all active galleries (every new gallery automatically appears)
+  const { data: activeGalleries, error: gErr } = await sb
+    .from('galleries')
+    .select('id,title,order_index,is_active')
     .eq('event_id', env.EVENT_SLUG)
-    // Support multiple gallery blocks stored as: gallery, gallery_1, gallery_2...
-    .ilike('type', 'gallery%')
+    .eq('is_active', true)
     .order('order_index', { ascending: true })
 
-    const tabIds = (blocks || [])
-    .filter((b: any) => {
-      const t = String(b?.type || '')
-      const visible = (b as any).enabled ?? (b as any).is_visible ?? true
-      return visible && (t === 'gallery' || t.startsWith('gallery_'))
-    })
-    .map((b: any) => String((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId || ''))
-    .filter(Boolean)
-
-  const titlesById = new Map<string, string>()
-  if (tabIds.length) {
-    const { data: gs } = await sb
-      .from('galleries')
-      .select('id,title,is_active')
-      .eq('event_id', env.EVENT_SLUG)
-      .eq('is_active', true)
-      .in('id', tabIds as any)
-
-    for (const g of gs || []) {
-      titlesById.set(String((g as any).id), String((g as any).title || '').trim())
-    }
+  if (gErr) {
+    console.error('galleries load error', gErr)
   }
 
-  const tabs = tabIds
-    .map((id) => ({ id, label: titlesById.get(id) || 'גלריה' }))
-    .filter((t, idx, arr) => arr.findIndex((x) => x.id === t.id) === idx)
+  const tabs = (activeGalleries || []).map((gg: any) => ({
+    id: String(gg.id),
+    label: String(gg.title || 'גלריה'),
+    href: `/gallery/${String(gg.id)}`,
+  }))
 
   // gallery settings (upload gating + auto approve window handled in API)
+ (upload gating + auto approve window handled in API)
   const { data: g } = await sb.from('galleries').select('id, title, upload_enabled').eq('id', galleryId).maybeSingle()
 
   const uploadEnabled = !!(g as any)?.upload_enabled

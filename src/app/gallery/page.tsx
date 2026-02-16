@@ -41,33 +41,34 @@ export default async function GalleryIndexPage() {
 
   const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
   // only blocks that point to a real gallery
-  const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
-      const galleryIds = Array.from(
-    new Set(
-      (galleryBlocks || [])
-        .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
-        .filter(Boolean)
-        .map((x: any) => String(x))
-    )
-  )
+  const galleryBlocks = galleryBlocksRaw.filter((b: any) => {
+    const cfg = (b as any)?.config || {}
+    const gid = String(cfg?.gallery_id || '')
+    return gid && gid !== 'null' && gid !== 'undefined'
+  })
+
+  // Tabs should follow all active galleries (so every new gallery that is added will automatically appear)
+  const { data: activeGalleries, error: gErr } = await supabase
+    .from('galleries')
+    .select('id,title,order_index,is_active')
+    .eq('event_id', eventId)
+    .eq('is_active', true)
+    .order('order_index', { ascending: true })
+
+  if (gErr) {
+    console.error('galleries load error', gErr)
+  }
+
+  const tabs = (activeGalleries || []).map((g: any) => ({
+    id: String(g.id),
+    label: String(g.title || 'גלריה'),
+    href: `/gallery/${String(g.id)}`,
+  }))
+
+  // Use active galleries for previews so the page stays consistent even if blocks change
+  const galleryIds = (activeGalleries || []).map((g: any) => String(g.id)).filter(Boolean)
 
   const previewByGalleryId = new Map<string, string[]>()
-
-const titlesById = new Map<string, string>()
-if (galleryIds.length) {
-  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
-  for (const g of gs || []) {
-    titlesById.set(String((g as any).id), String((g as any).title || '').trim())
-  }
-}
-
-  // tabs in the same order as the gallery blocks
-  const tabs = (galleryBlocks || [])
-    .map((b: any) => String((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId || ''))
-    .filter(Boolean)
-    .map((id: string) => ({ id, label: titlesById.get(id) || 'גלריה' }))
-    // de-dup while preserving order
-    .filter((t, idx, arr) => arr.findIndex((x) => x.id === t.id) === idx)
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
