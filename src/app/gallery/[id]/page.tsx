@@ -37,8 +37,7 @@ export default async function GalleryByIdPage({ params }: PageProps) {
     href: `/gallery/${String(gg.id)}`,
   }))
 
-  // gallery settings (upload gating + auto approve window handled in API)
- (upload gating + auto approve window handled in API)
+  // Gallery settings (upload gating + auto-approve window handled in API)
   const { data: g } = await sb.from('galleries').select('id, title, upload_enabled').eq('id', galleryId).maybeSingle()
 
   const uploadEnabled = !!(g as any)?.upload_enabled
