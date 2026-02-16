@@ -48,10 +48,10 @@ export default async function GalleryIndexPage() {
   })
 
   // Tabs should follow all active galleries (so every new gallery that is added will automatically appear)
-  const { data: activeGalleries, error: gErr } = await supabase
+  const { data: activeGalleries, error: gErr } = await srv
     .from('galleries')
     .select('id,title,order_index,is_active')
-    .eq('event_id', eventId)
+    .eq('event_id', env.EVENT_SLUG)
     .eq('is_active', true)
     .order('order_index', { ascending: true })
 
