@@ -29,7 +29,7 @@ const { data: blocks, error: bErr } = await sb
 if (bErr) console.error('Failed to load blocks for gallery tabs', bErr)
 
 const galleryBlocks = (blocks || [])
-  .filter((b: any) => b.type === 'gallery' && b.is_visible)
+  .filter((b: any) => String(b.type || '').startsWith('gallery') && b.is_visible)
   .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
 
 const galleryIdsFromBlocks = Array.from(
@@ -53,6 +53,16 @@ if (gErr) console.error('Failed to load galleries for tabs', gErr)
 
 const gMap = new Map((galleriesForTabs || []).map((g: any) => [String(g.id), g]))
 
+  // Current gallery record
+  const { data: currentGallery, error: curErr } = await sb
+    .from('galleries')
+    .select('id,title,upload_enabled')
+    .eq('event_id', env.EVENT_SLUG)
+    .eq('id', galleryId)
+    .maybeSingle()
+  if (curErr) console.error('Failed to load current gallery', curErr)
+
+
 const tabs: { id: string; label: string; href: string }[] = []
 const seen = new Set<string>()
 for (const b of galleryBlocks as any[]) {
@@ -64,7 +74,7 @@ for (const b of galleryBlocks as any[]) {
   tabs.push({ id: gid, label: String(cfg?.title || g.title || 'גלריה'), href: `/gallery/${gid}` })
   seen.add(gid)
 }
-  const uploadEnabled = !!(g as any)?.upload_enabled
+  const uploadEnabled = !!(currentGallery as any)?.upload_enabled
 
   const { data: items } = await sb
     .from('media_items')
@@ -75,7 +85,7 @@ for (const b of galleryBlocks as any[]) {
     .order('created_at', { ascending: false })
     .limit(500)
 
-  const title = (g as any)?.title || 'גלריה'
+  const title = (currentGallery as any)?.title || 'גלריה'
 
   return (
     <main className="py-3">
