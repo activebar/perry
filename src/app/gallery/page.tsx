@@ -80,7 +80,9 @@ for (const b of galleryBlocks as any[]) {
   tabs.push({ id: gid, label: String(cfg?.title || g.title || 'גלריה'), href: `/gallery/${gid}` })
   seen.add(gid)
 }
-  const previewByGalleryId = new Map<string, string[]>()
+  const galleryIds = tabs.map(t => t.id)
+
+const previewByGalleryId = new Map<string, string[]>()
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
@@ -99,8 +101,7 @@ const previewCols = Math.max(1, Math.min(6, Number.isFinite(previewColsRaw) && p
 
 // Per-gallery limit for the preview grid inside each card
 const perGalleryLimit = previewLimit
-
-  if (galleryIds.length) {
+if (galleryIds.length) {
     // Fetch a pool of recent approved items for these galleries and slice per gallery in JS
     const { data: recent } = await srv
       .from('media_items')
