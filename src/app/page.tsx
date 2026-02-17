@@ -531,24 +531,13 @@ export default function HomePage() {
                               ) : null}
                             </div>
 
-                            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-                              <div className="flex flex-wrap items-center justify-center gap-2">
-                                {shareEnabled && (
-                                  <button
-                                    type="button"
-                                    className="rounded-full border px-3 py-1 text-sm bg-white"
-                                    onClick={() => shareBlessing(p)}
-                                    aria-label="שתף"
-                                    title="שתף"
-                                  >
-                                    🔗
-                                  </button>
-                                )}
+                            <div className="mt-2 flex items-center justify-center gap-2">
+                              <div className="flex flex-nowrap items-center justify-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
                                 {EMOJIS.map(e => (
                                   <button
                                     key={e}
                                     type="button"
-                                    className={`rounded-full border px-3 py-1 text-sm ${
+                                    className={`shrink-0 rounded-full border px-3 py-1 text-sm ${
                                       (p.my_reactions || []).includes(e) ? 'bg-black text-white' : 'bg-white'
                                     }`}
                                     onClick={async () => {
@@ -581,8 +570,10 @@ export default function HomePage() {
                                 ))}
                               </div>
 
-                              <Link href="/blessings">
-                                <Button variant="ghost">כתוב ברכה</Button>
+                              <Link href="/blessings" className="shrink-0">
+                                <span className="inline-flex items-center rounded-full border bg-transparent px-4 py-2 text-sm font-medium">
+                                  כתוב ברכה
+                                </span>
                               </Link>
                             </div>
                           </div>
