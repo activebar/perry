@@ -32,7 +32,7 @@ export default async function GalleryIndexPage() {
   const { data: blocks } = await srv
     .from('blocks')
     .select('*')
-    .eq('event_id', env.EVENTId)
+    .eq('event_id', env.eventId)
     .eq('is_visible', true)
     .order('order_index', { ascending: true })
 
