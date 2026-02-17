@@ -483,27 +483,45 @@ export default function HomePage() {
                       <div className="mt-3 space-y-3">
                         {blessingsPreview.map((p: any) => (
                           <div key={p.id} className="rounded-2xl bg-zinc-50 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0 flex-1 text-right">
-                                <div className="text-sm font-semibold">{p.author_name || 'אנונימי'}</div>
-                                {p.text ? <div className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">{p.text}</div> : null}
-                                {p.link_url ? (
-                                  <div className="mt-2">
-                                    <HomeLinkThumb url={p.link_url} sizePx={120} />
-                                    <HomeLinkMeta url={p.link_url} />
-                                  </div>
-                                ) : null}
+                            <div dir="rtl" className="space-y-2">
+                              {/* Name row */}
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0 flex-1 text-right">
+                                  <div className="truncate text-sm font-semibold">{p.author_name || 'אנונימי'}</div>
+                                </div>
                               </div>
 
+                              {/* If no media, show link thumbnail under name (image-only even when details hidden) */}
+                              {!p.media_url && linkPreviewEnabled && p.link_url ? (
+                                <div className="text-right">
+                                  <HomeLinkThumb url={p.link_url} sizePx={Math.max(120, Math.min(220, mediaSize))} />
+                                  {linkPreviewShowDetails ? <HomeLinkMeta url={p.link_url} /> : null}
+                                </div>
+                              ) : null}
+
+                              {/* Media centered */}
                               {p.media_url ? (
-                                <button
-                                  type="button"
-                                  className="relative flex-none overflow-hidden rounded-2xl bg-zinc-200"
-                                  style={{ width: Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160))), height: Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160))) }}
-                                  onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
-                                >
-                                  <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                                </button>
+                                <div className="flex justify-center">
+                                  <button
+                                    type="button"
+                                    className="relative overflow-hidden rounded-2xl bg-zinc-200"
+                                    style={{ width: Math.max(120, Math.min(260, mediaSize)), height: Math.max(120, Math.min(260, mediaSize)) }}
+                                    onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
+                                  >
+                                    <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                  </button>
+                                </div>
+                              ) : null}
+
+                              {/* Text right */}
+                              {p.text ? <div className="whitespace-pre-wrap text-right text-sm text-zinc-700">{p.text}</div> : null}
+
+                              {/* If media exists, show link preview under text */}
+                              {p.media_url && linkPreviewEnabled && p.link_url ? (
+                                <div className="text-right">
+                                  <HomeLinkThumb url={p.link_url} sizePx={Math.max(120, Math.min(220, mediaSize))} />
+                                  {linkPreviewShowDetails ? <HomeLinkMeta url={p.link_url} /> : null}
+                                </div>
                               ) : null}
                             </div>
 
