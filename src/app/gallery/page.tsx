@@ -1,7 +1,6 @@
 import Link from 'next/link'
 
 import { Container, Card } from '@/components/ui'
-import { GalleryTabs } from '@/components/GalleryTabs'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
 
@@ -23,9 +22,7 @@ async function getLatestSettingsRow() {
 }
 
 function isGalleryBlockType(t: string) {
-  // We support multiple gallery blocks: "gallery", "gallery_1", "gallery_2"...
-  // (Some DB seeds / admin UIs store them as gallery_N.)
-  return t === 'gallery' || t.startsWith('gallery_')
+  return t === 'gallery'
 }
 
 export default async function GalleryIndexPage() {
@@ -41,48 +38,25 @@ export default async function GalleryIndexPage() {
 
   const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
   // only blocks that point to a real gallery
-  const galleryBlocks = galleryBlocksRaw.filter((b: any) => {
-    const cfg = (b as any)?.config || {}
-    const gid = String(cfg?.gallery_id || '')
-    return gid && gid !== 'null' && gid !== 'undefined'
-  })
-
-// Tabs should follow the visible gallery blocks only (if a block is hidden, its tab should not appear)
-const galleryIdsFromBlocks = Array.from(
-  new Set(
-    galleryBlocks
-      .map((b: any) => String((b as any)?.config?.gallery_id || ''))
-      .filter(Boolean)
+  const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
+      const galleryIds = Array.from(
+    new Set(
+      (galleryBlocks || [])
+        .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
+        .filter(Boolean)
+        .map((x: any) => String(x))
+    )
   )
-)
 
-const { data: galleriesForTabs, error: gErr } = galleryIdsFromBlocks.length
-  ? await srv
-      .from('galleries')
-      .select('id,title,is_active')
-      .eq('event_id', env.EVENT_SLUG)
-      .in('id', galleryIdsFromBlocks)
-      .eq('is_active', true)
-  : { data: [], error: null as any }
+  const previewByGalleryId = new Map<string, string[]>()
 
-if (gErr) console.error('Failed to load galleries for tabs', gErr)
-
-const gMap = new Map((galleriesForTabs || []).map((g: any) => [String(g.id), g]))
-
-const tabs: { id: string; label: string; href: string }[] = []
-const seen = new Set<string>()
-for (const b of galleryBlocks as any[]) {
-  const cfg = (b as any)?.config || {}
-  const gid = String(cfg?.gallery_id || '')
-  if (!gid || seen.has(gid)) continue
-  const g = gMap.get(gid)
-  if (!g) continue
-  tabs.push({ id: gid, label: String(cfg?.title || g.title || 'גלריה'), href: `/gallery/${gid}` })
-  seen.add(gid)
+const titlesById = new Map<string, string>()
+if (galleryIds.length) {
+  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
+  for (const g of gs || []) {
+    titlesById.set(String((g as any).id), String((g as any).title || '').trim())
+  }
 }
-  const galleryIds = tabs.map(t => t.id)
-
-const previewByGalleryId = new Map<string, string[]>()
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
@@ -101,7 +75,8 @@ const previewCols = Math.max(1, Math.min(6, Number.isFinite(previewColsRaw) && p
 
 // Per-gallery limit for the preview grid inside each card
 const perGalleryLimit = previewLimit
-if (galleryIds.length) {
+
+  if (galleryIds.length) {
     // Fetch a pool of recent approved items for these galleries and slice per gallery in JS
     const { data: recent } = await srv
       .from('media_items')
@@ -127,16 +102,11 @@ if (galleryIds.length) {
   }
 
   return (
-    <main className="py-4">
+    <main className="py-10">
       <Container>
         <div dir="rtl" className="mb-6 text-right">
           <h1 className="text-2xl font-semibold">גלריות</h1>
           <p className="mt-1 text-sm text-zinc-600">בחרו גלריה כדי לצפות בכל התמונות.</p>
-        </div>
-
-        {/* navigation pills between gallery blocks */}
-        <div className="mb-6">
-          <GalleryTabs tabs={tabs} />
         </div>
 
         {galleryBlocks.length === 0 ? (

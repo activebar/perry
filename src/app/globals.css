@@ -11,6 +11,5 @@ body {
 }
 
 a {
-  /* default: no underlines (looks cleaner on mobile pills/buttons) */
-  @apply text-zinc-900 no-underline;
+  @apply text-zinc-900 underline underline-offset-4;
 }

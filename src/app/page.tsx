@@ -95,7 +95,13 @@ function HomeLinkThumb({ url, sizePx }: { url?: string | null; sizePx: number })
   const img = d.image || youtubeThumb(d.url)
   if (!img) return null
   return (
-    <a href={d.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-2xl bg-zinc-50" style={{ width: sizePx, height: sizePx }} aria-label="פתח קישור">
+    <a
+      href={d.url}
+      target="_blank"
+      rel="noreferrer"
+      className="mx-auto block w-full max-w-[320px] overflow-hidden rounded-2xl bg-zinc-50 aspect-square"
+      aria-label="פתח קישור"
+    >
       <img src={img} alt="" className="h-full w-full object-cover" />
     </a>
   )
@@ -525,8 +531,19 @@ export default function HomePage() {
                               ) : null}
                             </div>
 
-                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex flex-wrap gap-2">
+                            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                              <div className="flex flex-wrap items-center justify-center gap-2">
+                                {shareEnabled && (
+                                  <button
+                                    type="button"
+                                    className="rounded-full border px-3 py-1 text-sm bg-white"
+                                    onClick={() => shareBlessing(p)}
+                                    aria-label="שתף"
+                                    title="שתף"
+                                  >
+                                    🔗
+                                  </button>
+                                )}
                                 {EMOJIS.map(e => (
                                   <button
                                     key={e}
