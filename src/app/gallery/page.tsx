@@ -22,7 +22,8 @@ async function getLatestSettingsRow() {
 }
 
 function isGalleryBlockType(t: string) {
-  return t === 'gallery'
+  // We historically had both "gallery" and "gallery_1/2/3" as block types
+  return t === 'gallery' || t.startsWith('gallery_')
 }
 
 export default async function GalleryIndexPage() {
@@ -37,26 +38,32 @@ export default async function GalleryIndexPage() {
     .order('order_index', { ascending: true })
 
   const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
-  // only blocks that point to a real gallery
-  const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
-      const galleryIds = Array.from(
-    new Set(
-      (galleryBlocks || [])
-        .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
-        .filter(Boolean)
-        .map((x: any) => String(x))
-    )
-  )
+  // Only blocks that point to a real gallery
+  const galleryBlocks = (galleryBlocksRaw || [])
+    .map((b: any) => {
+      const gid = String((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId || (b?.config as any)?.gallery_uuid || '')
+      return {
+        ...b,
+        _gallery_id: gid,
+      }
+    })
+    .filter((b: any) => !!b._gallery_id)
+
+  const galleryIds = Array.from(new Set(galleryBlocks.map((b: any) => String(b._gallery_id))))
 
   const previewByGalleryId = new Map<string, string[]>()
 
-const titlesById = new Map<string, string>()
-if (galleryIds.length) {
-  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
-  for (const g of gs || []) {
-    titlesById.set(String((g as any).id), String((g as any).title || '').trim())
+  const titlesById = new Map<string, string>()
+  if (galleryIds.length) {
+    const { data: gs } = await srv
+      .from('galleries')
+      .select('id,title')
+      .eq('event_id', env.EVENT_SLUG)
+      .in('id', galleryIds as any)
+    for (const g of gs || []) {
+      titlesById.set(String((g as any).id), String((g as any).title || '').trim())
+    }
   }
-}
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
@@ -116,8 +123,9 @@ const perGalleryLimit = previewLimit
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {galleryBlocks.map((b: any) => {
-              const galleryId = b?.config?.gallery_id || b?.config?.galleryId || b.id
-              const title = b?.config?.title || b?.config?.label || b?.title || 'גלריה'
+              const galleryId = String(b._gallery_id)
+              const titleFromDb = titlesById.get(galleryId) || ''
+              const title = String(b?.config?.title || b?.config?.label || titleFromDb || 'גלריה')
               return (
                 <Link key={b.id} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">

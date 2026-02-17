@@ -6,7 +6,9 @@ import { fetchSettings } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-const OG_SIZE = 800
+// OpenGraph standard (also works best for WhatsApp previews)
+const OG_W = 1200
+const OG_H = 630
 
 // In this codebase `supabaseServiceRole` is a factory function that returns a Supabase client.
 // Create a client instance for use inside this route module.
@@ -59,10 +61,10 @@ async function fetchImageBuffer(url: string) {
   return Buffer.from(ab)
 }
 
-async function toSquareJpeg(input: Buffer) {
+async function toOgJpeg(input: Buffer) {
   return await sharp(input)
     .rotate() // respect EXIF orientation
-    .resize(OG_SIZE, OG_SIZE, { fit: 'cover', position: 'centre' })
+    .resize(OG_W, OG_H, { fit: 'cover', position: 'centre' })
     .jpeg({ quality: 80, mozjpeg: true })
     .toBuffer()
 }
@@ -172,8 +174,8 @@ if (!imageUrl) {
       buf = await fetchImageBuffer(imageUrl)
     }
 
-    // 3) Normalize to WhatsApp-friendly square
-    const out = await toSquareJpeg(buf)
+    // 3) Normalize to OpenGraph-friendly 1200x630 (best for WhatsApp previews)
+    const out = await toOgJpeg(buf)
 
     const body = new Uint8Array(out)
 

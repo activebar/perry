@@ -549,8 +549,8 @@ async function saveEdit() {
                     <LinkPreviewMeta url={p.link_url} force={false} />
                   </div>
                 )}
-                {/* reactions */}
-                <div className="mt-3 flex items-center gap-2 justify-end flex-nowrap overflow-x-auto">
+                {/* reactions (wrap on mobile) */}
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                   {EMOJIS.map(emo => {
                     const active = (p.my_reactions || []).includes(emo)
                     const c = (p.reaction_counts || {})[emo] || 0
@@ -565,7 +565,11 @@ async function saveEdit() {
                       </Button>
                     )
                   })}
-                  {shareEnabled ? (
+                </div>
+
+                {/* share (separate row so it won't break the emoji layout) */}
+                {shareEnabled ? (
+                  <div className="mt-2 flex items-center justify-end">
                     <Button
                       variant="ghost"
                       onClick={() => sharePost(p)}
@@ -574,8 +578,8 @@ async function saveEdit() {
                     >
                       🔗
                     </Button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
 
                 {/* edit/delete (mine, within 1h) */}
                 {canEditMine(p) && (
