@@ -32,7 +32,7 @@ export default async function GalleryIndexPage() {
   const { data: blocks } = await srv
     .from('blocks')
     .select('*')
-    .eq('event_id', env.eventId)
+    .eq('event_id', env.EVENT_SLUG)
     .eq('is_visible', true)
     .order('order_index', { ascending: true })
 
@@ -52,7 +52,7 @@ export default async function GalleryIndexPage() {
 
 const titlesById = new Map<string, string>()
 if (galleryIds.length) {
-  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.eventId).in('id', galleryIds as any)
+  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
   for (const g of gs || []) {
     titlesById.set(String((g as any).id), String((g as any).title || '').trim())
   }
@@ -81,7 +81,7 @@ const perGalleryLimit = previewLimit
     const { data: recent } = await srv
       .from('media_items')
       .select('gallery_id, thumb_url, url, created_at, is_approved, kind, event_id')
-      .eq('event_id', env.eventId)
+      .eq('event_id', env.EVENT_SLUG)
       .eq('kind', 'gallery')
       .eq('is_approved', true)
       .in('gallery_id', galleryIds as any)
