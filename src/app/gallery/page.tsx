@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { Container, Card } from '@/components/ui'
+import { GalleryTabs } from '@/components/GalleryTabs'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
 
@@ -22,7 +23,9 @@ async function getLatestSettingsRow() {
 }
 
 function isGalleryBlockType(t: string) {
-  return t === 'gallery'
+  // We support multiple gallery blocks: "gallery", "gallery_1", "gallery_2"...
+  // (Some DB seeds / admin UIs store them as gallery_N.)
+  return t === 'gallery' || t.startsWith('gallery_')
 }
 
 export default async function GalleryIndexPage() {
@@ -32,20 +35,41 @@ export default async function GalleryIndexPage() {
   const { data: blocks } = await srv
     .from('blocks')
     .select('*')
+    .eq('event_id', env.EVENT_SLUG)
     .eq('is_visible', true)
     .order('order_index', { ascending: true })
 
-  const galleryBlocks = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
-  const galleryIds = Array.from(
-    new Set(
-      galleryBlocks
-        .map((b: any) => (b?.config as any)?.gallery_id)
-        .filter(Boolean)
-        .map((x: any) => String(x))
-    )
-  )
+  const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
+  // only blocks that point to a real gallery
+  const galleryBlocks = galleryBlocksRaw.filter((b: any) => {
+    const cfg = (b as any)?.config || {}
+    const gid = String(cfg?.gallery_id || '')
+    return gid && gid !== 'null' && gid !== 'undefined'
+  })
+
+  // Tabs should follow all active galleries (so every new gallery that is added will automatically appear)
+  const { data: activeGalleries, error: gErr } = await srv
+    .from('galleries')
+    .select('id,title,order_index,is_active')
+    .eq('event_id', env.EVENT_SLUG)
+    .eq('is_active', true)
+    .order('order_index', { ascending: true })
+
+  if (gErr) {
+    console.error('galleries load error', gErr)
+  }
+
+  const tabs = (activeGalleries || []).map((g: any) => ({
+    id: String(g.id),
+    label: String(g.title || 'גלריה'),
+    href: `/gallery/${String(g.id)}`,
+  }))
+
+  // Use active galleries for previews so the page stays consistent even if blocks change
+  const galleryIds = (activeGalleries || []).map((g: any) => String(g.id)).filter(Boolean)
 
   const previewByGalleryId = new Map<string, string[]>()
+
 
 // Settings-driven preview for gallery cards (same controls as Home)
 let settings: any = null
@@ -90,11 +114,16 @@ const perGalleryLimit = previewLimit
   }
 
   return (
-    <main className="py-10">
+    <main className="py-4">
       <Container>
         <div dir="rtl" className="mb-6 text-right">
           <h1 className="text-2xl font-semibold">גלריות</h1>
           <p className="mt-1 text-sm text-zinc-600">בחרו גלריה כדי לצפות בכל התמונות.</p>
+        </div>
+
+        {/* navigation pills between gallery blocks */}
+        <div className="mb-6">
+          <GalleryTabs tabs={tabs} />
         </div>
 
         {galleryBlocks.length === 0 ? (

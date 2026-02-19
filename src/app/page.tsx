@@ -498,7 +498,8 @@ export default function HomePage() {
                               {p.media_url ? (
                                 <button
                                   type="button"
-                                  className="relative h-20 w-20 flex-none overflow-hidden rounded-2xl bg-zinc-200"
+                                  className="relative flex-none overflow-hidden rounded-2xl bg-zinc-200"
+                                  style={{ width: Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160))), height: Math.max(120, Math.min(260, Number((settings as any)?.blessings_media_size || 160))) }}
                                   onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
                                 >
                                   <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -517,28 +518,30 @@ export default function HomePage() {
                                     }`}
                                     onClick={async () => {
                                       try {
-                                        const res = await fetch('/api/reactions', {
+                                        const res = await fetch('/api/reactions/toggle', {
                                           method: 'POST',
                                           headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ post_id: p.id, emoji: e })
+                                          body: JSON.stringify({ post_id: p.id, emoji: e }),
                                         })
                                         if (!res.ok) return
-                                        const j = await res.json().catch(() => ({}))
-                                        if (!j?.ok) return
-                                        // update counts locally (simple)
+                                        const j = await res.json().catch(() => ({} as any))
                                         setData(prev => {
                                           if (!prev) return prev
-                                          const next = { ...prev }
+                                          const next = { ...prev } as any
                                           next.blessingsPreview = (next.blessingsPreview || []).map((x: any) => {
                                             if (x.id !== p.id) return x
-                                            return j.post
+                                            return {
+                                              ...x,
+                                              reaction_counts: j.counts || x.reaction_counts || {},
+                                              my_reactions: j.my || x.my_reactions || [],
+                                            }
                                           })
                                           return next
                                         })
                                       } catch {}
                                     }}
                                   >
-                                    {e} {Number(p.reaction_counts?.[e] || 0)}
+                                    {e} {Number((p.reaction_counts || ({} as any))[e] || 0)}
                                   </button>
                                 ))}
                               </div>

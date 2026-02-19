@@ -91,7 +91,8 @@ export default function SiteChrome({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl px-4 py-6">{children}</main>
+      {/* Pages generally add their own spacing via <Container>. Keep chrome padding minimal. */}
+      <main className="mx-auto w-full max-w-3xl px-4 py-2">{children}</main>
 
       <footer className="mt-10 border-t border-zinc-200 bg-white">
   <div className="mx-auto w-full max-w-3xl px-4 py-6 text-center text-sm text-zinc-500">
@@ -123,6 +124,8 @@ export default function SiteChrome({
       {!footerEnabled && !footerLine2Enabled ? (
         <div className="opacity-70">{eventName ? `${eventName} • ` : ''}מופעל ע״י ActiveBar</div>
       ) : null}
+      <div className="mt-2 text-[10px] opacity-40" dir="ltr">build v13.21</div>
+
     </div>
   </div>
 </footer>

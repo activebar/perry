@@ -57,16 +57,15 @@ let eventName: string | undefined = undefined
   let giftNavLabel: string | undefined = undefined
 try {
   const s: any = await fetchSettings()
-// Footer (admin controlled)
-footerEnabled = Boolean(s?.footer_enabled)
-footerLabel = (s?.footer_label ?? null) as any
-footerUrl = (s?.footer_url ?? null) as any
-footerLine2Enabled = Boolean(s?.footer_line2_enabled)
-footerLine2Label = (s?.footer_line2_label ?? null) as any
-footerLine2Url = (s?.footer_line2_url ?? null) as any
-
-
 const blocks: any[] = await fetchBlocks()
+
+	  // Footer (fully controlled by admin)
+	  footerEnabled = !!s?.footer_enabled
+	  footerLabel = s?.footer_label ?? null
+	  footerUrl = s?.footer_url ?? null
+	  footerLine2Enabled = !!s?.footer_line2_enabled
+	  footerLine2Label = s?.footer_line2_label ?? null
+	  footerLine2Url = s?.footer_line2_url ?? null
 
 // Gift nav button should behave like Hero gift button:
 // shown only if the 'gift' block is visible and not auto-hidden by time.
@@ -88,7 +87,7 @@ if (!giftBlock?.is_visible) {
 }
 
 
-  eventName = s?.event_name ? String(s.event_name) : undefined
+	  eventName = s?.event_name ? String(s.event_name) : undefined
 } catch {
   eventName = undefined
       footerEnabled = undefined
