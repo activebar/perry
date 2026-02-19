@@ -6,7 +6,7 @@ import { fetchSettings } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-const OG_SIZE = 800
+const OG_SIZE = 630
 
 // In this codebase `supabaseServiceRole` is a factory function that returns a Supabase client.
 // Create a client instance for use inside this route module.

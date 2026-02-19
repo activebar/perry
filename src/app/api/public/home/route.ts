@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
 
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
 async function fetchSettingsAndBlocks() {
+  const env = getServerEnv()
   const sb = supabaseAnon()
   const [{ data: settings, error: sErr }, { data: blocks, error: bErr }] = await Promise.all([
     sb.from('event_settings').select('*').order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(1).single(),
-    sb.from('blocks').select('*').order('order_index', { ascending: true })
+    sb.from('blocks').select('*').eq('event_id', env.EVENT_SLUG).order('order_index', { ascending: true })
   ])
   if (sErr) throw sErr
   if (bErr) throw bErr
@@ -21,9 +23,12 @@ async function fetchSettingsAndBlocks() {
 
 async function fetchGalleryPreviews(blocks: any[]) {
   const sb = supabaseAnon()
-  const galleryBlocks = (blocks || []).filter((b: any) => String(b?.type || '').startsWith('gallery'))
+  const galleryBlocks = (blocks || []).filter((b: any) => {
+    const t = String(b?.type || '')
+    return t === 'gallery' || t.startsWith('gallery_')
+  })
   const galleryIds = galleryBlocks
-    .map((b: any) => (b?.config as any)?.gallery_id)
+    .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
     .filter((x: any) => typeof x === 'string' && x.length > 0)
 
   if (galleryIds.length === 0) return {}
@@ -31,6 +36,7 @@ async function fetchGalleryPreviews(blocks: any[]) {
   const { data, error } = await sb
     .from('media_items')
     .select('id, gallery_id, url, thumb_url, public_url, storage_path, created_at, kind, is_approved')
+    .eq('event_id', getServerEnv().EVENT_SLUG)
     .eq('kind', 'gallery')
     .eq('is_approved', true)
     .in('gallery_id', galleryIds as any)

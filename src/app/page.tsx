@@ -531,24 +531,14 @@ export default function HomePage() {
                               ) : null}
                             </div>
 
-                            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                            <div className="mt-2 space-y-2">
+                              {/* Row 1: reactions */}
                               <div className="flex flex-wrap items-center justify-center gap-2">
-                                {shareEnabled && (
-                                  <button
-                                    type="button"
-                                    className="rounded-full border px-3 py-1 text-sm bg-white"
-                                    onClick={() => shareBlessing(p)}
-                                    aria-label="שתף"
-                                    title="שתף"
-                                  >
-                                    🔗
-                                  </button>
-                                )}
                                 {EMOJIS.map(e => (
                                   <button
                                     key={e}
                                     type="button"
-                                    className={`rounded-full border px-3 py-1 text-sm ${
+                                    className={`rounded-full border px-3 py-1 text-sm whitespace-nowrap ${
                                       (p.my_reactions || []).includes(e) ? 'bg-black text-white' : 'bg-white'
                                     }`}
                                     onClick={async () => {
@@ -581,9 +571,26 @@ export default function HomePage() {
                                 ))}
                               </div>
 
-                              <Link href="/blessings">
-                                <Button variant="ghost">כתוב ברכה</Button>
-                              </Link>
+                              {/* Row 2: share icon (right) + write blessing (left) */}
+                              <div dir="rtl" className="flex flex-row-reverse items-center justify-between gap-2">
+                                {shareEnabled ? (
+                                  <button
+                                    type="button"
+                                    className="rounded-full border px-3 py-1 text-sm bg-white"
+                                    onClick={() => shareBlessing(p)}
+                                    aria-label="שתף"
+                                    title="שתף"
+                                  >
+                                    🔗
+                                  </button>
+                                ) : (
+                                  <span />
+                                )}
+
+                                <Link href="/blessings">
+                                  <Button variant="ghost">כתוב ברכה</Button>
+                                </Link>
+                              </div>
                             </div>
                           </div>
                         ))}
