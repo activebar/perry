@@ -46,6 +46,28 @@ async function shareUrl(url: string) {
   }
 }
 
+async function ensureShortLinkForMedia(mediaItemId: string) {
+  const id = String(mediaItemId || '').trim()
+  if (!id) return null
+  const code = id.slice(0, 8)
+  try {
+    await fetch('/api/short-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'gl',
+        mediaItemId: id,
+        code,
+        targetPath: `/media/${id}`,
+      }),
+    })
+  } catch {
+    // ignore
+  }
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return origin ? `${origin}/gl/${code}` : `/gl/${code}`
+}
+
 async function fileToImageBitmap(file: File) {
   // createImageBitmap is fast and widely supported
   return await createImageBitmap(file)
@@ -115,6 +137,11 @@ export function GalleryClient({
   const pickerRef = useRef<HTMLInputElement | null>(null)
 
   const feed = useMemo(() => (items || []).filter(i => i.url), [items])
+
+  async function shareItem(it: Item) {
+    const short = await ensureShortLinkForMedia(it.id)
+    await shareUrl(short || it.url)
+  }
 
   function addFiles(list: FileList | null) {
     const arr = Array.from(list || []).filter(f => (f.type || '').startsWith('image/'))
@@ -209,7 +236,11 @@ export function GalleryClient({
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => shareUrl(lightbox)}
+                onClick={async () => {
+                  const current = feed.find(x => x.url === lightbox)
+                  if (current) return shareItem(current)
+                  return shareUrl(lightbox)
+                }}
                 className="bg-white/90 text-black shadow hover:bg-white"
                 type="button"
               >
@@ -242,7 +273,7 @@ export function GalleryClient({
             </button>
 
             <div className="p-3 flex gap-2">
-              <Button variant="ghost" onClick={() => shareUrl(it.url)} type="button">
+              <Button variant="ghost" onClick={() => shareItem(it)} type="button">
                 שתף
               </Button>
               <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">

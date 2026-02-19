@@ -572,11 +572,11 @@ export default function HomePage() {
                               </div>
 
                               {/* Row 2: share icon (right) + write blessing (left) */}
-                              <div dir="rtl" className="flex flex-row-reverse items-center justify-between gap-2">
+                              <div dir="rtl" className="flex items-center justify-between gap-2">
                                 {shareEnabled ? (
                                   <button
                                     type="button"
-                                    className="rounded-full border px-3 py-1 text-sm bg-white"
+                                    className="shrink-0 rounded-full border px-3 py-1 text-sm bg-white"
                                     onClick={() => shareBlessing(p)}
                                     aria-label="שתף"
                                     title="שתף"
@@ -584,11 +584,13 @@ export default function HomePage() {
                                     🔗
                                   </button>
                                 ) : (
-                                  <span />
+                                  <span className="w-10" />
                                 )}
 
-                                <Link href="/blessings">
-                                  <Button variant="ghost">כתוב ברכה</Button>
+                                <Link href="/blessings" className="flex-1">
+                                  <Button variant="ghost" className="w-full">
+                                    כתוב ברכה
+                                  </Button>
                                 </Link>
                               </div>
                             </div>

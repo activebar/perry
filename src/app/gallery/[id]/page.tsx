@@ -22,35 +22,15 @@ export default async function GalleryByIdPage({ params }: PageProps) {
 
   const uploadEnabled = !!(g as any)?.upload_enabled
 
-  // Visible galleries navigation (based on blocks)
-  const { data: navBlocks } = await sb
-    .from('blocks')
-    .select('*')
+  // Visible galleries navigation (source of truth: galleries table)
+  const { data: navGalleries } = await sb
+    .from('galleries')
+    .select('id,title,order_index')
     .eq('event_id', env.EVENT_SLUG)
-    .eq('is_visible', true)
+    .eq('is_active', true)
     .order('order_index', { ascending: true })
 
-  const galleryBlocks = (navBlocks || []).filter((b: any) => {
-    const t = String((b as any)?.type || '')
-    return t === 'gallery' || t.startsWith('gallery_')
-  })
-
-  const navIds = Array.from(
-    new Set(
-      galleryBlocks
-        .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
-        .filter(Boolean)
-        .map((x: any) => String(x))
-    )
-  )
-
-  const navTitles = new Map<string, string>()
-  if (navIds.length) {
-    const { data: gs } = await sb.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', navIds as any)
-    for (const row of gs || []) navTitles.set(String((row as any).id), String((row as any).title || '').trim())
-  }
-
-  const nav = navIds.map(id => ({ id, title: navTitles.get(id) || 'גלריה' }))
+  const nav = (navGalleries || []).map((x: any) => ({ id: String(x.id), title: String(x.title || 'גלריה') }))
 
   const { data: items } = await sb
     .from('media_items')
@@ -67,31 +47,28 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   return (
     <main className="py-10">
       <Container>
-        <div dir="rtl" className="mb-6 flex items-center justify-between gap-3">
-          <div className="text-right">
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            <p className="mt-1 text-sm text-zinc-600">כל התמונות המאושרות בגלריה זו.</p>
-          </div>
-          <Link href="/" className="text-sm font-medium underline">
-            חזרה לדף הבית
-          </Link>
+        <div dir="rtl" className="mb-4 text-right">
+          <h1 className="text-2xl font-semibold">{title}</h1>
+          <p className="mt-1 text-sm text-zinc-600">כל התמונות המאושרות בגלריה זו.</p>
+        </div>
+
         {nav.length > 1 ? (
-          <div dir="rtl" className="mb-4 flex flex-wrap justify-end gap-2">
-            {nav.map(gx => (
-              <Link
-                key={gx.id}
-                href={`/gallery/${encodeURIComponent(gx.id)}`}
-                className={`rounded-full border px-3 py-1 text-sm ${
-                  gx.id === galleryId ? 'bg-black text-white' : 'bg-white'
-                }`}
-              >
-                {gx.title}
-              </Link>
-            ))}
+          <div dir="rtl" className="mb-5 flex justify-end">
+            <div className="flex max-w-full gap-2 overflow-x-auto pb-2">
+              {nav.map(gx => (
+                <Link
+                  key={gx.id}
+                  href={`/gallery/${encodeURIComponent(gx.id)}`}
+                  className={`shrink-0 rounded-full border px-3 py-1 text-sm ${
+                    gx.id === galleryId ? 'bg-black text-white' : 'bg-white'
+                  }`}
+                >
+                  {gx.title}
+                </Link>
+              ))}
+            </div>
           </div>
         ) : null}
-
-        </div>
 
         {(items || []).length === 0 ? (
           <Card dir="rtl">

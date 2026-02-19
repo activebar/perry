@@ -17,15 +17,19 @@ async function resolveTarget(code: string) {
   const srv = supabaseServiceRole()
 
   // Prefer schemas that include kind, but fallback to legacy schema without kind.
-  const first = await srv.from('short_links').select('target_path, kind').eq('code', code).maybeSingle()
-  if ((first.data as any)?.target_path) {
+  const first = await srv.from('short_links').select('target_path, kind, media_item_id').eq('code', code).maybeSingle()
+  if (first.data) {
     const k = String((first.data as any).kind || '').trim()
-    if (!k || k === 'gl') return String((first.data as any).target_path)
+    const mi = (first.data as any).media_item_id ? String((first.data as any).media_item_id) : null
+    if (mi && (!k || k === 'gl' || k === 'media')) return { target: String((first.data as any).target_path || ''), mediaItemId: mi }
+    if ((first.data as any)?.target_path) {
+      if (!k || k === 'gl') return { target: String((first.data as any).target_path), mediaItemId: null }
+    }
   }
 
   // Legacy fallback: some schemas may not have `kind` column at all.
   const second = await srv.from('short_links').select('target_path').eq('code', code).maybeSingle()
-  return (second.data as any)?.target_path ? String((second.data as any).target_path) : null
+  return (second.data as any)?.target_path ? { target: String((second.data as any).target_path), mediaItemId: null } : null
 }
 
 function baseUrl() {
@@ -40,6 +44,36 @@ function extractGalleryIdFromTarget(targetPath: string | null) {
   if (!targetPath) return null
   const m = String(targetPath).match(/\/gallery\/([0-9a-f-]{36})/i)
   return m?.[1] || null
+}
+
+async function getOgForMedia(mediaItemId: string) {
+  const srv = supabaseServiceRole()
+  const settings = await fetchSettings()
+
+  const { data: mi } = await srv
+    .from('media_items')
+    .select('id, gallery_id')
+    .eq('id', mediaItemId)
+    .maybeSingle()
+
+  let galleryTitle = 'תמונה'
+  if ((mi as any)?.gallery_id) {
+    const { data: g } = await srv
+      .from('galleries')
+      .select('id,title')
+      .eq('id', String((mi as any).gallery_id))
+      .maybeSingle()
+    if ((g as any)?.title) galleryTitle = String((g as any).title)
+  }
+
+  const eventName = String((settings as any)?.event_name || 'אירוע')
+  const description =
+    String((settings as any)?.share_gallery_description || '').trim() ||
+    'לחצו לצפייה בתמונה'
+
+  const b = baseUrl()
+  const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mediaItemId))}`
+  return { eventName, galleryTitle, description, ogImage }
 }
 
 async function getOgForGallery(galleryId: string) {
@@ -78,8 +112,33 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const code = cleanCode(params.code)
   if (!code) return {}
 
-  const target = await resolveTarget(code)
-  const galleryId = extractGalleryIdFromTarget(target)
+  const resolved = await resolveTarget(code)
+  if (!resolved) return {}
+
+  // Media link: OG should be based on the specific media item
+  if (resolved.mediaItemId) {
+    const { eventName, galleryTitle, description, ogImage } = await getOgForMedia(resolved.mediaItemId)
+    const title = `${eventName} · ${galleryTitle}`
+
+    return {
+      title,
+      description,
+      openGraph: {
+        title,
+        description,
+        type: 'website',
+        images: [{ url: ogImage, width: 800, height: 800 }]
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: [ogImage]
+      }
+    }
+  }
+
+  const galleryId = extractGalleryIdFromTarget(resolved.target)
   if (!galleryId) return {}
 
   const { eventName, galleryTitle, description, ogImage } = await getOgForGallery(galleryId)
@@ -107,11 +166,13 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
   const code = cleanCode(params.code)
   if (!code) notFound()
 
-  const target = await resolveTarget(code)
-  if (!target) notFound()
+  const resolved = await resolveTarget(code)
+  if (!resolved) notFound()
 
   // Client-side redirect so WhatsApp/Facebook can fetch OG tags from the HTML.
-  const href = target.startsWith('http') ? target : target
+  const href = resolved.mediaItemId
+    ? `/media/${encodeURIComponent(resolved.mediaItemId)}`
+    : resolved.target
 
   return (
     <main dir="rtl" className="mx-auto max-w-md p-6 text-center">

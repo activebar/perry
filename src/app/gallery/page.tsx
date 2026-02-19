@@ -21,42 +21,21 @@ async function getLatestSettingsRow() {
   return data as any
 }
 
-function isGalleryBlockType(t: string) {
-  return t === 'gallery' || t.startsWith('gallery_')
-}
-
 export default async function GalleryIndexPage() {
   const env = getServerEnv()
   const srv = supabaseServiceRole()
 
-  const { data: blocks } = await srv
-    .from('blocks')
-    .select('*')
+  // Source of truth: galleries table (active only)
+  const { data: galleries } = await srv
+    .from('galleries')
+    .select('id,title,order_index')
     .eq('event_id', env.EVENT_SLUG)
-    .eq('is_visible', true)
+    .eq('is_active', true)
     .order('order_index', { ascending: true })
 
-  const galleryBlocksRaw = (blocks || []).filter((b: any) => isGalleryBlockType(String((b as any)?.type || '')))
-  // only blocks that point to a real gallery
-  const galleryBlocks = galleryBlocksRaw.filter((b: any) => Boolean((b?.config as any)?.gallery_id || (b?.config as any)?.galleryId))
-      const galleryIds = Array.from(
-    new Set(
-      (galleryBlocks || [])
-        .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
-        .filter(Boolean)
-        .map((x: any) => String(x))
-    )
-  )
+  const galleryIds = (galleries || []).map((g: any) => String((g as any).id)).filter(Boolean)
 
   const previewByGalleryId = new Map<string, string[]>()
-
-const titlesById = new Map<string, string>()
-if (galleryIds.length) {
-  const { data: gs } = await srv.from('galleries').select('id,title').eq('event_id', env.EVENT_SLUG).in('id', galleryIds as any)
-  for (const g of gs || []) {
-    titlesById.set(String((g as any).id), String((g as any).title || '').trim())
-  }
-}
 
 
 // Settings-driven preview for gallery cards (same controls as Home)
@@ -109,17 +88,34 @@ const perGalleryLimit = previewLimit
           <p className="mt-1 text-sm text-zinc-600">בחרו גלריה כדי לצפות בכל התמונות.</p>
         </div>
 
-        {galleryBlocks.length === 0 ? (
+        {/* Navigation bar */}
+        {galleryIds.length > 1 ? (
+          <div dir="rtl" className="mb-5 flex justify-end">
+            <div className="flex max-w-full gap-2 overflow-x-auto pb-2">
+              {galleries!.map((g: any) => (
+                <Link
+                  key={g.id}
+                  href={`/gallery/${encodeURIComponent(String(g.id))}`}
+                  className="shrink-0 rounded-full border bg-white px-3 py-1 text-sm"
+                >
+                  {String(g.title || 'גלריה')}
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {galleryIds.length === 0 ? (
           <Card dir="rtl">
-            <div className="text-right text-sm text-zinc-600">אין גלריות מוגדרות בדף הבית.</div>
+            <div className="text-right text-sm text-zinc-600">אין גלריות פעילות.</div>
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {galleryBlocks.map((b: any) => {
-              const galleryId = b?.config?.gallery_id || b?.config?.galleryId
-              const title = titlesById.get(String(galleryId)) || b?.config?.title || b?.config?.label || b?.title || 'גלריה'
+            {(galleries || []).map((g: any) => {
+              const galleryId = String(g.id)
+              const title = String(g.title || 'גלריה')
               return (
-                <Link key={b.id} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
+                <Link key={galleryId} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">
                     <div>
                       <div className="flex items-center justify-between gap-3">
