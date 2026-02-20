@@ -98,7 +98,7 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
     blob = await new Promise((resolve, reject) =>
       canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', q)
     )
-    if (blob.size <= maxBytes) break
+    if (blob && blob.size <= maxBytes) break
   }
   if (!blob) throw new Error('encode failed')
 
