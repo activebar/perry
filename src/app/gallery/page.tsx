@@ -6,7 +6,6 @@ import { getServerEnv } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
-
 async function getLatestSettingsRow() {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
@@ -25,47 +24,84 @@ export default async function GalleryIndexPage() {
   const env = getServerEnv()
   const srv = supabaseServiceRole()
 
-  // Source of truth: galleries table (active only)
-  const { data: galleries } = await srv
-    .from('galleries')
-    .select('id,title,order_index')
+  // Source of truth for gallery names/buttons/order: blocks (Admin -> "עיצוב ותוכן")
+  const { data: blocks, error: bErr } = await srv
+    .from('blocks')
+    .select('id,type,order_index,is_visible,config,event_id')
     .eq('event_id', env.EVENT_SLUG)
-    .eq('is_active', true)
+    .eq('is_visible', true)
+    .or('type.eq.gallery,type.like.gallery_%')
     .order('order_index', { ascending: true })
 
-  const galleryIds = (galleries || []).map((g: any) => String((g as any).id)).filter(Boolean)
+  if (bErr) throw bErr
+
+  const galleryItems = (blocks || [])
+    .map((b: any) => {
+      const cfg = (b as any).config || {}
+      const galleryId = String(cfg.gallery_id || '').trim()
+      if (!galleryId) return null
+
+      return {
+        galleryId,
+        title: String(cfg.title || 'גלריה'),
+        buttonLabel: String(cfg.button_label || 'לכל התמונות'),
+        limit: Number(cfg.limit || 12),
+        orderIndex: Number((b as any).order_index || 0)
+      }
+    })
+    .filter(Boolean) as Array<{
+    galleryId: string
+    title: string
+    buttonLabel: string
+    limit: number
+    orderIndex: number
+  }>
+
+  const galleryIds = galleryItems.map((g) => g.galleryId)
+
+  // Fetch active galleries only (still respect DB activation)
+  const { data: galleriesRows } = await srv
+    .from('galleries')
+    .select('id,is_active,order_index,event_id')
+    .eq('event_id', env.EVENT_SLUG)
+    .in('id', galleryIds as any)
+
+  const activeSet = new Set(
+    (galleriesRows || [])
+      .filter((r: any) => r && (r as any).is_active === true)
+      .map((r: any) => String((r as any).id))
+  )
+
+  const visibleItems = galleryItems.filter((g) => activeSet.has(g.galleryId))
 
   const previewByGalleryId = new Map<string, string[]>()
 
+  // Settings-driven preview for gallery cards
+  let settings: any = null
+  try {
+    settings = await getLatestSettingsRow()
+  } catch {
+    settings = null
+  }
 
-// Settings-driven preview for gallery cards (same controls as Home)
-let settings: any = null
-try {
-  settings = await getLatestSettingsRow()
-} catch {
-  settings = null
-}
+  const previewLimitRaw = Number(settings?.home_gallery_preview_limit ?? 6)
+  const previewColsRaw = Number(settings?.home_gallery_preview_cols ?? 3)
 
-const previewLimitRaw = Number(settings?.home_gallery_preview_limit ?? 6)
-const previewColsRaw = Number(settings?.home_gallery_preview_cols ?? 3)
+  const previewLimit = Math.max(1, Math.min(30, Number.isFinite(previewLimitRaw) && previewLimitRaw > 0 ? previewLimitRaw : 6))
+  const previewCols = Math.max(1, Math.min(6, Number.isFinite(previewColsRaw) && previewColsRaw > 0 ? previewColsRaw : 3))
 
-const previewLimit = Math.max(1, Math.min(30, Number.isFinite(previewLimitRaw) && previewLimitRaw > 0 ? previewLimitRaw : 6))
-const previewCols = Math.max(1, Math.min(6, Number.isFinite(previewColsRaw) && previewColsRaw > 0 ? previewColsRaw : 3))
+  const perGalleryLimit = previewLimit
 
-// Per-gallery limit for the preview grid inside each card
-const perGalleryLimit = previewLimit
-
-  if (galleryIds.length) {
-    // Fetch a pool of recent approved items for these galleries and slice per gallery in JS
+  if (visibleItems.length) {
     const { data: recent } = await srv
       .from('media_items')
       .select('gallery_id, thumb_url, url, created_at, is_approved, kind, event_id')
       .eq('event_id', env.EVENT_SLUG)
       .eq('kind', 'gallery')
       .eq('is_approved', true)
-      .in('gallery_id', galleryIds as any)
+      .in('gallery_id', visibleItems.map((x) => x.galleryId) as any)
       .order('created_at', { ascending: false })
-      .limit(Math.min(400, galleryIds.length * Math.max(20, perGalleryLimit * 3)))
+      .limit(Math.min(400, visibleItems.length * Math.max(20, perGalleryLimit * 3)))
 
     for (const it of recent || []) {
       const gid = String((it as any).gallery_id || '')
@@ -89,49 +125,50 @@ const perGalleryLimit = previewLimit
         </div>
 
         {/* Navigation bar */}
-        {galleryIds.length > 1 ? (
+        {visibleItems.length > 1 ? (
           <div dir="rtl" className="mb-5 flex justify-end">
             <div className="flex max-w-full gap-2 overflow-x-auto pb-2">
-              {galleries!.map((g: any) => (
+              {visibleItems.map((g) => (
                 <Link
-                  key={g.id}
-                  href={`/gallery/${encodeURIComponent(String(g.id))}`}
+                  key={g.galleryId}
+                  href={`/gallery/${encodeURIComponent(String(g.galleryId))}`}
                   className="shrink-0 rounded-full border bg-white px-3 py-1 text-sm"
                 >
-                  {String(g.title || 'גלריה')}
+                  {g.title}
                 </Link>
               ))}
             </div>
           </div>
         ) : null}
 
-        {galleryIds.length === 0 ? (
+        {visibleItems.length === 0 ? (
           <Card dir="rtl">
             <div className="text-right text-sm text-zinc-600">אין גלריות פעילות.</div>
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {(galleries || []).map((g: any) => {
-              const galleryId = String(g.id)
+            {visibleItems.map((g) => {
+              const galleryId = String(g.galleryId)
               const title = String(g.title || 'גלריה')
+              const buttonLabel = String(g.buttonLabel || 'לכל התמונות')
+
               return (
-                <Link key={galleryId} href={`/gallery/${encodeURIComponent(String(galleryId))}`} className="block">
+                <Link key={galleryId} href={`/gallery/${encodeURIComponent(galleryId)}`} className="block">
                   <Card dir="rtl" className="hover:shadow-sm transition-shadow">
                     <div>
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-right">
                           <p className="font-semibold">{title}</p>
-                          <p className="text-sm text-zinc-600">לצפייה בכל התמונות</p>
+                          <p className="text-sm text-zinc-600">{buttonLabel}</p>
                         </div>
                         <span className="text-sm font-medium">פתיחה</span>
                       </div>
 
                       {(() => {
-                        const previews = previewByGalleryId.get(String(galleryId)) || []
+                        const previews = previewByGalleryId.get(galleryId) || []
                         if (!previews.length) return null
                         return (
-                          <div className="mt-3 grid gap-2"
-                            style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
+                          <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
                             {previews.slice(0, perGalleryLimit).map((u, idx) => (
                               <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
