@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { fetchSettings } from '@/lib/db'
@@ -16,20 +17,37 @@ function cleanCode(input: string) {
 async function resolveTarget(code: string) {
   const srv = supabaseServiceRole()
 
-  // Prefer schemas that include kind, but fallback to legacy schema without kind.
-  const first = await srv.from('short_links').select('target_path, kind, media_item_id').eq('code', code).maybeSingle()
+  // Prefer schema with kind/media_item_id; fallback to legacy schema without kind.
+  const first = await srv
+    .from('short_links')
+    .select('target_path, kind, media_item_id')
+    .eq('code', code)
+    .maybeSingle()
+
   if (first.data) {
     const k = String((first.data as any).kind || '').trim()
     const mi = (first.data as any).media_item_id ? String((first.data as any).media_item_id) : null
-    if (mi && (!k || k === 'gl' || k === 'media')) return { target: String((first.data as any).target_path || ''), mediaItemId: mi }
+
+    // If media_item_id exists, treat as media link
+    if (mi) return { target: String((first.data as any).target_path || ''), mediaItemId: mi }
+
     if ((first.data as any)?.target_path) {
-      if (!k || k === 'gl') return { target: String((first.data as any).target_path), mediaItemId: null }
+      // gallery target link (legacy)
+      return { target: String((first.data as any).target_path), mediaItemId: null }
     }
   }
 
-  // Legacy fallback: some schemas may not have `kind` column at all.
+  // Legacy fallback: schemas that do not have `kind` column at all.
   const second = await srv.from('short_links').select('target_path').eq('code', code).maybeSingle()
   return (second.data as any)?.target_path ? { target: String((second.data as any).target_path), mediaItemId: null } : null
+}
+
+function baseUrlFromRequestHeaders() {
+  const h = headers()
+  const host = h.get('x-forwarded-host') ?? h.get('host')
+  const proto = h.get('x-forwarded-proto') ?? 'https'
+  if (host) return `${proto}://${host}`.replace(/\/$/, '')
+  return ''
 }
 
 function baseUrl() {
@@ -37,7 +55,8 @@ function baseUrl() {
   if (explicit) return explicit.replace(/\/$/, '')
   const vercel = process.env.VERCEL_URL
   if (vercel) return `https://${vercel}`.replace(/\/$/, '')
-  return ''
+  // Fallback: derive from current request headers (important for WhatsApp scraper)
+  return baseUrlFromRequestHeaders()
 }
 
 function extractGalleryIdFromTarget(targetPath: string | null) {
@@ -63,16 +82,16 @@ async function getOgForMedia(mediaItemId: string) {
       .select('id,title')
       .eq('id', String((mi as any).gallery_id))
       .maybeSingle()
+
     if ((g as any)?.title) galleryTitle = String((g as any).title)
   }
 
   const eventName = String((settings as any)?.event_name || 'אירוע')
-  const description =
-    String((settings as any)?.share_gallery_description || '').trim() ||
-    'לחצו לצפייה בתמונה'
+  const description = String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
 
   const b = baseUrl()
   const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mediaItemId))}`
+
   return { eventName, galleryTitle, description, ogImage }
 }
 
@@ -98,9 +117,7 @@ async function getOgForGallery(galleryId: string) {
 
   const eventName = String((settings as any)?.event_name || 'אירוע')
   const galleryTitle = String((g as any)?.title || 'גלריה')
-  const description =
-    String((settings as any)?.share_gallery_description || '').trim() ||
-    'לחצו לצפייה בגלריה והעלאת תמונות'
+  const description = String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בגלריה והעלאת תמונות'
 
   const b = baseUrl()
   const ogImage = mi?.id ? `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}` : `${b}/api/og/image?default=1`
@@ -127,7 +144,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
         title,
         description,
         type: 'website',
-        images: [{ url: ogImage, width: 800, height: 800 }]
+        images: [{ url: ogImage, width: 630, height: 630 }]
       },
       twitter: {
         card: 'summary_large_image',
@@ -151,7 +168,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
       title,
       description,
       type: 'website',
-      images: [{ url: ogImage, width: 800, height: 800 }]
+      images: [{ url: ogImage, width: 630, height: 630 }]
     },
     twitter: {
       card: 'summary_large_image',
@@ -170,9 +187,7 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
   if (!resolved) notFound()
 
   // Client-side redirect so WhatsApp/Facebook can fetch OG tags from the HTML.
-  const href = resolved.mediaItemId
-    ? `/media/${encodeURIComponent(resolved.mediaItemId)}`
-    : resolved.target
+  const href = resolved.mediaItemId ? `/media/${encodeURIComponent(resolved.mediaItemId)}` : resolved.target
 
   return (
     <main dir="rtl" className="mx-auto max-w-md p-6 text-center">
