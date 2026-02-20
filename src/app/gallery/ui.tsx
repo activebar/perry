@@ -9,6 +9,7 @@ type Item = {
   created_at?: string
   editable_until?: string | null
   is_approved?: boolean
+  crop_position?: string | null
 }
 
 async function downloadUrl(url: string) {
@@ -73,19 +74,27 @@ async function fileToImageBitmap(file: File) {
   return await createImageBitmap(file)
 }
 
-async function compressToJpeg(file: File, maxDim: number, maxBytes: number): Promise<Blob> {
+async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2_500_000): Promise<Blob> {
   const bmp = await fileToImageBitmap(file)
   const srcW = bmp.width
   const srcH = bmp.height
+  const srcPixels = srcW * srcH
 
-  let dstW = srcW
-  let dstH = srcH
-  const biggest = Math.max(srcW, srcH)
-  if (biggest > maxDim) {
-    const scale = maxDim / biggest
-    dstW = Math.round(srcW * scale)
-    dstH = Math.round(srcH * scale)
+  // Scale down to meet maxPixels (2MP) while preserving aspect ratio
+  let scale = 1
+  if (srcPixels > maxPixels) {
+    scale = Math.sqrt(maxPixels / srcPixels)
   }
+
+  // Also cap the longest side (helps very tall/wide images)
+  const maxLongSide = 2200
+  const longSide = Math.max(srcW, srcH)
+  if (longSide * scale > maxLongSide) {
+    scale = maxLongSide / longSide
+  }
+
+  const dstW = Math.max(1, Math.round(srcW * scale))
+  const dstH = Math.max(1, Math.round(srcH * scale))
 
   const canvas = document.createElement('canvas')
   canvas.width = dstW
@@ -95,7 +104,7 @@ async function compressToJpeg(file: File, maxDim: number, maxBytes: number): Pro
   ctx.drawImage(bmp, 0, 0, dstW, dstH)
 
   // Try a few quality levels to stay under maxBytes
-  const qualities = [0.86, 0.8, 0.74, 0.68, 0.6]
+  const qualities = [0.86, 0.82, 0.78, 0.72, 0.66, 0.6]
   for (const q of qualities) {
     const blob: Blob = await new Promise((resolve, reject) =>
       canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', q)
@@ -103,7 +112,7 @@ async function compressToJpeg(file: File, maxDim: number, maxBytes: number): Pro
     if (blob.size <= maxBytes) return blob
   }
 
-  // Last resort: return the lowest quality blob
+  // Last resort: return lowest quality blob
   const finalBlob: Blob = await new Promise((resolve, reject) =>
     canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', 0.55)
   )
@@ -111,6 +120,7 @@ async function compressToJpeg(file: File, maxDim: number, maxBytes: number): Pro
 }
 
 export function GalleryClient({
+{
   initialItems,
   galleryId,
   uploadEnabled
@@ -159,11 +169,8 @@ export function GalleryClient({
     setMsg(null)
     setBusy(true)
     try {
-      const maxDim = 2560
-      const maxBytes = 3 * 1024 * 1024
-
-      for (const f of files) {
-        const blob = await compressToJpeg(f, maxDim, maxBytes)
+            for (const f of files) {
+        const blob = await compressToJpeg2MP(f)
         const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
 
         const fd = new FormData()
@@ -269,7 +276,7 @@ export function GalleryClient({
               onClick={() => setLightbox(it.url)}
               type="button"
             >
-              <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
             </button>
 
             <div className="p-3 flex gap-2">

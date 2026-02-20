@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
+import sharp from 'sharp'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole, getPublicUploadUrl } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
@@ -72,6 +73,24 @@ export async function POST(req: Request) {
     }
 
     const buf = Buffer.from(await file.arrayBuffer())
+
+// Extract basic image metadata (for smart cropping defaults)
+const isImage = (file.type || '').startsWith('image/')
+let width: number | null = null
+let height: number | null = null
+let crop_position: 'top' | 'center' = 'center'
+
+if (isImage) {
+  try {
+    const meta = await sharp(buf).metadata()
+    width = typeof meta.width === 'number' ? meta.width : null
+    height = typeof meta.height === 'number' ? meta.height : null
+    if (width && height && width < height) crop_position = 'top'
+  } catch {
+    // ignore metadata failures
+  }
+}
+
     const ext = (file.name.includes('.') ? file.name.split('.').pop() : '') || 'jpg'
     const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
 
@@ -99,6 +118,11 @@ export async function POST(req: Request) {
       gallery_id,
       url: publicUrl,
       thumb_url: publicUrl,
+      width,
+      height,
+      crop_position: isImage ? crop_position : 'center',
+      storage_provider: 'supabase',
+      external_url: null,
       storage_path: path,
       is_approved,
       editable_until,

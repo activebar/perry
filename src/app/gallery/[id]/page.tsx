@@ -72,7 +72,7 @@ export default async function GalleryByIdPage({ params }: PageProps) {
   // 4) IMPORTANT: Some rows use kind='galleries' (legacy). Show both.
   const { data: items } = await sb
     .from('media_items')
-    .select('id, url, thumb_url, created_at, editable_until, is_approved, kind')
+    .select('id, url, thumb_url, created_at, editable_until, is_approved, kind, crop_position')
     .eq('event_id', env.EVENT_SLUG)
     .in('kind', ['gallery', 'galleries'])
     .eq('gallery_id', galleryId)

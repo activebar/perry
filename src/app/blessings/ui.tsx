@@ -47,6 +47,65 @@ function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/')
 }
 
+async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
+  // @ts-ignore
+  if (typeof createImageBitmap === 'function') return await createImageBitmap(file)
+  // Fallback for very old browsers
+  const url = URL.createObjectURL(file)
+  const img = new Image()
+  img.src = url
+  await new Promise((resolve, reject) => {
+    img.onload = resolve
+    img.onerror = reject
+  })
+  const canvas = document.createElement('canvas')
+  canvas.width = img.naturalWidth || img.width
+  canvas.height = img.naturalHeight || img.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas not supported')
+  ctx.drawImage(img, 0, 0)
+  URL.revokeObjectURL(url)
+  // @ts-ignore
+  return await createImageBitmap(canvas)
+}
+
+async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2_500_000): Promise<File> {
+  const bmp = await fileToImageBitmap(file)
+  const srcW = bmp.width
+  const srcH = bmp.height
+  const srcPixels = srcW * srcH
+
+  let scale = 1
+  if (srcPixels > maxPixels) scale = Math.sqrt(maxPixels / srcPixels)
+
+  const maxLongSide = 2200
+  const longSide = Math.max(srcW, srcH)
+  if (longSide * scale > maxLongSide) scale = maxLongSide / longSide
+
+  const dstW = Math.max(1, Math.round(srcW * scale))
+  const dstH = Math.max(1, Math.round(srcH * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = dstW
+  canvas.height = dstH
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas not supported')
+  ctx.drawImage(bmp, 0, 0, dstW, dstH)
+
+  const qualities = [0.86, 0.82, 0.78, 0.72, 0.66, 0.6]
+  let blob: Blob | null = null
+  for (const q of qualities) {
+    blob = await new Promise((resolve, reject) =>
+      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', q)
+    )
+    if (blob.size <= maxBytes) break
+  }
+  if (!blob) throw new Error('encode failed')
+
+  const name = (file.name || 'image').replace(/\.[^.]+$/, '') + '.jpg'
+  return new File([blob], name, { type: 'image/jpeg' })
+}
+
 
 function firstHttpUrl(input: string) {
   const s = String(input || '')
@@ -199,7 +258,12 @@ export default function BlessingsClient({
 
       if (file) {
         const fd = new FormData()
-        fd.set('file', file)
+
+        // Compress images client-side (2MP) to keep uploads fast & cheap (Supabase free tier)
+        const outFile = isVideoFile(file) ? file : await compressToJpeg2MP(file)
+
+        fd.set('file', outFile)
+
         fd.set('kind', 'blessing')
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json().catch(() => ({}))
