@@ -120,7 +120,6 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
 }
 
 export function GalleryClient({
-{
   initialItems,
   galleryId,
   uploadEnabled
