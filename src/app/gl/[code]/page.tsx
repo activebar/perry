@@ -17,7 +17,7 @@ function cleanCode(input: string) {
 async function resolveTarget(code: string) {
   const srv = supabaseServiceRole()
 
-  // Prefer schema with kind/media_item_id; fallback to legacy schema without kind.
+  // Prefer schemas that include kind, but fallback to legacy schema without kind.
   const first = await srv
     .from('short_links')
     .select('target_path, kind, media_item_id')
@@ -28,35 +28,37 @@ async function resolveTarget(code: string) {
     const k = String((first.data as any).kind || '').trim()
     const mi = (first.data as any).media_item_id ? String((first.data as any).media_item_id) : null
 
-    // If media_item_id exists, treat as media link
+    // If media_item_id exists, treat as media link (new behavior)
     if (mi) return { target: String((first.data as any).target_path || ''), mediaItemId: mi }
 
     if ((first.data as any)?.target_path) {
-      // gallery target link (legacy)
+      // Legacy gallery link: target_path points to /gallery/<uuid>
       return { target: String((first.data as any).target_path), mediaItemId: null }
     }
   }
 
-  // Legacy fallback: schemas that do not have `kind` column at all.
+  // Legacy fallback: some schemas may not have `kind` column at all.
   const second = await srv.from('short_links').select('target_path').eq('code', code).maybeSingle()
   return (second.data as any)?.target_path ? { target: String((second.data as any).target_path), mediaItemId: null } : null
 }
 
-function baseUrlFromRequestHeaders() {
+function baseUrlFromHeaders() {
   const h = headers()
   const host = h.get('x-forwarded-host') ?? h.get('host')
   const proto = h.get('x-forwarded-proto') ?? 'https'
-  if (host) return `${proto}://${host}`.replace(/\/$/, '')
-  return ''
+  return host ? `${proto}://${host}`.replace(/\/$/, '') : ''
 }
 
 function baseUrl() {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL
   if (explicit) return explicit.replace(/\/$/, '')
+
   const vercel = process.env.VERCEL_URL
   if (vercel) return `https://${vercel}`.replace(/\/$/, '')
-  // Fallback: derive from current request headers (important for WhatsApp scraper)
-  return baseUrlFromRequestHeaders()
+
+  // IMPORTANT: WhatsApp/Facebook scrapers rely on absolute URLs.
+  // If env vars are missing in runtime, fall back to request headers.
+  return baseUrlFromHeaders()
 }
 
 function extractGalleryIdFromTarget(targetPath: string | null) {
@@ -108,7 +110,7 @@ async function getOgForGallery(galleryId: string) {
   const { data: mi } = await srv
     .from('media_items')
     .select('id')
-    .eq('kind', 'gallery')
+    .in('kind', ['gallery', 'galleries'])
     .eq('gallery_id', galleryId)
     .eq('is_approved', true)
     .order('created_at', { ascending: false })
@@ -186,12 +188,12 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
   const resolved = await resolveTarget(code)
   if (!resolved) notFound()
 
-  // Client-side redirect so WhatsApp/Facebook can fetch OG tags from the HTML.
+  // IMPORTANT: keep as client-side redirect so OG meta is visible to scrapers.
   const href = resolved.mediaItemId ? `/media/${encodeURIComponent(resolved.mediaItemId)}` : resolved.target
 
   return (
     <main dir="rtl" className="mx-auto max-w-md p-6 text-center">
-      <p className="text-sm text-zinc-600">מעבירים אותך לגלריה…</p>
+      <p className="text-sm text-zinc-600">מעבירים אותך לתמונה…</p>
       <a className="mt-3 inline-block rounded-full border px-4 py-2 text-sm no-underline" href={href}>
         אם לא עברת אוטומטית — לחץ כאן
       </a>
