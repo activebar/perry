@@ -73,9 +73,17 @@ async function getOgForMedia(mediaItemId: string) {
 
   const { data: mi } = await srv
     .from('media_items')
-    .select('id, gallery_id')
+    .select('id, gallery_id, public_url, storage_path, url, thumb_url')
     .eq('id', mediaItemId)
     .maybeSingle()
+
+  // Prefer a direct public URL for WhatsApp reliability.
+  // (WhatsApp sometimes fails to fetch dynamic OG image routes.)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const bucket = 'uploads'
+  const toPublic = (storagePath: string) => (supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${storagePath}` : '')
+  const directUrl =
+    (mi as any)?.thumb_url || (mi as any)?.public_url || (mi as any)?.url || ((mi as any)?.storage_path ? toPublic(String((mi as any).storage_path)) : '')
 
   let galleryTitle = 'תמונה'
   if ((mi as any)?.gallery_id) {
@@ -92,7 +100,8 @@ async function getOgForMedia(mediaItemId: string) {
   const description = String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
 
   const b = baseUrl()
-  const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mediaItemId))}`
+  // Use direct URL if available, otherwise fall back to the dynamic OG generator
+  const ogImage = directUrl ? String(directUrl) : `${b}/api/og/image?media=${encodeURIComponent(String(mediaItemId))}`
 
   return { eventName, galleryTitle, description, ogImage }
 }
@@ -109,7 +118,7 @@ async function getOgForGallery(galleryId: string) {
 
   const { data: mi } = await srv
     .from('media_items')
-    .select('id')
+    .select('id, public_url, storage_path, url, thumb_url')
     .in('kind', ['gallery', 'galleries'])
     .eq('gallery_id', galleryId)
     .eq('is_approved', true)
@@ -121,8 +130,18 @@ async function getOgForGallery(galleryId: string) {
   const galleryTitle = String((g as any)?.title || 'גלריה')
   const description = String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בגלריה והעלאת תמונות'
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const bucket = 'uploads'
+  const toPublic = (storagePath: string) => (supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${storagePath}` : '')
+  const directUrl =
+    (mi as any)?.thumb_url || (mi as any)?.public_url || (mi as any)?.url || ((mi as any)?.storage_path ? toPublic(String((mi as any).storage_path)) : '')
+
   const b = baseUrl()
-  const ogImage = mi?.id ? `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}` : `${b}/api/og/image?default=1`
+  const ogImage = directUrl
+    ? String(directUrl)
+    : mi?.id
+      ? `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}`
+      : `${b}/api/og/image?default=1`
 
   return { eventName, galleryTitle, description, ogImage }
 }

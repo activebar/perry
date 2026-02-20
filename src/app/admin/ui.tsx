@@ -2289,7 +2289,7 @@ async function loadBlocks() {
                       (selectedGalleryId === g.id ? 'border-black bg-zinc-50' : 'border-zinc-200 bg-white')
                     }
                   >
-                    {g.title || g.slug || g.id}
+                    {g.display_title || g.title || g.slug || g.id}
                     {!g.upload_enabled && <span className="mr-2 text-xs text-zinc-500">(סגור)</span>}
                   </button>
                 ))}
@@ -2307,7 +2307,7 @@ async function loadBlocks() {
                   <div className="grid gap-4">
                     <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
                       <div className="text-right">
-                        <h4 className="font-semibold">{g.title || 'גלריה'}</h4>
+                        <h4 className="font-semibold">{g.display_title || g.title || 'גלריה'}</h4>
                         {g.auto_approve_until && (
                           <p className="text-xs text-zinc-500 mt-1">
                             אוטומט-אישור עד: {new Date(g.auto_approve_until).toLocaleString('he-IL')}
