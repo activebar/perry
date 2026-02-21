@@ -146,7 +146,7 @@ export default function GalleryClient({
   const [lightbox, setLightbox] = useState<string | null>(null)
 
   // Select + ZIP (client-side)
-  const DIRECT_MAX = 8
+    const DIRECT_MAX = 8
     const ZIP_MAX = 20
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -168,9 +168,9 @@ export default function GalleryClient({
         return next
       }
       if (Object.keys(next).length >= ZIP_MAX) {
-          setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות במכה אחת`)
-          return next
-        }
+        setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
+        return next
+      }
       next[id] = true
       return next
     })
@@ -182,34 +182,28 @@ export default function GalleryClient({
       return
     }
     setLightbox(it.url)
-  }    const downloadSelectedDirect = async () => {
+  }
+    const downloadSelectedDirect = async () => {
       try {
         setErr(null)
         setMsg(null)
         const ids = Object.keys(selected)
         if (ids.length === 0) return
-
-        if (ids.length <= DIRECT_MAX) {
-          setErr(`עד ${DIRECT_MAX} תמונות יורדות בהורדה ישירה. בחר 'הורד ישיר'.`)
-          return
-        }
         if (ids.length > ZIP_MAX) {
-          setErr(`מקסימום ${ZIP_MAX} תמונות ב-ZIP אחד`)
+          setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
           return
         }
-        if (ids.length > DIRECT_MAX) {
-          setErr(`עד ${DIRECT_MAX} תמונות יורדות בהורדה ישירה. מעל זה – ZIP.`)
-          return
-        }
-
         setZipBusy(true)
+
         for (let i = 0; i < ids.length; i++) {
           const id = ids[i]
           const it = items.find(x => x.id === id)
           if (!it?.url) continue
           await downloadUrl(it.url)
-          await new Promise(r => setTimeout(r, 200))
+          // small delay so browsers don't block multiple downloads
+          await new Promise(r => setTimeout(r, 250))
         }
+
         setMsg('✅ ההורדות התחילו')
         clearSelected()
         setSelectMode(false)
@@ -328,16 +322,41 @@ export default function GalleryClient({
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+            <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
+              {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
+            </Button>
+            <input
+              ref={pickerRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={e => addFiles(e.target.files)}
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+              disabled={!uploadEnabled}
+            />
+          </div>
+        </div>
+
+        {/* Select + ZIP */}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
+          {!selectMode ? (
             <Button
-                  onClick={selectedCount <= DIRECT_MAX ? downloadSelectedDirect : downloadSelectedZip}
-                  disabled={zipBusy || selectedCount === 0}
-                >
-                  {zipBusy
-                    ? (selectedCount <= DIRECT_MAX ? 'מוריד…' : 'מכין ZIP…')
-                    : (selectedCount <= DIRECT_MAX
-                        ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})`
-                        : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
-                </Button>
+              variant="ghost"
+              onClick={() => {
+                setErr(null)
+                setMsg(null)
+                clearSelected()
+                setSelectMode(true)
+              }}
+              disabled={zipBusy}
+            >
+              בחר תמונות
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+              <Button onClick={selectedCount <= DIRECT_MAX ? downloadSelectedDirect : downloadSelectedZip} disabled={zipBusy || selectedCount === 0}>
+                {zipBusy ? (selectedCount <= DIRECT_MAX ? 'מוריד…' : 'מכין ZIP…') : (selectedCount <= DIRECT_MAX ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})` : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
+              </Button>
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -354,7 +373,7 @@ export default function GalleryClient({
           )}
 
           {selectMode ? (
-            <p className="text-xs text-zinc-500 text-right">1–{DIRECT_MAX} תמונות יורדות בהורדה ישירה. 9–{ZIP_MAX} יורד ZIP. אחרי הורדה אפשר לבחור שוב.</p>
+            <p className="text-xs text-zinc-500 text-right">סמן עד {ZIP_MAX} תמונות. 1–{DIRECT_MAX} יורד ישיר, {DIRECT_MAX + 1}–{ZIP_MAX} יורד ZIP. אחרי הורדה אפשר לבחור שוב.</p>
           ) : (
             <span />
           )}
