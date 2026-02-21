@@ -224,6 +224,48 @@ export function GalleryClient({
           </div>
         </div>
 
+        {/* Select + ZIP */}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
+          {!selectMode ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setErr(null)
+                setMsg(null)
+                clearSelected()
+                setSelectMode(true)
+              }}
+              disabled={zipBusy}
+            >
+              בחר תמונות
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+              <Button onClick={downloadSelectedZip} disabled={zipBusy || selectedCount() === 0}>
+                {zipBusy ? 'מכין ZIP…' : `הורד ZIP (${selectedCount()}/${MAX_SELECT})`}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelectMode(false)
+                  clearSelected()
+                  setErr(null)
+                  setMsg(null)
+                }}
+                disabled={zipBusy}
+              >
+                ביטול
+              </Button>
+            </div>
+          )}
+
+          {selectMode ? (
+            <p className="text-xs text-zinc-500 text-right">סמן עד {MAX_SELECT} תמונות. אחרי הורדה אפשר לבחור שוב.</p>
+          ) : (
+            <span />
+          )}
+        </div>
+
         {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
         {msg && <p className="mt-2 text-sm text-zinc-700">{msg}</p>}
         {!uploadEnabled && <p className="mt-2 text-xs text-zinc-500">העלאה סגורה כעת.</p>}
@@ -273,19 +315,36 @@ export function GalleryClient({
           <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
             <button
               className="relative block aspect-square w-full bg-zinc-50"
-              onClick={() => setLightbox(it.url)}
+              onClick={() => onThumbClick(it)}
               type="button"
             >
               <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
+
+              {selectMode ? (
+                <div className="absolute left-2 top-2">
+                  <div
+                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
+                    aria-hidden
+                  >
+                    {selected[it.id] ? '✓' : ''}
+                  </div>
+                </div>
+              ) : null}
             </button>
 
             <div className="p-3 flex gap-2">
-              <Button variant="ghost" onClick={() => shareItem(it)} type="button">
-                שתף
-              </Button>
-              <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
-                הורד
-              </Button>
+              {!selectMode ? (
+                <>
+                  <Button variant="ghost" onClick={() => shareItem(it)} type="button">
+                    שתף
+                  </Button>
+                  <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
+                    הורד
+                  </Button>
+                </>
+              ) : (
+                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+              )}
             </div>
           </div>
         ))}
