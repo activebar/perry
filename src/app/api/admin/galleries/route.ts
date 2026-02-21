@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
   // Pending count per gallery (unapproved media)
   const galleriesWithCounts = await Promise.all(
     galleries.map(async (g: any) => {
-      const { count } = await supabaseServiceRole
+      const { count } = await sb
         .from('media_items')
         .select('id', { count: 'exact', head: true })
         .eq('gallery_id', g.id)
