@@ -438,5 +438,3 @@ export default function GalleryClient({
     </div>
   )
 }
-
-export default GalleryClient
