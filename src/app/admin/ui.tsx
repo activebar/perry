@@ -1047,6 +1047,7 @@ async function loadBlocks() {
       const res = await jfetch('/api/admin/galleries', { method: 'GET' })
       const rows = res.galleries || []
       setGalleries(rows)
+      setGalleriesTotalPending((rows || []).reduce((s: number, g: any) => s + (g?.pending_count || 0), 0))
       if (!selectedGalleryId && rows[0]?.id) setSelectedGalleryId(rows[0].id)
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת גלריות'))
@@ -2293,7 +2294,14 @@ async function loadBlocks() {
 
           {settings && (
             <div className="mt-4 grid gap-2 rounded-2xl border border-zinc-200 p-4">
-              <p className="text-sm font-medium text-right">הגדרות גלריות</p>
+              <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-right">הגדרות גלריות</p>
+                  {galleriesTotalPending > 0 ? (
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                      ממתינות לאישור: {galleriesTotalPending}
+                    </span>
+                  ) : null}
+                </div>
 
               <Input
                 value={settings.guest_gallery_title || ''}
@@ -2404,7 +2412,14 @@ async function loadBlocks() {
                       (selectedGalleryId === g.id ? 'border-black bg-zinc-50' : 'border-zinc-200 bg-white')
                     }
                   >
-                    {g.display_title || g.title || g.slug || g.id}
+                    <span className="flex items-center gap-2">
+                      <span>{g.display_title || g.title || g.slug || g.id}</span>
+                      {g?.pending_count > 0 ? (
+                        <span className="inline-flex min-w-[20px] justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                          {g.pending_count}
+                        </span>
+                      ) : null}
+                    </span>
                     {!g.upload_enabled && <span className="mr-2 text-xs text-zinc-500">(סגור)</span>}
                   </button>
                 ))}
