@@ -440,7 +440,7 @@ export default function HomePage() {
                 const previews: any[] = (data as any)?.galleryPreviews?.[galleryId] || []
 
                 return (
-                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push(`/gallery/${encodeURIComponent(galleryId)}`)}>
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push('/blessings')}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{title}</p>
@@ -480,7 +480,7 @@ export default function HomePage() {
 
               if (type === 'blessings') {
                 return (
-                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push(`/gallery/${encodeURIComponent(galleryId)}`)}>
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push('/blessings')}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{blessingsTitle}</p>
@@ -612,7 +612,7 @@ export default function HomePage() {
 
               if (type === 'gift') {
                 return (
-                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push(`/gallery/${encodeURIComponent(galleryId)}`)}>
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push('/blessings')}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{giftLabel}</p>
