@@ -404,7 +404,6 @@ export default function AdminApp({
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingBlessingsCount, setPendingBlessingsCount] = useState(0)
   const [pendingPhotosCount, setPendingPhotosCount] = useState(0)
-  const [pendingByGallery, setPendingByGallery] = useState<Record<string, number>>({})
 
   // blessings manage (approved)
   const [approvedBlessings, setApprovedBlessings] = useState<any[]>([])
@@ -428,19 +427,131 @@ export default function AdminApp({
   const [galleryMsg, setGalleryMsg] = useState<string | null>(null)
   const [pendingMedia, setPendingMedia] = useState<any[]>([])
   const [approvedMedia, setApprovedMedia] = useState<any[]>([])
+  // Selection + download (admin gallery only)
+  const DIRECT_MAX = 8
+  const ZIP_MAX = 2000
+
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
+
+  const clearSelected = () => setSelected({})
+
+  const toggleSelected = (id: string) => {
+    setSelected(prev => {
+      const next = { ...prev }
+      if (next[id]) {
+        delete next[id]
+        return next
+      }
+      if (Object.keys(next).length >= ZIP_MAX) {
+        setError(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
+        return next
+      }
+      next[id] = true
+      return next
+    })
+  }
+
+  const selectAllApproved = () => {
+    setError('')
+    const all = approvedMedia.slice(0, ZIP_MAX)
+    const next: Record<string, boolean> = {}
+    for (const it of all) next[it.id] = true
+    setSelected(next)
+    if (approvedMedia.length > ZIP_MAX) setError(`בוצעה בחירה של ${ZIP_MAX} תמונות (מגבלת בטיחות)`)
+  }
+
+
+  const downloadSelectedDirect = async () => {
+    try {
+      setError('')
+      setMessage('')
+      const ids = Object.keys(selected)
+      if (ids.length === 0) return
+      if (ids.length > DIRECT_MAX) return downloadSelectedZip()
+
+      // Download sequentially (some browsers block too many parallel downloads)
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const it = approvedMedia.find(x => x.id === id)
+        if (!it?.public_url) continue
+        const base = `activebar_${String(i + 1).padStart(2, '0')}`
+        await triggerDownload(it.public_url, base)
+        await new Promise(r => setTimeout(r, 250))
+      }
+
+      setMessage('✅ ההורדות התחילו')
+      clearSelected()
+      setSelectMode(false)
+    } catch (e: any) {
+      setError(e?.message || 'שגיאה בהורדה')
+    }
+  }
+
+  const downloadSelectedZip = async () => {
+    try {
+      setError('')
+      setMessage('')
+      const ids = Object.keys(selected)
+      if (ids.length === 0) return
+
+      const JSZipMod: any = await import('jszip')
+      const zip = new (JSZipMod.default || JSZipMod)()
+
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const it = approvedMedia.find(x => x.id === id)
+        if (!it?.public_url) continue
+        const res = await fetch(it.public_url)
+        const blob = await res.blob()
+        const ext =
+          blob.type === 'image/png' ? 'png' :
+          blob.type === 'image/webp' ? 'webp' :
+          blob.type === 'image/jpeg' ? 'jpg' : 'jpg'
+        const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
+        zip.file(name, blob)
+      }
+
+      const out = await zip.generateAsync({ type: 'blob' })
+      const href = URL.createObjectURL(out)
+      const a = document.createElement('a')
+      a.href = href
+      a.download = `activebar_gallery_${selectedGallery || 'selected'}.zip`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(href)
+
+      setMessage('✅ הורדת ZIP התחילה')
+      clearSelected()
+      setSelectMode(false)
+    } catch (e: any) {
+      setError(e?.message || 'שגיאה בהורדת ZIP')
+    }
+  }
   const [hoursToOpen, setHoursToOpen] = useState<number>(8)
 
 
-  async function triggerDownload(url: string) {
+  async function triggerDownload(url: string, filenameBase?: string) {
     try {
       const res = await fetch(url)
       const blob = await res.blob()
       const blobUrl = URL.createObjectURL(blob)
 
-      const fileName = (url.split('/').pop() || 'image').split('?')[0] || 'image'
+      const ext =
+        blob.type === 'image/png' ? 'png' :
+        blob.type === 'image/webp' ? 'webp' :
+        blob.type === 'image/jpeg' ? 'jpg' : 'jpg'
+
+      const safeBase = (filenameBase || (url.split('/').pop() || 'activebar').split('?')[0] || 'activebar')
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9_\-]+/g, '_')
+        .slice(0, 60) || 'activebar'
+
       const a = document.createElement('a')
       a.href = blobUrl
-      a.download = fileName
+      a.download = `${safeBase}.${ext}`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -936,21 +1047,6 @@ async function loadBlocks() {
       const rows = res.galleries || []
       setGalleries(rows)
       if (!selectedGalleryId && rows[0]?.id) setSelectedGalleryId(rows[0].id)
-
-      // Pending counts per gallery (badge on buttons)
-      try {
-        const p = await jfetch('/api/admin/media-items?status=pending', { method: 'GET' })
-        const items = p.items || []
-        const map: Record<string, number> = {}
-        for (const it of items) {
-          const gid = (it as any).gallery_id || (it as any).galleryId || (it as any).gallery?.id
-          if (!gid) continue
-          map[gid] = (map[gid] || 0) + 1
-        }
-        setPendingByGallery(map)
-      } catch (e: any) {
-        // ignore (badges are nice-to-have)
-      }
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת גלריות'))
     }
@@ -2297,6 +2393,8 @@ async function loadBlocks() {
                     onClick={() => {
                       setSelectedGalleryId(g.id)
                       setGalleryMsg(null)
+                      setSelectMode(false)
+                      clearSelected()
                       loadPendingMedia(g.id)
                       loadApprovedMedia(g.id)
                     }}
@@ -2407,24 +2505,90 @@ async function loadBlocks() {
                     {pendingMedia.length === 0 && <p className="text-sm text-zinc-600 text-right">אין תמונות ממתינות.</p>}
 
                     <div className="mt-6 border-t border-zinc-200 pt-4">
-                      <div className="flex items-center justify-between">
-                        <Button variant="ghost" onClick={() => loadApprovedMedia(g.id)} disabled={galleryBusy}>
-                          רענן מאושרות
-                        </Button>
+                      <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
+                        <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+                          <Button variant="ghost" onClick={() => loadApprovedMedia(g.id)} disabled={galleryBusy}>
+                            רענן מאושרות
+                          </Button>
+
+                          {!selectMode ? (
+                            <Button
+                              variant="ghost"
+                              onClick={() => {
+                                setError('')
+                                setMessage('')
+                                clearSelected()
+                                setSelectMode(true)
+                              }}
+                              disabled={galleryBusy}
+                            >
+                              בחר תמונות
+                            </Button>
+                          ) : (
+                            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+                              <Button
+                                onClick={selectedCount <= DIRECT_MAX ? downloadSelectedDirect : downloadSelectedZip}
+                                disabled={galleryBusy || selectedCount === 0}
+                              >
+                                {selectedCount <= DIRECT_MAX
+                                  ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})`
+                                  : `הורד ZIP (${selectedCount})`}
+                              </Button>
+
+                              <Button variant="ghost" onClick={selectAllApproved} disabled={galleryBusy}>
+                                בחר הכל
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                onClick={() => {
+                                  setSelectMode(false)
+                                  clearSelected()
+                                  setError('')
+                                  setMessage('')
+                                }}
+                                disabled={galleryBusy}
+                              >
+                                ביטול
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+
                         <div className="text-sm text-zinc-600 text-right">
                           מאושרות: <b>{approvedMedia.length}</b>
                         </div>
                       </div>
+
+                      {selectMode && (
+                        <p className="mt-1 text-xs text-zinc-500 text-right">
+                          1–{DIRECT_MAX} תמונות יורדות בהורדה ישירה. מעל {DIRECT_MAX} יורד ZIP (ללא הגבלה).
+                        </p>
+                      )}
 
                       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {approvedMedia.map((p: any) => (
                           <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
                             <button
                               className="relative block aspect-square w-full bg-zinc-50"
-                              onClick={() => p.url && setLightbox(p.url)}
+                              onClick={() => {
+                                if (selectMode) return toggleSelected(p.id)
+                                if (p.url) setLightbox(p.url)
+                              }}
                               type="button"
                             >
                               <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+
+                              {selectMode ? (
+                                <div className="absolute left-2 top-2">
+                                  <div
+                                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[p.id] ? 'font-bold' : ''}`}
+                                    aria-hidden
+                                  >
+                                    {selected[p.id] ? '✓' : ''}
+                                  </div>
+                                </div>
+                              ) : null}
                             </button>
 
                             <div className="p-3 flex gap-2 justify-end">

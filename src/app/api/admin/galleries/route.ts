@@ -57,7 +57,19 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json({ ok: true, galleries })
+  // Pending count per gallery (unapproved media)
+  const galleriesWithCounts = await Promise.all(
+    galleries.map(async (g: any) => {
+      const { count } = await supabaseServiceRole
+        .from('media_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('gallery_id', g.id)
+        .eq('is_approved', false)
+      return { ...g, pending_count: count || 0 }
+    })
+  )
+
+  return NextResponse.json({ ok: true, galleries: galleriesWithCounts })
 }
 
 export async function PUT(req: NextRequest) {
