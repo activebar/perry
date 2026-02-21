@@ -304,7 +304,7 @@ function onThumbClick(it: Item) {
         <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
           {!selectMode ? (
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => {
                 setErr(null)
                 setMsg(null)
@@ -321,7 +321,7 @@ function onThumbClick(it: Item) {
                 {zipBusy ? 'מכין ZIP…' : `הורד ZIP (${selectedCount()}/${MAX_SELECT})`}
               </Button>
               <Button
-                variant="outline"
+                variant="ghost"
                 onClick={() => {
                   setSelectMode(false)
                   clearSelected()
