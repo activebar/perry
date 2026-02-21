@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Container, Card, Button } from '@/components/ui'
 import { computeEventPhase } from '@/lib/db'
 import HeroRotator from '@/components/hero-rotator'
@@ -146,6 +147,7 @@ function HomeLinkMeta({
 }
 
 export default function HomePage() {
+  const router = useRouter()
   const [data, setData] = useState<HomePayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
@@ -438,7 +440,7 @@ export default function HomePage() {
                 const previews: any[] = (data as any)?.galleryPreviews?.[galleryId] || []
 
                 return (
-                  <Card key={b.id} dir="rtl">
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push(`/gallery/${encodeURIComponent(galleryId)}`)}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{title}</p>
@@ -456,14 +458,18 @@ export default function HomePage() {
                         {previews.slice(0, Math.max(1, Number(settings?.home_gallery_preview_limit || 6))).map((it: any) => {
                           const url = String(it.thumb_url || it.url || '')
                           return (
-                            <button
+                            <div
                               key={String(it.id)}
-                              type="button"
                               className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-200"
-                              onClick={() => url && setLightbox({ url: String(it.url || url), isVideo: false })}
                             >
-                              {url ? <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
-                            </button>
+                              {url ? (
+                                <img
+                                  src={url}
+                                  alt=""
+                                  className={"absolute inset-0 h-full w-full object-cover " + (it.crop_position === 'top' ? 'object-top' : 'object-center')}
+                                />
+                              ) : null}
+                            </div>
                           )
                         })}
                       </div>
@@ -474,7 +480,7 @@ export default function HomePage() {
 
               if (type === 'blessings') {
                 return (
-                  <Card key={b.id} dir="rtl">
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push(`/gallery/${encodeURIComponent(galleryId)}`)}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{blessingsTitle}</p>
@@ -606,7 +612,7 @@ export default function HomePage() {
 
               if (type === 'gift') {
                 return (
-                  <Card key={b.id} dir="rtl">
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push(`/gallery/${encodeURIComponent(galleryId)}`)}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{giftLabel}</p>

@@ -35,13 +35,14 @@ async function fetchGalleryPreviews(blocks: any[]) {
 
   const { data, error } = await sb
     .from('media_items')
-    .select('id, gallery_id, url, thumb_url, public_url, storage_path, created_at, kind, is_approved')
+    .select('id, gallery_id, url, thumb_url, public_url, storage_path, created_at, kind, is_approved, crop_position')
     .eq('event_id', getServerEnv().EVENT_SLUG)
-    .eq('kind', 'gallery')
+    // IMPORTANT: Some rows use kind='galleries' (legacy). Show both.
+    .in('kind', ['gallery', 'galleries'])
     .eq('is_approved', true)
     .in('gallery_id', galleryIds as any)
     .order('created_at', { ascending: false })
-    .limit(300)
+    .limit(600)
 
   if (error || !data) return {}
 
@@ -50,23 +51,38 @@ async function fetchGalleryPreviews(blocks: any[]) {
   for (const b of galleryBlocks) {
     const gid = (b?.config as any)?.gallery_id
     const lim = Number((b?.config as any)?.limit ?? 12)
-    if (typeof gid === 'string' && gid) limitById[gid] = Number.isFinite(lim) ? Math.max(0, Math.min(48, lim)) : 12
+    if (typeof gid === 'string' && gid) {
+      limitById[gid] = Number.isFinite(lim) ? Math.max(0, Math.min(48, lim)) : 12
+    }
   }
 
-  const out: Record<string, any[]> = {}
+  // Group all items by gallery first
+  const grouped: Record<string, any[]> = {}
   for (const it of data as any[]) {
     const gid = String((it as any).gallery_id || '')
     if (!gid) continue
     const url = String((it as any).thumb_url || (it as any).url || (it as any).public_url || '')
     if (!url) continue
-    if (!out[gid]) out[gid] = []
-    if (out[gid].length >= (limitById[gid] ?? 12)) continue
-    out[gid].push({
+    if (!grouped[gid]) grouped[gid] = []
+    grouped[gid].push({
       id: (it as any).id,
       url,
-      created_at: (it as any).created_at
+      created_at: (it as any).created_at,
+      crop_position: (it as any).crop_position ?? null
     })
   }
+
+  // Randomize per gallery on every request (so refresh shows different photos)
+  const out: Record<string, any[]> = {}
+  for (const gid of Object.keys(grouped)) {
+    const arr = grouped[gid] || []
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    out[gid] = arr.slice(0, limitById[gid] ?? 12)
+  }
+
   return out
 }
 

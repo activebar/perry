@@ -134,7 +134,8 @@ export function GalleryClient({
       url: x.url || x.media_url || x.public_url || '',
       created_at: x.created_at,
       editable_until: x.editable_until ?? null,
-      is_approved: x.is_approved ?? true
+      is_approved: x.is_approved ?? true,
+      crop_position: x.crop_position ?? null
     }))
   )
   const [files, setFiles] = useState<File[]>([])
