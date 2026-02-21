@@ -147,30 +147,27 @@ export default function GalleryClient({
 
   // Select + ZIP (client-side)
     const DIRECT_MAX = 8
-    const ZIP_MAX = 500
+    const ZIP_MAX = 20
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [zipBusy, setZipBusy] = useState(false)
 
   const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
 
-  const clearSelected = () => {
-      setSelected({})
-    }
+    const isIOSSafari = useMemo(() => {
+      if (typeof navigator === 'undefined') return false
+      const ua = navigator.userAgent || ''
+      const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+      const safari = /^((?!chrome|android).)*safari/i.test(ua)
+      return iOS && safari
+    }, [])
 
-    const selectAll = () => {
-      setErr(null)
-      setMsg(null)
-      const ids = (feed || []).map(x => x.id).filter(Boolean)
-      if (ids.length === 0) return
-      if (ids.length > ZIP_MAX) {
-        setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
-        return
-      }
-      const next: Record<string, boolean> = {}
-      for (const id of ids) next[id] = true
-      setSelected(next)
-    }
+    const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
+
+
+  const clearSelected = () => {
+    setSelected({})
+  }
 
   const toggleSelected = (id: string) => {
     setErr(null)
@@ -197,24 +194,38 @@ export default function GalleryClient({
     }
     setLightbox(it.url)
   }
+
     const downloadSelectedDirect = async () => {
       try {
         setErr(null)
         setMsg(null)
         const ids = Object.keys(selected)
         if (ids.length === 0) return
-        if (ids.length > ZIP_MAX) {
-          setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
-          return
-        }
+
         setZipBusy(true)
 
+        // Direct download (1-8): fetch each file and force a short filename: activebar_01.jpg ...
         for (let i = 0; i < ids.length; i++) {
           const id = ids[i]
           const it = items.find(x => x.id === id)
           if (!it?.url) continue
-          await downloadUrl(it.url)
-          // small delay so browsers don't block multiple downloads
+
+          const res = await fetch(it.url)
+          if (!res.ok) throw new Error('download failed')
+          const blob = await res.blob()
+          const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+          const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
+
+          const href = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = href
+          a.download = name
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          URL.revokeObjectURL(href)
+
+          // small delay so browsers don't block multiple downloads aggressively
           await new Promise(r => setTimeout(r, 250))
         }
 
@@ -228,9 +239,7 @@ export default function GalleryClient({
       }
     }
 
-
-
-  const downloadSelectedZip = async () => {
+    const downloadSelectedZip = async () => {
     try {
       setErr(null)
       setMsg(null)
@@ -247,14 +256,14 @@ export default function GalleryClient({
         const res = await fetch(it.url)
         const blob = await res.blob()
         const ext = blob.type === 'image/png' ? 'png' : 'jpg'
-        zip.file(`image_${i + 1}.${ext}`, blob)
+        zip.file(`activebar_${String(i + 1).padStart(2, '0')}.${ext}`, blob)
       }
 
       const out = await zip.generateAsync({ type: 'blob' })
       const href = URL.createObjectURL(out)
       const a = document.createElement('a')
       a.href = href
-      a.download = `gallery_${galleryId}_selected.zip`
+      a.download = `activebar_${(galleryId || '').slice(0, 6)}.zip`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -368,11 +377,8 @@ export default function GalleryClient({
             </Button>
           ) : (
             <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
-              <Button variant="ghost" onClick={selectAll} disabled={zipBusy}>
-                  בחר הכל
-                </Button>
-                <Button onClick={selectedCount <= DIRECT_MAX ? downloadSelectedDirect : downloadSelectedZip} disabled={zipBusy || selectedCount === 0}>
-                {zipBusy ? (selectedCount <= DIRECT_MAX ? 'מוריד…' : 'מכין ZIP…') : (selectedCount <= DIRECT_MAX ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})` : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
+              <Button onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip} disabled={zipBusy || selectedCount === 0}>
+                {zipBusy ? (useDirect ? 'מוריד…' : 'מכין ZIP…') : (selectedCount <= DIRECT_MAX ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})` : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
               </Button>
               <Button
                 variant="ghost"
