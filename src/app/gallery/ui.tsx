@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo, useRef, useState } from 'react'
+import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
 type Item = {
@@ -147,6 +148,81 @@ export function GalleryClient({
   const pickerRef = useRef<HTMLInputElement | null>(null)
 
   const feed = useMemo(() => (items || []).filter(i => i.url), [items])
+
+// Select + ZIP (up to 8)
+const MAX_ZIP = 8
+const [selectMode, setSelectMode] = useState(false)
+const [zipBusy, setZipBusy] = useState(false)
+const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+const selectedCount = selectedIds.length
+const isSelected = (id: string) => selectedIds.includes(id)
+
+function clearSelected() {
+  setSelectedIds([])
+}
+
+function toggleSelected(id: string) {
+  setSelectedIds(prev => {
+    if (prev.includes(id)) return prev.filter(x => x !== id)
+    if (prev.length >= MAX_ZIP) {
+      setMsg(`אפשר לבחור עד ${MAX_ZIP} תמונות`)
+      return prev
+    }
+    return [...prev, id]
+  })
+}
+
+async function downloadSelectedZip() {
+  try {
+    setErr(null)
+    setMsg(null)
+    if (selectedIds.length === 0) {
+      setMsg('לא נבחרו תמונות')
+      return
+    }
+    setZipBusy(true)
+
+    const zip = new JSZip()
+    const picked = feed.filter(it => selectedIds.includes(it.id)).slice(0, MAX_ZIP)
+
+    // Fetch blobs sequentially to reduce memory spikes on mobile
+    for (let i = 0; i < picked.length; i++) {
+      const it = picked[i]
+      const res = await fetch(it.url)
+      if (!res.ok) throw new Error(`Failed to fetch image (${res.status})`)
+      const blob = await res.blob()
+      const ext = (blob.type || '').includes('png') ? 'png' : 'jpg'
+      zip.file(`image_${i + 1}_${it.id}.${ext}`, blob)
+    }
+
+    const out = await zip.generateAsync({ type: 'blob' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(out)
+    a.download = `gallery_${galleryId}_selected.zip`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+
+    // Reset for "2nd round"
+    clearSelected()
+    setSelectMode(false)
+    setMsg('ה-ZIP מוכן להורדה')
+  } catch (e: any) {
+    setErr(e?.message || 'ZIP failed')
+  } finally {
+    setZipBusy(false)
+  }
+}
+
+function onThumbClick(it: Item) {
+  if (selectMode) {
+    toggleSelected(it.id)
+    return
+  }
+  setLightbox(it.url)
+}
 
   async function shareItem(it: Item) {
     const short = await ensureShortLinkForMedia(it.id)
@@ -323,10 +399,10 @@ export function GalleryClient({
               {selectMode ? (
                 <div className="absolute left-2 top-2">
                   <div
-                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
+                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${isSelected(it.id) ? 'font-bold' : ''}`}
                     aria-hidden
                   >
-                    {selected[it.id] ? '✓' : ''}
+                    {isSelected(it.id) ? '✓' : ''}
                   </div>
                 </div>
               ) : null}
