@@ -156,9 +156,9 @@ export default async function GalleryIndexPage() {
                       {previews.length ? (
                         <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
                           {previews.slice(0, previewLimit).map((u, idx) => (
-                            <div key={idx} className="w-full pt-[100%] overfoverflow-hidden rounded-lg bg-zinc-100">
+                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={u} alt="" className="h-full w-full object-contain bg-white" />
+                              <img src={u} alt="" className="h-full w-full object-cover" />
                             </div>
                           ))}
                         </div>
