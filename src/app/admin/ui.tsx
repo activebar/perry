@@ -404,6 +404,7 @@ export default function AdminApp({
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingBlessingsCount, setPendingBlessingsCount] = useState(0)
   const [pendingPhotosCount, setPendingPhotosCount] = useState(0)
+  const [pendingByGallery, setPendingByGallery] = useState<Record<string, number>>({})
 
   // blessings manage (approved)
   const [approvedBlessings, setApprovedBlessings] = useState<any[]>([])
@@ -935,6 +936,21 @@ async function loadBlocks() {
       const rows = res.galleries || []
       setGalleries(rows)
       if (!selectedGalleryId && rows[0]?.id) setSelectedGalleryId(rows[0].id)
+
+      // Pending counts per gallery (badge on buttons)
+      try {
+        const p = await jfetch('/api/admin/media-items?status=pending', { method: 'GET' })
+        const items = p.items || []
+        const map: Record<string, number> = {}
+        for (const it of items) {
+          const gid = (it as any).gallery_id || (it as any).galleryId || (it as any).gallery?.id
+          if (!gid) continue
+          map[gid] = (map[gid] || 0) + 1
+        }
+        setPendingByGallery(map)
+      } catch (e: any) {
+        // ignore (badges are nice-to-have)
+      }
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת גלריות'))
     }
