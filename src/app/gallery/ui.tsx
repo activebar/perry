@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useMemo, useRef, useState } from 'react'
-import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
 type Item = {
@@ -120,7 +119,7 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
   return finalBlob
 }
 
-export default function GalleryClient({
+export function GalleryClient({
   initialItems,
   galleryId,
   uploadEnabled
@@ -144,141 +143,6 @@ export default function GalleryClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
-
-  // Select + ZIP (client-side)
-    const DIRECT_MAX = 8
-    const ZIP_MAX = 20
-  const [selectMode, setSelectMode] = useState(false)
-  const [selected, setSelected] = useState<Record<string, boolean>>({})
-  const [zipBusy, setZipBusy] = useState(false)
-
-  const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
-
-    const isIOSSafari = useMemo(() => {
-      if (typeof navigator === 'undefined') return false
-      const ua = navigator.userAgent || ''
-      const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
-      const safari = /^((?!chrome|android).)*safari/i.test(ua)
-      return iOS && safari
-    }, [])
-
-    const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
-
-
-  const clearSelected = () => {
-    setSelected({})
-  }
-
-  const toggleSelected = (id: string) => {
-    setErr(null)
-    setMsg(null)
-    setSelected(prev => {
-      const next = { ...prev }
-      if (next[id]) {
-        delete next[id]
-        return next
-      }
-      if (Object.keys(next).length >= ZIP_MAX) {
-        setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
-        return next
-      }
-      next[id] = true
-      return next
-    })
-  }
-
-  const onThumbClick = (it: Item) => {
-    if (selectMode) {
-      toggleSelected(it.id)
-      return
-    }
-    setLightbox(it.url)
-  }
-
-    const downloadSelectedDirect = async () => {
-      try {
-        setErr(null)
-        setMsg(null)
-        const ids = Object.keys(selected)
-        if (ids.length === 0) return
-
-        setZipBusy(true)
-
-        // Direct download (1-8): fetch each file and force a short filename: activebar_01.jpg ...
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i]
-          const it = items.find(x => x.id === id)
-          if (!it?.url) continue
-
-          const res = await fetch(it.url)
-          if (!res.ok) throw new Error('download failed')
-          const blob = await res.blob()
-          const ext = blob.type === 'image/png' ? 'png' : 'jpg'
-          const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
-
-          const href = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = href
-          a.download = name
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          URL.revokeObjectURL(href)
-
-          // small delay so browsers don't block multiple downloads aggressively
-          await new Promise(r => setTimeout(r, 250))
-        }
-
-        setMsg('✅ ההורדות התחילו')
-        clearSelected()
-        setSelectMode(false)
-      } catch (e: any) {
-        setErr(e?.message || 'שגיאה בהורדה')
-      } finally {
-        setZipBusy(false)
-      }
-    }
-
-    const downloadSelectedZip = async () => {
-    try {
-      setErr(null)
-      setMsg(null)
-      const ids = Object.keys(selected)
-      if (ids.length === 0) return
-
-      setZipBusy(true)
-      const zip = new JSZip()
-
-      for (let i = 0; i < ids.length; i++) {
-        const id = ids[i]
-        const it = items.find(x => x.id === id)
-        if (!it?.url) continue
-        const res = await fetch(it.url)
-        const blob = await res.blob()
-        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
-        zip.file(`activebar_${String(i + 1).padStart(2, '0')}.${ext}`, blob)
-      }
-
-      const out = await zip.generateAsync({ type: 'blob' })
-      const href = URL.createObjectURL(out)
-      const a = document.createElement('a')
-      a.href = href
-      a.download = `activebar_${(galleryId || '').slice(0, 6)}.zip`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(href)
-
-      setMsg('הורדת ZIP התחילה')
-      clearSelected()
-      setSelectMode(false)
-    } catch (e: any) {
-      setErr(e?.message || 'שגיאה בהורדת ZIP')
-    } finally {
-      setZipBusy(false)
-    }
-  }
-
 
   const pickerRef = useRef<HTMLInputElement | null>(null)
 
@@ -360,48 +224,6 @@ export default function GalleryClient({
           </div>
         </div>
 
-        {/* Select + ZIP */}
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
-          {!selectMode ? (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setErr(null)
-                setMsg(null)
-                clearSelected()
-                setSelectMode(true)
-              }}
-              disabled={zipBusy}
-            >
-              בחר תמונות
-            </Button>
-          ) : (
-            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
-              <Button onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip} disabled={zipBusy || selectedCount === 0}>
-                {zipBusy ? (useDirect ? 'מוריד…' : 'מכין ZIP…') : (selectedCount <= DIRECT_MAX ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})` : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setSelectMode(false)
-                  clearSelected()
-                  setErr(null)
-                  setMsg(null)
-                }}
-                disabled={zipBusy}
-              >
-                ביטול
-              </Button>
-            </div>
-          )}
-
-          {selectMode ? (
-            <p className="text-xs text-zinc-500 text-right">סמן עד {ZIP_MAX} תמונות. 1–{DIRECT_MAX} יורד ישיר, {DIRECT_MAX + 1}–{ZIP_MAX} יורד ZIP. אחרי הורדה אפשר לבחור שוב.</p>
-          ) : (
-            <span />
-          )}
-        </div>
-
         {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
         {msg && <p className="mt-2 text-sm text-zinc-700">{msg}</p>}
         {!uploadEnabled && <p className="mt-2 text-xs text-zinc-500">העלאה סגורה כעת.</p>}
@@ -451,36 +273,19 @@ export default function GalleryClient({
           <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
             <button
               className="relative block aspect-square w-full bg-zinc-50"
-              onClick={() => onThumbClick(it)}
+              onClick={() => setLightbox(it.url)}
               type="button"
             >
               <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
-
-              {selectMode ? (
-                <div className="absolute left-2 top-2">
-                  <div
-                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
-                    aria-hidden
-                  >
-                    {selected[it.id] ? '✓' : ''}
-                  </div>
-                </div>
-              ) : null}
             </button>
 
             <div className="p-3 flex gap-2">
-              {!selectMode ? (
-                <>
-                  <Button variant="ghost" onClick={() => shareItem(it)} type="button">
-                    שתף
-                  </Button>
-                  <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
-                    הורד
-                  </Button>
-                </>
-              ) : (
-                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
-              )}
+              <Button variant="ghost" onClick={() => shareItem(it)} type="button">
+                שתף
+              </Button>
+              <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
+                הורד
+              </Button>
             </div>
           </div>
         ))}
@@ -494,3 +299,5 @@ export default function GalleryClient({
     </div>
   )
 }
+
+export default GalleryClient
