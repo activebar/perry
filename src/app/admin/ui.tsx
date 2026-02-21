@@ -517,7 +517,7 @@ export default function AdminApp({
       const href = URL.createObjectURL(out)
       const a = document.createElement('a')
       a.href = href
-      a.download = `activebar_gallery_${selectedGallery || 'selected'}.zip`
+      a.download = `activebar_gallery_${selectedGalleryId || 'selected'}.zip`
       document.body.appendChild(a)
       a.click()
       a.remove()
