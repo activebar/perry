@@ -2393,8 +2393,11 @@ async function loadBlocks() {
             {/* Left: galleries list */}
             <div className="rounded-2xl border border-zinc-200 p-3">
               <div className="text-sm font-medium mb-1 text-right">גלריות</div>
-              <div className="text-xs text-zinc-500 mb-2 text-right">
-                ממתינות לאישור (סה"כ): <span className="font-semibold text-zinc-800">{totalPendingCount}</span>
+              <div className="mb-2 flex items-center justify-between" dir="rtl">
+                <div className="text-xs text-zinc-500">ממתינות לאישור (סה"כ)</div>
+                <span className="inline-flex items-center rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white">
+                  {totalPendingCount}
+                </span>
               </div>
               <div className="grid gap-2">
                 {galleries.map((g: any) => (
