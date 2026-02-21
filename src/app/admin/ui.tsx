@@ -466,7 +466,7 @@ export default function AdminApp({
   const downloadSelectedDirect = async () => {
     try {
       setErr('')
-      setMessage('')
+      setMsg('')
       const ids = Object.keys(selected)
       if (ids.length === 0) return
       if (ids.length > DIRECT_MAX) return downloadSelectedZip()
@@ -481,7 +481,7 @@ export default function AdminApp({
         await new Promise(r => setTimeout(r, 250))
       }
 
-      setMessage('✅ ההורדות התחילו')
+      setMsg('✅ ההורדות התחילו')
       clearSelected()
       setSelectMode(false)
     } catch (e: any) {
@@ -492,7 +492,7 @@ export default function AdminApp({
   const downloadSelectedZip = async () => {
     try {
       setErr('')
-      setMessage('')
+      setMsg('')
       const ids = Object.keys(selected)
       if (ids.length === 0) return
 
@@ -523,7 +523,7 @@ export default function AdminApp({
       a.remove()
       URL.revokeObjectURL(href)
 
-      setMessage('✅ הורדת ZIP התחילה')
+      setMsg('✅ הורדת ZIP התחילה')
       clearSelected()
       setSelectMode(false)
     } catch (e: any) {
@@ -2516,7 +2516,7 @@ async function loadBlocks() {
                               variant="ghost"
                               onClick={() => {
                                 setErr('')
-                                setMessage('')
+                                setMsg('')
                                 clearSelected()
                                 setSelectMode(true)
                               }}
@@ -2545,7 +2545,7 @@ async function loadBlocks() {
                                   setSelectMode(false)
                                   clearSelected()
                                   setErr('')
-                                  setMessage('')
+                                  setMsg('')
                                 }}
                                 disabled={galleryBusy}
                               >
