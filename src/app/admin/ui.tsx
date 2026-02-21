@@ -445,7 +445,7 @@ export default function AdminApp({
         return next
       }
       if (Object.keys(next).length >= ZIP_MAX) {
-        setError(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
+        setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
         return next
       }
       next[id] = true
@@ -454,18 +454,18 @@ export default function AdminApp({
   }
 
   const selectAllApproved = () => {
-    setError('')
+    setErr('')
     const all = approvedMedia.slice(0, ZIP_MAX)
     const next: Record<string, boolean> = {}
     for (const it of all) next[it.id] = true
     setSelected(next)
-    if (approvedMedia.length > ZIP_MAX) setError(`בוצעה בחירה של ${ZIP_MAX} תמונות (מגבלת בטיחות)`)
+    if (approvedMedia.length > ZIP_MAX) setErr(`בוצעה בחירה של ${ZIP_MAX} תמונות (מגבלת בטיחות)`)
   }
 
 
   const downloadSelectedDirect = async () => {
     try {
-      setError('')
+      setErr('')
       setMessage('')
       const ids = Object.keys(selected)
       if (ids.length === 0) return
@@ -485,13 +485,13 @@ export default function AdminApp({
       clearSelected()
       setSelectMode(false)
     } catch (e: any) {
-      setError(e?.message || 'שגיאה בהורדה')
+      setErr(e?.message || 'שגיאה בהורדה')
     }
   }
 
   const downloadSelectedZip = async () => {
     try {
-      setError('')
+      setErr('')
       setMessage('')
       const ids = Object.keys(selected)
       if (ids.length === 0) return
@@ -527,7 +527,7 @@ export default function AdminApp({
       clearSelected()
       setSelectMode(false)
     } catch (e: any) {
-      setError(e?.message || 'שגיאה בהורדת ZIP')
+      setErr(e?.message || 'שגיאה בהורדת ZIP')
     }
   }
   const [hoursToOpen, setHoursToOpen] = useState<number>(8)
@@ -2515,7 +2515,7 @@ async function loadBlocks() {
                             <Button
                               variant="ghost"
                               onClick={() => {
-                                setError('')
+                                setErr('')
                                 setMessage('')
                                 clearSelected()
                                 setSelectMode(true)
@@ -2544,7 +2544,7 @@ async function loadBlocks() {
                                 onClick={() => {
                                   setSelectMode(false)
                                   clearSelected()
-                                  setError('')
+                                  setErr('')
                                   setMessage('')
                                 }}
                                 disabled={galleryBusy}
