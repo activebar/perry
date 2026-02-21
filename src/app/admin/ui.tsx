@@ -1221,10 +1221,10 @@ async function loadBlocks() {
 
             
             <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{activeEventId || 'IDO'}</span></p>
-{(pendingBlessingsCount + alleriesTotalPending) > 0 && (
+{(pendingBlessingsCount + galleriesTotalPending) > 0 && (
               <div className="mt-1 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {alleriesTotalPending}</span>
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {galleriesTotalPending}</span>
               </div>
             )}
 
