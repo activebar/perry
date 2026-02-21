@@ -7,15 +7,6 @@ import { getServerEnv } from '@/lib/env'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-function shuffle<T>(arr: T[]) {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
 async function getLatestSettingsRow() {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
@@ -84,7 +75,7 @@ export default async function GalleryIndexPage() {
 
   const visibleItems = blockItems.filter((g) => activeSet.has(g.galleryId))
 
-  // Previews (randomized selection, only on /gallery + home)
+  // Previews
   const previewByGalleryId = new Map<string, string[]>()
 
   const settings = await getLatestSettingsRow()
@@ -105,20 +96,16 @@ export default async function GalleryIndexPage() {
       .order('created_at', { ascending: false })
       .limit(Math.min(600, visibleItems.length * 40))
 
-    const MAX_COLLECT_PER_GALLERY = 80
     for (const it of recent || []) {
       const gid = String((it as any).gallery_id || '')
       if (!gid) continue
       const u = (it as any).thumb_url || (it as any).url
       if (!u) continue
       const arr = previewByGalleryId.get(gid) || []
-      if (arr.length < MAX_COLLECT_PER_GALLERY) arr.push(u)
-      previewByGalleryId.set(gid, arr)
-    }
-
-    // Randomize per gallery and then keep the configured previewLimit
-    for (const [gid, arr] of previewByGalleryId.entries()) {
-      previewByGalleryId.set(gid, shuffle(arr).slice(0, previewLimit))
+      if (arr.length < previewLimit) {
+        arr.push(u)
+        previewByGalleryId.set(gid, arr)
+      }
     }
   }
 
@@ -171,12 +158,7 @@ export default async function GalleryIndexPage() {
                           {previews.slice(0, previewLimit).map((u, idx) => (
                             <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={u}
-                                alt=""
-                                className="h-full w-full object-contain"
-                                style={{ objectPosition: 'center' }}
-                              />
+                              <img src={u} alt="" className="h-full w-full object-contain bg-white" />
                             </div>
                           ))}
                         </div>

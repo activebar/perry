@@ -422,20 +422,15 @@ export default function AdminApp({
   const [lightbox, setLightbox] = useState<string | null>(null)
   // galleries management (new)
   const [galleries, setGalleries] = useState<any[]>([])
+  const [galleriesTotalPending, setGalleriesTotalPending] = useState<number>(0)
   const [selectedGalleryId, setSelectedGalleryId] = useState<string>('')
   const [galleryBusy, setGalleryBusy] = useState(false)
   const [galleryMsg, setGalleryMsg] = useState<string | null>(null)
   const [pendingMedia, setPendingMedia] = useState<any[]>([])
   const [approvedMedia, setApprovedMedia] = useState<any[]>([])
-
-  // Total pending across all galleries (visible in the galleries list)
-  const totalPendingCount = useMemo(() => {
-    return (galleries || []).reduce((sum: number, g: any) => sum + (Number(g?.pending_count) || 0), 0)
-  }, [galleries])
   // Selection + download (admin gallery only)
-  // 1–8 => direct downloads, 9+ => ZIP
   const DIRECT_MAX = 8
-  const ZIP_MAX = 9999
+  const ZIP_MAX = 2000
 
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
@@ -481,10 +476,9 @@ export default function AdminApp({
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i]
         const it = approvedMedia.find(x => x.id === id)
-        const url = String(it?.url || it?.public_url || '')
-        if (!url) continue
+        if (!it?.public_url) continue
         const base = `activebar_${String(i + 1).padStart(2, '0')}`
-        await triggerDownload(url, base)
+        await triggerDownload(it.public_url, base)
         await new Promise(r => setTimeout(r, 250))
       }
 
@@ -509,9 +503,8 @@ export default function AdminApp({
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i]
         const it = approvedMedia.find(x => x.id === id)
-        const url = String(it?.url || it?.public_url || '')
-        if (!url) continue
-        const res = await fetch(url)
+        if (!it?.public_url) continue
+        const res = await fetch(it.public_url)
         const blob = await res.blob()
         const ext =
           blob.type === 'image/png' ? 'png' :
@@ -2392,13 +2385,7 @@ async function loadBlocks() {
           <div className="mt-4 grid gap-4 lg:grid-cols-[260px_1fr]">
             {/* Left: galleries list */}
             <div className="rounded-2xl border border-zinc-200 p-3">
-              <div className="text-sm font-medium mb-1 text-right">גלריות</div>
-              <div className="mb-2 flex items-center justify-between" dir="rtl">
-                <div className="text-xs text-zinc-500">ממתינות לאישור (סה"כ)</div>
-                <span className="inline-flex items-center rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-semibold text-white">
-                  {totalPendingCount}
-                </span>
-              </div>
+              <div className="text-sm font-medium mb-2 text-right">גלריות</div>
               <div className="grid gap-2">
                 {galleries.map((g: any) => (
                   <button
@@ -2417,19 +2404,8 @@ async function loadBlocks() {
                       (selectedGalleryId === g.id ? 'border-black bg-zinc-50' : 'border-zinc-200 bg-white')
                     }
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {(Number(g?.pending_count) || 0) > 0 && (
-                          <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                            {Number(g.pending_count)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        {g.display_title || g.title || g.slug || g.id}
-                        {!g.upload_enabled && <span className="mr-2 text-xs text-zinc-500">(סגור)</span>}
-                      </div>
-                    </div>
+                    {g.display_title || g.title || g.slug || g.id}
+                    {!g.upload_enabled && <span className="mr-2 text-xs text-zinc-500">(סגור)</span>}
                   </button>
                 ))}
                 {galleries.length === 0 && <p className="text-sm text-zinc-600 text-right">אין גלריות.</p>}

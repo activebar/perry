@@ -69,7 +69,9 @@ export async function GET(req: NextRequest) {
     })
   )
 
-  return NextResponse.json({ ok: true, galleries: galleriesWithCounts })
+  const total_pending = galleriesWithCounts.reduce((sum: number, g: any) => sum + (g.pending_count || 0), 0)
+
+  return NextResponse.json({ ok: true, galleries: galleriesWithCounts, total_pending })
 }
 
 export async function PUT(req: NextRequest) {
