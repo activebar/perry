@@ -1221,12 +1221,12 @@ async function loadBlocks() {
 
             
             <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{activeEventId || 'IDO'}</span></p>
-{(pendingBlessingsCount + galleriesTotalPending) > 0 && (
-              <div className="mt-1 flex flex-wrap gap-2 text-xs">
+{(
+            <div className="mt-1 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {galleriesTotalPending}</span>
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">תמונות ממתינות: {pendingPhotosCount}</span>
               </div>
-            )}
+          )}
 
             {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
           </div>
@@ -2296,11 +2296,11 @@ async function loadBlocks() {
             <div className="mt-4 grid gap-2 rounded-2xl border border-zinc-200 p-4">
               <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-right">הגדרות גלריות</p>
-                  {galleriesTotalPending > 0 ? (
-                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
-                      ממתינות לאישור: {galleriesTotalPending}
-                    </span>
-                  ) : null}
+                  {(
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                  ממתינות לאישור: {galleriesTotalPending}
+                </span>
+              )}
                 </div>
 
               <Input

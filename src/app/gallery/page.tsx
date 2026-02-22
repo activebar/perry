@@ -4,6 +4,17 @@ import { Container, Card } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
 
+function shuffleInPlace<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = arr[i]
+    arr[i] = arr[j]
+    arr[j] = tmp
+  }
+  return arr
+}
+
+
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
