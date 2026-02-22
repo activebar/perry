@@ -7,24 +7,26 @@ import { getDeviceId } from '@/lib/device'
 export const dynamic = 'force-dynamic'
 
 type Payload = {
+  mode?: string
   text?: string
   closeness?: string
   style?: string
   writer?: string
 }
 
-async function getSetting(eventId: string, key: string) {
+async function getLatestSettingsRow(eventId: string) {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
     .from('event_settings')
-    .select('value_json')
+    .select('*')
     .eq('event_id', eventId)
-    .eq('key', key)
+    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
-    .maybeSingle()
+    .single()
 
   if (error) throw error
-  return data?.value_json
+  return data as any
 }
 
 async function bumpDailyUsage(eventId: string, deviceId: string, limit: number) {
@@ -56,7 +58,7 @@ async function bumpDailyUsage(eventId: string, deviceId: string, limit: number) 
       event_id: eventId,
       device_id: deviceId,
       day,
-      count: nextCount,
+      count: nextCount
     })
     if (insErr) throw insErr
   }
@@ -64,18 +66,18 @@ async function bumpDailyUsage(eventId: string, deviceId: string, limit: number) 
   return { ok: true, used: nextCount, day }
 }
 
-async function callOpenAI(apiKey: string, model: string, prompt: string) {
+async function callOpenAI(opts: { apiKey: string; model: string; prompt: string }) {
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${opts.apiKey}`
     },
     body: JSON.stringify({
-      model,
-      input: prompt,
-      max_output_tokens: 350,
-    }),
+      model: opts.model,
+      input: opts.prompt,
+      max_output_tokens: 350
+    })
   })
 
   const data = await res.json()
@@ -106,7 +108,9 @@ async function callOpenAI(apiKey: string, model: string, prompt: string) {
 export async function POST(req: NextRequest) {
   try {
     const env = getServerEnv()
-    if (!env.OPENAI_API_KEY) return NextResponse.json({ error: 'missing_openai_key' }, { status: 400 })
+    if (!env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: 'missing_openai_key' }, { status: 400 })
+    }
 
     const eventId = getEventId()
     const deviceId = getDeviceId() || 'unknown'
@@ -115,19 +119,22 @@ export async function POST(req: NextRequest) {
     const text = String(body?.text || '').trim()
     if (!text) return NextResponse.json({ error: 'missing_text' }, { status: 400 })
 
-    const enabledVal = await getSetting(eventId, 'ai_blessing_enabled')
-    if (enabledVal === false) return NextResponse.json({ error: 'ai_disabled' }, { status: 403 })
+    const settings = await getLatestSettingsRow(eventId)
 
-    const limitVal = await getSetting(eventId, 'ai_daily_limit')
-    const dailyLimit = Math.max(0, Number(limitVal ?? 3) || 3)
-    if (dailyLimit > 0 && deviceId !== 'unknown') {
-      const usage = await bumpDailyUsage(eventId, deviceId, dailyLimit)
-      if (!usage.ok) return NextResponse.json({ error: 'daily_limit', used: usage.used, day: usage.day }, { status: 429 })
+    if (settings?.ai_blessing_enabled === false) {
+      return NextResponse.json({ error: 'ai_disabled' }, { status: 403 })
     }
 
-    const eventNameVal = await getSetting(eventId, 'event_name')
-    const eventName = typeof eventNameVal === 'string' && eventNameVal ? eventNameVal : 'האירוע'
+    const dailyLimit = Math.max(0, Number(settings?.ai_daily_limit ?? 3) || 3)
+    if (dailyLimit > 0 && deviceId !== 'unknown') {
+      const usage = await bumpDailyUsage(eventId, deviceId, dailyLimit)
+      if (!usage.ok) {
+        return NextResponse.json({ error: 'daily_limit', used: usage.used, day: usage.day }, { status: 429 })
+      }
+    }
 
+    const eventName = String(settings?.event_name || 'האירוע')
+    const mode = String(body?.mode || 'improve')
     const closeness = String(body?.closeness || '')
     const style = String(body?.style || '')
     const writer = String(body?.writer || '')
@@ -147,14 +154,14 @@ export async function POST(req: NextRequest) {
       `הטקסט של האורח:`,
       text,
       ``,
-      `משימה: שפר את הטקסט ושמור על אותנטיות.`,
-      `החזר רק את הברכה המשופרת ללא הסברים.`,
+      mode === 'improve' ? `משימה: שפר את הטקסט ושמור על אותנטיות.` : `משימה: שפר את הטקסט ושמור על אותנטיות.`,
+      `החזר רק את הברכה המשופרת ללא הסברים.`
     ]
       .filter(Boolean)
       .join('\n')
 
     const model = env.OPENAI_WRITING_MODEL || 'gpt-4o-mini'
-    const suggestion = await callOpenAI(env.OPENAI_API_KEY, model, prompt)
+    const suggestion = await callOpenAI({ apiKey: env.OPENAI_API_KEY, model, prompt })
 
     return NextResponse.json({ suggestion })
   } catch (e: any) {

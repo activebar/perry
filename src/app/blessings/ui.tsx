@@ -135,21 +135,21 @@ export default function BlessingsClient({
   const [linkUrl, setLinkUrl] = useState('')
 
 
-const aiEnabled = settings?.ai_blessing_enabled !== false
+const aiEnabled = (settings as any)?.ai_blessing_enabled !== false
 
 const closenessOptions: string[] =
-  Array.isArray(settings?.blessings_ai_closeness_options) && settings?.blessings_ai_closeness_options.length
-    ? settings?.blessings_ai_closeness_options
+  Array.isArray((settings as any)?.blessings_ai_closeness_options) && (settings as any).blessings_ai_closeness_options.length
+    ? (settings as any).blessings_ai_closeness_options
     : ['משפחה', 'חברים', 'מהעבודה']
 
 const styleOptions: string[] =
-  Array.isArray(settings?.blessings_ai_style_options) && settings?.blessings_ai_style_options.length
-    ? settings?.blessings_ai_style_options
+  Array.isArray((settings as any)?.blessings_ai_style_options) && (settings as any).blessings_ai_style_options.length
+    ? (settings as any).blessings_ai_style_options
     : ['מרגש', 'קליל', 'רשמי']
 
 const writerSuggestions: string[] =
-  Array.isArray(settings?.blessings_ai_writer_suggestions) && settings?.blessings_ai_writer_suggestions.length
-    ? settings?.blessings_ai_writer_suggestions
+  Array.isArray((settings as any)?.blessings_ai_writer_suggestions) && (settings as any).blessings_ai_writer_suggestions.length
+    ? (settings as any).blessings_ai_writer_suggestions
     : ['אבא', 'אמא', 'סבתא', 'סבא', 'אח', 'אחות', 'דודה', 'דוד', 'חבר מהכיתה', 'חברה מהכיתה']
 
 const [aiCloseness, setAiCloseness] = useState<string>(closenessOptions[0] || '')
@@ -173,6 +173,7 @@ async function runAiImprove() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        mode: 'improve',
         text,
         closeness: aiCloseness,
         style: aiStyle,
