@@ -174,8 +174,21 @@ export default async function GalleryIndexPage() {
                           {previews.slice(0, previewLimit).map((u, idx) => (
                             <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              {/* Match home-page previews: always square tiles with cover + centered */}
-                              <img src={u} alt="" className="h-full w-full object-cover object-center" />
+                              {/* Square tile like home-page previews:
+                                  - keep the tile square
+                                  - portraits are centered and NOT cropped
+                                  - add a soft blurred background so it still looks full */}
+                              <div className="relative h-full w-full">
+                                {/* blurred backdrop */}
+                                <img
+                                  src={u}
+                                  alt=""
+                                  aria-hidden
+                                  className="absolute inset-0 h-full w-full scale-110 object-cover blur-xl opacity-60"
+                                />
+                                {/* foreground (no crop) */}
+                                <img src={u} alt="" className="absolute inset-0 h-full w-full object-contain object-center" />
+                              </div>
                             </div>
                           ))}
                         </div>
