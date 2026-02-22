@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { unstable_noStore as noStore } from 'next/cache'
 
 import { Container, Card } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
@@ -40,6 +41,8 @@ type BlockGalleryCfg = {
 }
 
 export default async function GalleryIndexPage() {
+  noStore()
+
   const env = getServerEnv()
   const srv = supabaseServiceRole()
 
@@ -167,9 +170,9 @@ export default async function GalleryIndexPage() {
                       {previews.length ? (
                         <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
                           {previews.slice(0, previewLimit).map((u, idx) => (
-                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
+                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100 flex items-center justify-center">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={u} alt="" className="h-full w-full object-cover" />
+                              <img src={u} alt="" className="h-full w-full object-contain object-center" />
                             </div>
                           ))}
                         </div>
