@@ -607,16 +607,16 @@ async function saveEdit() {
                   <Button type="button" disabled={aiBusy} onClick={() => runAi('improve')}>
                     ✨ שפר לי את הברכה
                   </Button>
-                  <Button type="button" variant="outline" disabled={aiBusy} onClick={() => runAi('more_emotional')}>
+                  <Button type="button" variant="ghost" disabled={aiBusy} onClick={() => runAi('more_emotional')}>
                     💖 מרגש יותר
                   </Button>
-                  <Button type="button" variant="outline" disabled={aiBusy} onClick={() => runAi('more_funny')}>
+                  <Button type="button" variant="ghost" disabled={aiBusy} onClick={() => runAi('more_funny')}>
                     😊 מצחיק בעדינות
                   </Button>
-                  <Button type="button" variant="outline" disabled={aiBusy} onClick={() => runAi('more_formal')}>
+                  <Button type="button" variant="ghost" disabled={aiBusy} onClick={() => runAi('more_formal')}>
                     רשמי יותר
                   </Button>
-                  <Button type="button" variant="outline" disabled={aiBusy} onClick={() => runAi('shorter')}>
+                  <Button type="button" variant="ghost" disabled={aiBusy} onClick={() => runAi('shorter')}>
                     קצר יותר
                   </Button>
                 </div>
@@ -635,7 +635,7 @@ async function saveEdit() {
                       >
                         השתמש בטקסט הזה
                       </Button>
-                      <Button type="button" variant="outline" onClick={() => setAiSuggestion(null)}>
+                      <Button type="button" variant="ghost" onClick={() => setAiSuggestion(null)}>
                         סגור
                       </Button>
                     </div>
