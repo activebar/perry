@@ -137,26 +137,23 @@ export default function BlessingsClient({
 
 const aiEnabled = settings?.ai_blessing_enabled !== false
 
-const closenessOptions: { label: string; value: string }[] =
+const closenessOptions: string[] =
   Array.isArray(settings?.blessings_ai_closeness_options) && settings?.blessings_ai_closeness_options.length
     ? settings?.blessings_ai_closeness_options
-    : [
-        { label: 'משפחה', value: 'family' },
-        { label: 'חברים', value: 'friends' },
-        { label: 'מהעבודה', value: 'work' },
-      ]
+    : ['משפחה', 'חברים', 'מהעבודה']
 
-const styleOptions: { label: string; value: string }[] =
+const styleOptions: string[] =
   Array.isArray(settings?.blessings_ai_style_options) && settings?.blessings_ai_style_options.length
     ? settings?.blessings_ai_style_options
-    : [
-        { label: 'מרגש', value: 'emotional' },
-        { label: 'קליל', value: 'light' },
-        { label: 'רשמי', value: 'formal' },
-      ]
+    : ['מרגש', 'קליל', 'רשמי']
 
-const [aiCloseness, setAiCloseness] = useState<string>(closenessOptions[0]?.value || 'friends')
-const [aiStyle, setAiStyle] = useState<string>(styleOptions[0]?.value || 'emotional')
+const writerSuggestions: string[] =
+  Array.isArray(settings?.blessings_ai_writer_suggestions) && settings?.blessings_ai_writer_suggestions.length
+    ? settings?.blessings_ai_writer_suggestions
+    : ['אבא', 'אמא', 'סבתא', 'סבא', 'אח', 'אחות', 'דודה', 'דוד', 'חבר מהכיתה', 'חברה מהכיתה']
+
+const [aiCloseness, setAiCloseness] = useState<string>(closenessOptions[0] || '')
+const [aiStyle, setAiStyle] = useState<string>(styleOptions[0] || '')
 const [aiWriter, setAiWriter] = useState<string>('')
 
 const [aiBusy, setAiBusy] = useState(false)
@@ -180,8 +177,8 @@ async function runAiImprove() {
         text,
         closeness: aiCloseness,
         style: aiStyle,
-        writer: aiWriter,
-      }),
+        writer: aiWriter
+      })
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data?.error || 'שגיאה')

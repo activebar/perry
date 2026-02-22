@@ -1,142 +1,187 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
 import { getEventId } from '@/lib/event-id'
 import { getDeviceId } from '@/lib/device'
-import { supabaseServiceRole } from '@/lib/supabase'
-import { openaiGenerateText } from '@/lib/ai'
 
 export const dynamic = 'force-dynamic'
 
-type Body = {
-  text: string
-  closeness?: string | null
-  style?: string | null
-  writer?: string | null
-  mode?: 'improve' | 'shorter' | 'more_emotional' | 'more_formal' | 'more_funny'
+type Payload = {
+  mode?: string
+  text?: string
+  closeness?: string
+  style?: string
+  writer?: string
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n))
+async function getLatestSettingsRow(eventId: string) {
+  const srv = supabaseServiceRole()
+  const { data, error } = await srv
+    .from('event_settings')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('updated_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (error) throw error
+  return data as any
 }
 
-function cleanStr(s: any) {
-  return String(s || '').trim()
+async function bumpDailyUsage(eventId: string, deviceId: string, limit: number) {
+  const srv = supabaseServiceRole()
+  const day = new Date().toISOString().slice(0, 10)
+
+  // Read current
+  const { data: existing, error: readErr } = await srv
+    .from('ai_usage_daily')
+    .select('*')
+    .eq('event_id', eventId)
+    .eq('device_id', deviceId)
+    .eq('day', day)
+    .maybeSingle()
+
+  if (readErr) throw readErr
+
+  const used = Number(existing?.count || 0)
+  if (used >= limit) {
+    return { ok: false, used, day }
+  }
+
+  const nextCount = used + 1
+  if (existing?.id) {
+    const { error: upErr } = await srv
+      .from('ai_usage_daily')
+      .update({ count: nextCount, updated_at: new Date().toISOString() })
+      .eq('id', existing.id)
+    if (upErr) throw upErr
+  } else {
+    const { error: insErr } = await srv.from('ai_usage_daily').insert({
+      event_id: eventId,
+      device_id: deviceId,
+      day,
+      count: nextCount
+    })
+    if (insErr) throw insErr
+  }
+
+  return { ok: true, used: nextCount, day }
 }
 
-function pickLengthProfile(closeness: string) {
-  const c = closeness
-  if (c.includes('משפחה')) return { minLines: 8, maxLines: 12, maxWords: 180, maxEmojis: 3 }
-  if (c.includes('עבודה') || c.includes('קולגות') || c.includes('מכרים')) return { minLines: 2, maxLines: 3, maxWords: 45, maxEmojis: 1 }
-  return { minLines: 4, maxLines: 6, maxWords: 90, maxEmojis: 2 }
-}
-
-function buildInstructions(args: {
-  eventName: string
-  closeness: string
-  style: string
-  writer: string
-  mode: string
-  minLines: number
-  maxLines: number
-  maxWords: number
-  maxEmojis: number
+async function callOpenAI(opts: {
+  apiKey: string
+  model: string
+  prompt: string
 }) {
-  const softEmojis = '❤️✨😊🎉'
-  return [
-    'אתה כותב ברכה בעברית טבעית לאירוע.',
-    `שם האירוע או החוגג: ${args.eventName}.`,
-    args.closeness ? `קרבה לחוגג: ${args.closeness}.` : '',
-    args.writer ? `תפקיד הכותב: ${args.writer}. אם יש סתירה לקרבה, תפקיד הכותב מנצח.` : '',
-    args.style ? `סגנון כתיבה: ${args.style}.` : '',
-    `יעד אורך: בין ${args.minLines} ל ${args.maxLines} שורות, עד ${args.maxWords} מילים.`,
-    `אימוגים בעדינות בלבד. עד ${args.maxEmojis}. רק מתוך ${softEmojis}.`,
-    'לא להשתמש בתו מינוס בכלל.',
-    'לא לכתוב רשימות עם מקפים.',
-    'סיום חם עם איחול.',
-    args.mode === 'shorter' ? 'קצר יותר, שמור על משמעות.' : '',
-    args.mode === 'more_emotional' ? 'הפוך את הטון ליותר מרגש, בלי קלישאות כבדות.' : '',
-    args.mode === 'more_formal' ? 'הפוך את הטון לרשמי ומכובד.' : '',
-    args.mode === 'more_funny' ? 'הפוך את הטון לקליל ומצחיק בעדינות, בלי ציניות.' : '',
-    'החזר טקסט בלבד, בלי כותרות ובלי מרכאות.'
-  ]
-    .filter(Boolean)
-    .join('\n')
+  const res = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${opts.apiKey}`
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      input: opts.prompt,
+      // Keep responses short and cheap
+      max_output_tokens: 350
+    })
+  })
+
+  const data = await res.json()
+  if (!res.ok) {
+    const msg = data?.error?.message || 'OpenAI error'
+    throw new Error(msg)
+  }
+
+  // Try to extract text from Responses API
+  const output = data?.output
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      const content = item?.content
+      if (Array.isArray(content)) {
+        for (const c of content) {
+          const t = c?.text
+          if (typeof t === 'string' && t.trim()) return t.trim()
+        }
+      }
+    }
+  }
+
+  // Fallbacks
+  const t1 = data?.output_text
+  if (typeof t1 === 'string' && t1.trim()) return t1.trim()
+
+  throw new Error('No text returned')
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => null)) as Body | null
-    const text = cleanStr(body?.text)
-    if (!text) return NextResponse.json({ error: 'missing text' }, { status: 400 })
+    const env = getServerEnv()
+    if (!env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: 'missing_openai_key' }, { status: 400 })
+    }
 
     const eventId = getEventId()
     const deviceId = getDeviceId() || 'unknown'
 
-    const srv = supabaseServiceRole()
-    const { data: settingsRow, error: sErr } = await srv
-      .from('event_settings')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('updated_at', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
+    const body = (await req.json()) as Payload
+    const text = String(body?.text || '').trim()
+    if (!text) return NextResponse.json({ error: 'missing_text' }, { status: 400 })
 
-    if (sErr) throw sErr
+    const settings = await getLatestSettingsRow(eventId)
 
-    const enabled = (settingsRow as any)?.ai_blessing_enabled !== false
-    if (!enabled) return NextResponse.json({ error: 'ai disabled' }, { status: 403 })
-
-    const dailyLimit = clamp(Number((settingsRow as any)?.ai_blessing_daily_limit ?? 3), 0, 50)
-    if (dailyLimit === 0) return NextResponse.json({ error: 'ai disabled' }, { status: 403 })
-
-    const today = new Date()
-    const day = today.toISOString().slice(0, 10)
-
-    const { data: usageRow } = await srv
-      .from('ai_usage_daily')
-      .select('*')
-      .eq('event_id', eventId)
-      .eq('device_id', deviceId)
-      .eq('day', day)
-      .maybeSingle()
-
-    const currentCount = Number((usageRow as any)?.count ?? 0)
-    if (currentCount >= dailyLimit) {
-      return NextResponse.json({ error: 'limit reached' }, { status: 429 })
+    if (settings?.ai_blessing_enabled === false) {
+      return NextResponse.json({ error: 'ai_disabled' }, { status: 403 })
     }
 
-    const closeness = cleanStr(body?.closeness)
-    const style = cleanStr(body?.style)
-    const writer = cleanStr(body?.writer)
-    const mode = cleanStr(body?.mode || 'improve')
+    const dailyLimit = Math.max(0, Number(settings?.ai_daily_limit ?? 3) || 3)
+    if (dailyLimit > 0 && deviceId !== 'unknown') {
+      const usage = await bumpDailyUsage(eventId, deviceId, dailyLimit)
+      if (!usage.ok) {
+        return NextResponse.json({ error: 'daily_limit', used: usage.used, day: usage.day }, { status: 429 })
+      }
+    }
 
-    const profile = pickLengthProfile(closeness)
-    const instructions = buildInstructions({
-      eventName: cleanStr((settingsRow as any)?.event_name || 'האירוע'),
-      closeness,
-      style,
-      writer,
-      mode,
-      ...profile
+    const eventName = settings?.event_name || 'האירוע'
+    const mode = String(body?.mode || 'improve')
+    const closeness = String(body?.closeness || '')
+    const style = String(body?.style || '')
+    const writer = String(body?.writer || '')
+
+    // Soft emoji rules (no enforcement in code beyond instruction)
+    const prompt = [
+      `אתה עוזר לנסח ברכה בעברית טבעית לאירוע.`,
+      `שם האירוע: ${eventName}.`,
+      closeness ? `קרבה לחוגג: ${closeness}.` : '',
+      style ? `סגנון כתיבה: ${style}.` : '',
+      writer ? `מי כותב: ${writer}.` : '',
+      `הנחיות:`,
+      `כתוב בצורה ברורה, נעימה, ולא ארוך מדי.`,
+      `מותר להשתמש באימוגים רכים בעדינות בלבד.`,
+      `לא להשתמש בתו מקף.`,
+      `סיים באיחול חם.`,
+      ``,
+      `הטקסט של האורח:`,
+      text,
+      ``,
+      `משימה:`,
+      mode === 'improve'
+        ? `שפר את הטקסט ושמור על אותנטיות.`
+        : `שפר את הטקסט ושמור על אותנטיות.`,
+      `החזר רק את הברכה המשופרת ללא הסברים.`
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    const model = env.OPENAI_WRITING_MODEL || 'gpt-4o-mini'
+    const suggestion = await callOpenAI({
+      apiKey: env.OPENAI_API_KEY,
+      model,
+      prompt
     })
 
-    const suggestion = await openaiGenerateText({
-      instructions,
-      input: text,
-      maxOutputTokens: 450,
-      temperature: 0.8
-    })
-
-    // update usage
-    const nextCount = currentCount + 1
-    await srv
-      .from('ai_usage_daily')
-      .upsert(
-        { event_id: eventId, device_id: deviceId, day, count: nextCount },
-        { onConflict: 'event_id,device_id,day' }
-      )
-
-    return NextResponse.json({ ok: true, suggestion, used: nextCount, limit: dailyLimit })
+    return NextResponse.json({ suggestion })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }

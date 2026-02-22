@@ -40,7 +40,6 @@ export function getServerEnv() {
 
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODERATION_MODEL: process.env.OPENAI_MODERATION_MODEL,
-    OPENAI_WRITING_MODEL: process.env.OPENAI_WRITING_MODEL,
 
     FOOTER_LABEL: process.env.FOOTER_LABEL,
     FOOTER_URL: process.env.FOOTER_URL

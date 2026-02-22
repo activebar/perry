@@ -88,21 +88,6 @@ function hostOf(u: string) {
   }
 }
 
-function linesToArray(v: any): string[] {
-  const s = String(v || '')
-  const out = s
-    .split(/\r?\n/g)
-    .map(x => x.trim())
-    .filter(Boolean)
-  return Array.from(new Set(out))
-}
-
-function arrayToLines(v: any): string {
-  if (!Array.isArray(v)) return ''
-  return v.map(x => String(x || '').trim()).filter(Boolean).join('\n')
-}
-
-
 function youtubeThumb(u: string) {
   try {
     const url = new URL(u)
@@ -1533,56 +1518,6 @@ async function loadBlocks() {
                 onChange={e => setSettings({ ...(settings as any), max_blessing_lines: Number(e.target.value) })}
                 placeholder="למשל 50"
               />
-
-
-              <div className="mt-3 rounded-xl border border-zinc-200 p-3 space-y-2" dir="rtl">
-                <p className="text-sm font-medium text-right">עזרה בכתיבת ברכה</p>
-
-                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                  <input
-                    type="checkbox"
-                    checked={(settings as any).ai_blessing_enabled !== false}
-                    onChange={e => setSettings({ ...(settings as any), ai_blessing_enabled: e.target.checked })}
-                  />
-                  להפעיל עזרה בכתיבת ברכה
-                </label>
-
-                <label className="text-xs text-zinc-500 text-right">מגבלת בקשות ליום לכל מכשיר (ai_blessing_daily_limit)</label>
-                <Input
-                  className="text-right"
-                  dir="rtl"
-                  value={String((settings as any).ai_blessing_daily_limit ?? 3)}
-                  onChange={e => setSettings({ ...(settings as any), ai_blessing_daily_limit: Number(e.target.value) })}
-                  placeholder="למשל 3"
-                />
-
-                <label className="text-xs text-zinc-500 text-right">אפשרויות קרבה לחוגג, שורה לכל אפשרות</label>
-                <Textarea
-                  className="text-right"
-                  dir="rtl"
-                  value={arrayToLines((settings as any).ai_closeness_options)}
-                  onChange={e => setSettings({ ...(settings as any), ai_closeness_options: linesToArray(e.target.value) })}
-                  placeholder={'משפחה\nחברים\nמהעבודה'}
-                />
-
-                <label className="text-xs text-zinc-500 text-right">אפשרויות סגנון כתיבה, שורה לכל אפשרות</label>
-                <Textarea
-                  className="text-right"
-                  dir="rtl"
-                  value={arrayToLines((settings as any).ai_style_options)}
-                  onChange={e => setSettings({ ...(settings as any), ai_style_options: linesToArray(e.target.value) })}
-                  placeholder={'מרגש\nקליל\nרשמי'}
-                />
-
-                <label className="text-xs text-zinc-500 text-right">הצעות מהירות לשדה מי כותב, שורה לכל אפשרות</label>
-                <Textarea
-                  className="text-right"
-                  dir="rtl"
-                  value={arrayToLines((settings as any).ai_writer_suggestions)}
-                  onChange={e => setSettings({ ...(settings as any), ai_writer_suggestions: linesToArray(e.target.value) })}
-                  placeholder={'אבא\nאמא\nסבא\nסבתא\nחבר מהכיתה'}
-                />
-              </div>
 
 
               <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">

@@ -70,10 +70,10 @@ export async function PUT(req: NextRequest) {
       'show_link_preview',
       'preview_image_size',
       'ai_blessing_enabled',
-      'ai_blessing_daily_limit',
-      'ai_closeness_options',
-      'ai_style_options',
-      'ai_writer_suggestions'
+      'ai_daily_limit',
+      'blessings_ai_closeness_options',
+      'blessings_ai_style_options',
+      'blessings_ai_writer_suggestions'
     ]
     const SHARE_KEYS = [
       'show_qr_admin',
