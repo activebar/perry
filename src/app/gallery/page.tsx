@@ -1,20 +1,8 @@
 import Link from 'next/link'
-import { unstable_noStore as noStore } from 'next/cache'
 
 import { Container, Card } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
-
-function shuffleInPlace<T>(arr: T[]): T[] {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    const tmp = arr[i]
-    arr[i] = arr[j]
-    arr[j] = tmp
-  }
-  return arr
-}
-
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -41,8 +29,6 @@ type BlockGalleryCfg = {
 }
 
 export default async function GalleryIndexPage() {
-  noStore()
-
   const env = getServerEnv()
   const srv = supabaseServiceRole()
 
@@ -170,9 +156,9 @@ export default async function GalleryIndexPage() {
                       {previews.length ? (
                         <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
                           {previews.slice(0, previewLimit).map((u, idx) => (
-                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100 flex items-center justify-center">
+                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={u} alt="" className="h-full w-full object-contain object-center" />
+                              <img src={u} alt="" className="h-full w-full object-cover" />
                             </div>
                           ))}
                         </div>
