@@ -156,10 +156,15 @@ export default async function GalleryIndexPage() {
                       {previews.length ? (
                         <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
                           {previews.slice(0, previewLimit).map((u, idx) => (
-                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
+                            <div key={idx} className="relative aspect-square overflow-hidden rounded-lg bg-zinc-100">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              {/* Keep previews always square, but don't crop portrait images (portrait stays centered inside the square) */}
-                              <img src={u} alt="" className="h-full w-full object-contain object-center" />
+                              {/*
+                                Square previews + portrait-friendly centering:
+                                1) blurred cover image fills the square background
+                                2) main image is object-contain so portrait isn't cropped
+                              */}
+                              <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover object-center blur-md scale-110 opacity-60" />
+                              <img src={u} alt="" className="absolute inset-0 h-full w-full object-contain object-center" />
                             </div>
                           ))}
                         </div>
