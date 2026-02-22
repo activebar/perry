@@ -588,9 +588,9 @@ async function saveEdit() {
                         aria-label="פתח מדיה"
                       >
                         {video ? (
-                          <video src={mediaUrl} className="h-full w-full object-cover" muted playsInline />
+                          <video src={mediaUrl} className="h-full w-full object-cover object-top" muted playsInline />
                         ) : (
-                          <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
+                          <img src={mediaUrl} alt="" className="h-full w-full object-cover object-top" />
                         )}
                       </button>
                     </div>
