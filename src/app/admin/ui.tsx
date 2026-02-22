@@ -231,9 +231,9 @@ function MediaBox({
       title="פתח מדיה"
     >
       {isVid ? (
-        <video src={url} className="absolute inset-0 h-full w-full object-cover" muted playsInline />
+        <video src={url} className="absolute inset-0 h-full w-full object-cover object-top" muted playsInline />
       ) : (
-        <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
       )}
     </a>
   )
@@ -403,8 +403,6 @@ export default function AdminApp({
   const [pending, setPending] = useState<any[]>([])
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingBlessingsCount, setPendingBlessingsCount] = useState(0)
-  const [pendingPhotosCount, setPendingPhotosCount] = useState(0)
-
   // blessings manage (approved)
   const [approvedBlessings, setApprovedBlessings] = useState<any[]>([])
   const [editBlessing, setEditBlessing] = useState<any | null>(null)
@@ -422,7 +420,7 @@ export default function AdminApp({
   const [lightbox, setLightbox] = useState<string | null>(null)
   // galleries management (new)
   const [galleries, setGalleries] = useState<any[]>([])
-  const [galleriesTotalPending, setGalleriesTotalPending] = useState<number>(0)
+  const galleriesTotalPending = useMemo(() => galleries.reduce((sum: number, g: any) => sum + (g?.pending_count || 0), 0), [galleries])
   const [selectedGalleryId, setSelectedGalleryId] = useState<string>('')
   const [galleryBusy, setGalleryBusy] = useState(false)
   const [galleryMsg, setGalleryMsg] = useState<string | null>(null)
@@ -889,7 +887,6 @@ async function loadBlocks() {
       const pCount = (g.posts || []).length + (ga.posts || []).length
 
       setPendingBlessingsCount(bCount)
-      setPendingPhotosCount(pCount)
       setPendingCount(bCount + pCount)
     } catch {}
   }
@@ -1047,7 +1044,6 @@ async function loadBlocks() {
       const res = await jfetch('/api/admin/galleries', { method: 'GET' })
       const rows = res.galleries || []
       setGalleries(rows)
-      setGalleriesTotalPending((rows || []).reduce((s: number, g: any) => s + (g?.pending_count || 0), 0))
       if (!selectedGalleryId && rows[0]?.id) setSelectedGalleryId(rows[0].id)
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת גלריות'))
@@ -1221,12 +1217,11 @@ async function loadBlocks() {
 
             
             <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{activeEventId || 'IDO'}</span></p>
-{(
-            <div className="mt-1 flex flex-wrap gap-2 text-xs">
+{pendingBlessingsCount > 0 && (
+              <div className="mt-1 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ברכות ממתינות: {pendingBlessingsCount}</span>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">ממתינות לאישור: {pendingPhotosCount}</span>
-              </div>
-          )}
+                              </div>
+            )}
 
             {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
           </div>
@@ -1379,7 +1374,7 @@ async function loadBlocks() {
                     {settings.hero_images.map((u: string) => (
                       <div key={u} className="overflow-hidden rounded-2xl border border-zinc-200">
                         <div className="relative aspect-[16/9] bg-zinc-50">
-                          <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                          <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
                         </div>
                         <div className="p-2 flex items-center justify-between gap-2">
                           <Button variant="ghost" onClick={() => removeHeroImage(u)}>הסר</Button>
@@ -2294,14 +2289,10 @@ async function loadBlocks() {
 
           {settings && (
             <div className="mt-4 grid gap-2 rounded-2xl border border-zinc-200 p-4">
-              <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-right">הגדרות גלריות</p>
-                  {(
-                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                  ממתינות לאישור: {galleriesTotalPending}
-                </span>
-              )}
-                </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-right">הגדרות גלריות</p>
+                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">ממתינות לאישור: {galleriesTotalPending}</span>
+              </div>
 
               <Input
                 value={settings.guest_gallery_title || ''}
@@ -2412,14 +2403,14 @@ async function loadBlocks() {
                       (selectedGalleryId === g.id ? 'border-black bg-zinc-50' : 'border-zinc-200 bg-white')
                     }
                   >
-                    <span className="flex items-center gap-2">
-                      <span>{g.display_title || g.title || g.slug || g.id}</span>
-                      {g?.pending_count > 0 ? (
-                        <span className="inline-flex min-w-[20px] justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate">{g.display_title || g.title || g.slug || g.id}</span>
+                      {g.pending_count > 0 && (
+                        <span className="inline-flex min-w-[1.75rem] justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
                           {g.pending_count}
                         </span>
-                      ) : null}
-                    </span>
+                      )}
+                    </div>
                     {!g.upload_enabled && <span className="mr-2 text-xs text-zinc-500">(סגור)</span>}
                   </button>
                 ))}
@@ -2503,7 +2494,7 @@ async function loadBlocks() {
                             onClick={() => p.url && setLightbox(p.url)}
                             type="button"
                           >
-                            <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                            <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
                           </button>
 
                           <div className="p-3 flex gap-2">
@@ -2593,7 +2584,7 @@ async function loadBlocks() {
                               }}
                               type="button"
                             >
-                              <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                              <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
 
                               {selectMode ? (
                                 <div className="absolute left-2 top-2">
