@@ -2373,7 +2373,75 @@ async function loadBlocks() {
                 </div>
               </div>
 <div className="flex items-center justify-end">
-                <Button onClick={() => saveSettings()} disabled={saving}>
+                
+<div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-4">
+  <div className="text-sm font-semibold text-right">AI לברכות</div>
+
+  <div className="mt-3 flex items-center justify-between gap-3">
+    <div className="text-sm text-right">הפעלת AI לשיפור ברכות</div>
+    <input
+      type="checkbox"
+      checked={Boolean(form.ai_blessing_enabled ?? true)}
+      onChange={(e) => setForm((p: any) => ({ ...p, ai_blessing_enabled: e.target.checked }))}
+    />
+  </div>
+
+  <div className="mt-3">
+    <div className="text-xs text-right text-zinc-500">מגבלת שימוש יומית למכשיר</div>
+    <Input
+      value={String(form.ai_daily_limit ?? 3)}
+      onChange={(e) => setForm((p: any) => ({ ...p, ai_daily_limit: Number(e.target.value || 0) }))}
+      className="text-right"
+    />
+    <div className="mt-2 text-xs text-right text-zinc-500">אם הערך 0 אז אין הגבלה</div>
+  </div>
+
+  <div className="mt-4">
+    <div className="text-xs text-right text-zinc-500">אופציות קרבה לחוגג</div>
+    <Textarea
+      value={JSON.stringify(form.blessings_ai_closeness_options ?? ['משפחה','חברים','מהעבודה'])}
+      onChange={(e) => {
+        try {
+          const v = JSON.parse(e.target.value)
+          setForm((p: any) => ({ ...p, blessings_ai_closeness_options: v }))
+        } catch {}
+      }}
+      className="text-right"
+      rows={3}
+    />
+  </div>
+
+  <div className="mt-4">
+    <div className="text-xs text-right text-zinc-500">אופציות סגנון כתיבה</div>
+    <Textarea
+      value={JSON.stringify(form.blessings_ai_style_options ?? ['מרגש','קליל','רשמי'])}
+      onChange={(e) => {
+        try {
+          const v = JSON.parse(e.target.value)
+          setForm((p: any) => ({ ...p, blessings_ai_style_options: v }))
+        } catch {}
+      }}
+      className="text-right"
+      rows={3}
+    />
+  </div>
+
+  <div className="mt-4">
+    <div className="text-xs text-right text-zinc-500">הצעות מי כותב</div>
+    <Textarea
+      value={JSON.stringify(form.blessings_ai_writer_suggestions ?? ['אבא','אמא','סבתא','סבא','אח','אחות','דודה','דוד','חבר מהכיתה','חברה מהכיתה'])}
+      onChange={(e) => {
+        try {
+          const v = JSON.parse(e.target.value)
+          setForm((p: any) => ({ ...p, blessings_ai_writer_suggestions: v }))
+        } catch {}
+      }}
+      className="text-right"
+      rows={4}
+    />
+  </div>
+</div>
+<Button onClick={() => saveSettings()} disabled={saving}>
                   {saving ? 'שומר...' : 'שמור הגדרות גלריות'}
                 </Button>
               </div>

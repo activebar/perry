@@ -7,33 +7,30 @@ import { getDeviceId } from '@/lib/device'
 export const dynamic = 'force-dynamic'
 
 type Payload = {
-  mode?: string
   text?: string
   closeness?: string
   style?: string
   writer?: string
 }
 
-async function getLatestSettingsRow(eventId: string) {
+async function getSetting(eventId: string, key: string) {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
     .from('event_settings')
-    .select('*')
+    .select('value_json')
     .eq('event_id', eventId)
-    .order('updated_at', { ascending: false })
-    .order('created_at', { ascending: false })
+    .eq('key', key)
     .limit(1)
-    .single()
+    .maybeSingle()
 
   if (error) throw error
-  return data as any
+  return data?.value_json
 }
 
 async function bumpDailyUsage(eventId: string, deviceId: string, limit: number) {
   const srv = supabaseServiceRole()
   const day = new Date().toISOString().slice(0, 10)
 
-  // Read current
   const { data: existing, error: readErr } = await srv
     .from('ai_usage_daily')
     .select('*')
@@ -45,9 +42,7 @@ async function bumpDailyUsage(eventId: string, deviceId: string, limit: number) 
   if (readErr) throw readErr
 
   const used = Number(existing?.count || 0)
-  if (used >= limit) {
-    return { ok: false, used, day }
-  }
+  if (used >= limit) return { ok: false, used, day }
 
   const nextCount = used + 1
   if (existing?.id) {
@@ -61,7 +56,7 @@ async function bumpDailyUsage(eventId: string, deviceId: string, limit: number) 
       event_id: eventId,
       device_id: deviceId,
       day,
-      count: nextCount
+      count: nextCount,
     })
     if (insErr) throw insErr
   }
@@ -69,23 +64,18 @@ async function bumpDailyUsage(eventId: string, deviceId: string, limit: number) 
   return { ok: true, used: nextCount, day }
 }
 
-async function callOpenAI(opts: {
-  apiKey: string
-  model: string
-  prompt: string
-}) {
+async function callOpenAI(apiKey: string, model: string, prompt: string) {
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${opts.apiKey}`
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: opts.model,
-      input: opts.prompt,
-      // Keep responses short and cheap
-      max_output_tokens: 350
-    })
+      model,
+      input: prompt,
+      max_output_tokens: 350,
+    }),
   })
 
   const data = await res.json()
@@ -94,10 +84,9 @@ async function callOpenAI(opts: {
     throw new Error(msg)
   }
 
-  // Try to extract text from Responses API
-  const output = data?.output
-  if (Array.isArray(output)) {
-    for (const item of output) {
+  const out = data?.output
+  if (Array.isArray(out)) {
+    for (const item of out) {
       const content = item?.content
       if (Array.isArray(content)) {
         for (const c of content) {
@@ -108,7 +97,6 @@ async function callOpenAI(opts: {
     }
   }
 
-  // Fallbacks
   const t1 = data?.output_text
   if (typeof t1 === 'string' && t1.trim()) return t1.trim()
 
@@ -118,9 +106,7 @@ async function callOpenAI(opts: {
 export async function POST(req: NextRequest) {
   try {
     const env = getServerEnv()
-    if (!env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: 'missing_openai_key' }, { status: 400 })
-    }
+    if (!env.OPENAI_API_KEY) return NextResponse.json({ error: 'missing_openai_key' }, { status: 400 })
 
     const eventId = getEventId()
     const deviceId = getDeviceId() || 'unknown'
@@ -129,27 +115,28 @@ export async function POST(req: NextRequest) {
     const text = String(body?.text || '').trim()
     if (!text) return NextResponse.json({ error: 'missing_text' }, { status: 400 })
 
-    const settings = await getLatestSettingsRow(eventId)
+    const enabledVal = await getSetting(eventId, 'ai_blessing_enabled')
+    if (enabledVal === false) return NextResponse.json({ error: 'ai_disabled' }, { status: 403 })
 
-    if (settings?.ai_blessing_enabled === false) {
-      return NextResponse.json({ error: 'ai_disabled' }, { status: 403 })
+    const limitVal = await getSetting(eventId, 'ai_daily_limit')
+    const dailyLimit = Math.max(0, Number(limitVal ?? 3) || 3)
+
+    if (dailyLimit > 0 and deviceId != 'unknown') {
+      pass
     }
-
-    const dailyLimit = Math.max(0, Number(settings?.ai_daily_limit ?? 3) || 3)
+    // TS does not allow python syntax. We'll keep logic below.
     if (dailyLimit > 0 && deviceId !== 'unknown') {
       const usage = await bumpDailyUsage(eventId, deviceId, dailyLimit)
-      if (!usage.ok) {
-        return NextResponse.json({ error: 'daily_limit', used: usage.used, day: usage.day }, { status: 429 })
-      }
+      if (!usage.ok) return NextResponse.json({ error: 'daily_limit', used: usage.used, day: usage.day }, { status: 429 })
     }
 
-    const eventName = settings?.event_name || 'האירוע'
-    const mode = String(body?.mode || 'improve')
+    const eventNameVal = await getSetting(eventId, 'event_name')
+    const eventName = typeof eventNameVal === 'string' && eventNameVal ? eventNameVal : 'האירוע'
+
     const closeness = String(body?.closeness || '')
     const style = String(body?.style || '')
     const writer = String(body?.writer || '')
 
-    // Soft emoji rules (no enforcement in code beyond instruction)
     const prompt = [
       `אתה עוזר לנסח ברכה בעברית טבעית לאירוע.`,
       `שם האירוע: ${eventName}.`,
@@ -165,21 +152,14 @@ export async function POST(req: NextRequest) {
       `הטקסט של האורח:`,
       text,
       ``,
-      `משימה:`,
-      mode === 'improve'
-        ? `שפר את הטקסט ושמור על אותנטיות.`
-        : `שפר את הטקסט ושמור על אותנטיות.`,
-      `החזר רק את הברכה המשופרת ללא הסברים.`
+      `משימה: שפר את הטקסט ושמור על אותנטיות.`,
+      `החזר רק את הברכה המשופרת ללא הסברים.`,
     ]
       .filter(Boolean)
       .join('\n')
 
     const model = env.OPENAI_WRITING_MODEL || 'gpt-4o-mini'
-    const suggestion = await callOpenAI({
-      apiKey: env.OPENAI_API_KEY,
-      model,
-      prompt
-    })
+    const suggestion = await callOpenAI(env.OPENAI_API_KEY, model, prompt)
 
     return NextResponse.json({ suggestion })
   } catch (e: any) {

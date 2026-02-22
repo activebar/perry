@@ -173,12 +173,11 @@ async function runAiImprove() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        mode: 'improve',
         text,
         closeness: aiCloseness,
         style: aiStyle,
-        writer: aiWriter
-      })
+        writer: aiWriter,
+      }),
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data?.error || 'שגיאה')
