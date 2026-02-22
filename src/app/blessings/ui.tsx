@@ -154,6 +154,34 @@ export default function BlessingsClient({
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
 
+  async function runAi(mode: 'improve' | 'shorter' | 'more_emotional' | 'more_formal' | 'more_funny') {
+    if (!aiEnabled) {
+      setAiError('העזרה בכתיבת ברכה כבויה כרגע')
+      return
+    }
+    const src = String(text || '').trim()
+    if (!src) {
+      setAiError('כתבו ברכה כדי שאוכל לעזור לשפר אותה')
+      return
+    }
+    setAiBusy(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/ai/blessing', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: src, closeness, style, writer, mode }),
+      })
+      const data = await res.json()
+      if (!res.ok || data?.error) throw new Error(data?.error || 'error')
+      setAiSuggestion(String(data?.suggestion || ''))
+    } catch (e: any) {
+      setAiError(e?.message || 'שגיאה')
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   // media pickers (mobile-friendly)
   const pickRef = useRef<HTMLInputElement | null>(null)
   const cameraPhotoRef = useRef<HTMLInputElement | null>(null)
