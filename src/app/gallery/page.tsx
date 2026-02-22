@@ -158,7 +158,8 @@ export default async function GalleryIndexPage() {
                           {previews.slice(0, previewLimit).map((u, idx) => (
                             <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={u} alt="" className="h-full w-full object-cover" />
+                              {/* Keep previews always square, but don't crop portrait images (portrait stays centered inside the square) */}
+                              <img src={u} alt="" className="h-full w-full object-contain object-center" />
                             </div>
                           ))}
                         </div>
