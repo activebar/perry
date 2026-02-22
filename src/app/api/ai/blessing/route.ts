@@ -120,11 +120,6 @@ export async function POST(req: NextRequest) {
 
     const limitVal = await getSetting(eventId, 'ai_daily_limit')
     const dailyLimit = Math.max(0, Number(limitVal ?? 3) || 3)
-
-    if (dailyLimit > 0 and deviceId != 'unknown') {
-      pass
-    }
-    // TS does not allow python syntax. We'll keep logic below.
     if (dailyLimit > 0 && deviceId !== 'unknown') {
       const usage = await bumpDailyUsage(eventId, deviceId, dailyLimit)
       if (!usage.ok) return NextResponse.json({ error: 'daily_limit', used: usage.used, day: usage.day }, { status: 429 })
