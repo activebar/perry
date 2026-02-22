@@ -10,6 +10,7 @@ const serverSchema = z.object({
   // OpenAI (optional): used for content moderation / AI helper
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODERATION_MODEL: z.string().optional(),
+  OPENAI_WRITING_MODEL: z.string().optional(),
 
   FOOTER_LABEL: z.string().optional(),
   FOOTER_URL: z.string().optional()
@@ -39,6 +40,7 @@ export function getServerEnv() {
 
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODERATION_MODEL: process.env.OPENAI_MODERATION_MODEL,
+    OPENAI_WRITING_MODEL: process.env.OPENAI_WRITING_MODEL,
 
     FOOTER_LABEL: process.env.FOOTER_LABEL,
     FOOTER_URL: process.env.FOOTER_URL

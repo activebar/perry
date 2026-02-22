@@ -54,6 +54,13 @@ export type EventSettings = {
   blessings_preview_limit?: number | null
   blessings_show_all_button?: boolean | null
 
+  // AI blessings
+  ai_blessing_enabled?: boolean | null
+  ai_blessing_daily_limit?: number | null
+  ai_closeness_options?: any[] | null
+  ai_style_options?: any[] | null
+  ai_writer_suggestions?: any[] | null
+
   approval_lock_after_days?: number | null
 
   created_at?: string

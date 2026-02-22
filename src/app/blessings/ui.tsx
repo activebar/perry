@@ -136,6 +136,24 @@ export default function BlessingsClient({
   const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
 
+  const aiEnabled = settings?.ai_blessing_enabled !== false
+  const aiClosenessOptions: string[] = Array.isArray(settings?.ai_closeness_options) && settings.ai_closeness_options.length
+    ? settings.ai_closeness_options
+    : ['משפחה', 'חברים', 'מהעבודה']
+  const aiStyleOptions: string[] = Array.isArray(settings?.ai_style_options) && settings.ai_style_options.length
+    ? settings.ai_style_options
+    : ['מרגש', 'קליל', 'רשמי']
+  const aiWriterSuggestions: string[] = Array.isArray(settings?.ai_writer_suggestions) && settings.ai_writer_suggestions.length
+    ? settings.ai_writer_suggestions
+    : ['אבא', 'אמא', 'סבא', 'סבתא', 'אח', 'אחות', 'דוד', 'דודה', 'חבר מהכיתה']
+
+  const [closeness, setCloseness] = useState<string>(aiClosenessOptions[0] || '')
+  const [style, setStyle] = useState<string>(aiStyleOptions[0] || '')
+  const [writer, setWriter] = useState<string>('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
+  const [aiError, setAiError] = useState<string | null>(null)
+
   // media pickers (mobile-friendly)
   const pickRef = useRef<HTMLInputElement | null>(null)
   const cameraPhotoRef = useRef<HTMLInputElement | null>(null)
@@ -497,6 +515,106 @@ async function saveEdit() {
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
+
+            {aiEnabled && (
+              <div className="rounded-xl border border-zinc-200 p-3 space-y-2">
+                <p className="text-sm font-medium">עזרה בכתיבת ברכה</p>
+
+                <div className="space-y-1">
+                  <p className="text-xs text-zinc-500">בחרו קרבה לחוגג</p>
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    {aiClosenessOptions.map(opt => (
+                      <button
+                        key={opt}
+                        type="button"
+                        className={
+                          'rounded-full border px-3 py-1 text-sm ' +
+                          (closeness === opt ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-900 border-zinc-200')
+                        }
+                        onClick={() => setCloseness(opt)}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs text-zinc-500">בחרו סגנון כתיבה</p>
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    {aiStyleOptions.map(opt => (
+                      <button
+                        key={opt}
+                        type="button"
+                        className={
+                          'rounded-full border px-3 py-1 text-sm ' +
+                          (style === opt ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-900 border-zinc-200')
+                        }
+                        onClick={() => setStyle(opt)}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs text-zinc-500">מי כותב</p>
+                  <Input
+                    placeholder="אופציונלי"
+                    value={writer}
+                    onChange={e => setWriter(e.target.value)}
+                    list="writer_suggestions"
+                  />
+                  <datalist id="writer_suggestions">
+                    {aiWriterSuggestions.map(x => (
+                      <option key={x} value={x} />
+                    ))}
+                  </datalist>
+                </div>
+
+                {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+
+                <div className="flex flex-wrap gap-2 justify-end">
+                  <Button type="button" disabled={aiBusy} onClick={() => runAi('improve')}>
+                    ✨ שפר לי את הברכה
+                  </Button>
+                  <Button type="button" variant="outline" disabled={aiBusy} onClick={() => runAi('more_emotional')}>
+                    💖 מרגש יותר
+                  </Button>
+                  <Button type="button" variant="outline" disabled={aiBusy} onClick={() => runAi('more_funny')}>
+                    😊 מצחיק בעדינות
+                  </Button>
+                  <Button type="button" variant="outline" disabled={aiBusy} onClick={() => runAi('more_formal')}>
+                    רשמי יותר
+                  </Button>
+                  <Button type="button" variant="outline" disabled={aiBusy} onClick={() => runAi('shorter')}>
+                    קצר יותר
+                  </Button>
+                </div>
+
+                {aiSuggestion && (
+                  <div className="rounded-xl border border-zinc-200 p-3 space-y-2 bg-zinc-50">
+                    <p className="text-sm font-medium">הצעה</p>
+                    <Textarea value={aiSuggestion} onChange={e => setAiSuggestion(e.target.value)} />
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setText(aiSuggestion || '')
+                          setAiSuggestion(null)
+                        }}
+                      >
+                        השתמש בטקסט הזה
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setAiSuggestion(null)}>
+                        סגור
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <Input placeholder="קישור (אופציונלי)" value={linkUrl} onChange={e => { setLinkTouched(true); setLinkUrl(e.target.value) }} dir="ltr" />
             <LinkPreview url={linkUrl} />
             <div className="flex items-center justify-between gap-3">
@@ -729,7 +847,7 @@ async function saveEdit() {
             {editDraft.media_url && !editRemoveMedia && !editFile && (
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="h-16 w-16 overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
-                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover" />
+                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover object-top" />
                 </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -847,7 +965,7 @@ function LinkPreviewThumb({ url, size }: { url?: string; size: number }) {
       style={{ width: size, height: size }}
       aria-label="פתח קישור"
     >
-      <img src={img} alt="" className="h-full w-full object-cover" />
+      <img src={img} alt="" className="h-full w-full object-cover object-top" />
     </a>
   )
 }

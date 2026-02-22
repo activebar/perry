@@ -68,7 +68,12 @@ export async function PUT(req: NextRequest) {
       'approval_lock_after_days',
       'max_blessing_lines',
       'show_link_preview',
-      'preview_image_size'
+      'preview_image_size',
+      'ai_blessing_enabled',
+      'ai_blessing_daily_limit',
+      'ai_closeness_options',
+      'ai_style_options',
+      'ai_writer_suggestions'
     ]
     const SHARE_KEYS = [
       'show_qr_admin',

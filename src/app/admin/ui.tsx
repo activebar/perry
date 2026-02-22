@@ -88,6 +88,21 @@ function hostOf(u: string) {
   }
 }
 
+function linesToArray(v: any): string[] {
+  const s = String(v || '')
+  const out = s
+    .split(/\r?\n/g)
+    .map(x => x.trim())
+    .filter(Boolean)
+  return Array.from(new Set(out))
+}
+
+function arrayToLines(v: any): string {
+  if (!Array.isArray(v)) return ''
+  return v.map(x => String(x || '').trim()).filter(Boolean).join('\n')
+}
+
+
 function youtubeThumb(u: string) {
   try {
     const url = new URL(u)
@@ -563,9 +578,6 @@ export default function AdminApp({
   // diag
   const [diag, setDiag] = useState<any | null>(null)
 
-  // top-level counts (shown in header in every tab)
-  const [pendingMediaTotal, setPendingMediaTotal] = useState<number>(0)
-
   const bSize = Number(settings?.blessings_media_size ?? 96)
   const safeBSize = Number.isFinite(bSize) ? Math.max(56, Math.min(220, bSize)) : 96
   const linkPreviewEnabled = settings?.link_preview_enabled === true
@@ -586,13 +598,6 @@ export default function AdminApp({
   useEffect(() => {
     refreshMe()
   }, [])
-
-  // Always keep event settings loaded so moderation UI (and media sizing) reacts immediately.
-  useEffect(() => {
-    if (!admin) return
-    loadSettings().catch(() => null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [admin])
 
   useEffect(() => {
     if (!admin) return
@@ -893,19 +898,11 @@ async function loadBlocks() {
         jfetch(`/api/admin/posts?status=pending&kind=gallery_admin`, { method: 'GET', headers: {} as any })
       ])
 
-      // pending gallery media (images/videos) awaiting approval
-      const m = await jfetch(`/api/admin/media-items?status=pending`, { method: 'GET', headers: {} as any }).catch(
-        () => ({ items: [] }) as any
-      )
-
       const bCount = (b.posts || []).length
       const pCount = (g.posts || []).length + (ga.posts || []).length
 
-      const mCount = (m.items || []).length
-
       setPendingBlessingsCount(bCount)
       setPendingCount(bCount + pCount)
-      setPendingMediaTotal(mCount)
     } catch {}
   }
 
@@ -1125,7 +1122,6 @@ async function loadBlocks() {
     try {
       await jfetch('/api/admin/media-items', { method: 'PUT', body: JSON.stringify({ id, is_approved: true }) })
       setPendingMedia(prev => prev.filter(x => x.id !== id))
-      setPendingMediaTotal(prev => Math.max(0, (prev || 0) - 1))
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה באישור'))
     }
@@ -1137,7 +1133,6 @@ async function loadBlocks() {
     try {
       await jfetch('/api/admin/media-items', { method: 'DELETE', body: JSON.stringify({ id }) })
       setPendingMedia(prev => prev.filter(x => x.id !== id))
-      setPendingMediaTotal(prev => Math.max(0, (prev || 0) - 1))
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה במחיקה'))
     }
@@ -1157,8 +1152,6 @@ async function loadBlocks() {
     }
     if (tab === 'blocks') loadBlocks()
     if (tab === 'moderation') {
-      // make sure settings are loaded (media size etc.)
-      loadSettings()
       loadPending()
       loadApprovedBlessings()
     }
@@ -1241,7 +1234,7 @@ async function loadBlocks() {
             <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{activeEventId || 'IDO'}</span></p>
 <div className="mt-1 flex flex-wrap gap-2 text-xs">
               <span className={`rounded-full px-2 py-0.5 ${pendingBlessingsCount > 0 ? 'bg-amber-50 text-amber-800' : 'bg-zinc-100 text-zinc-600'}`}>ברכות ממתינות: {pendingBlessingsCount}</span>
-              <span className={`rounded-full px-2 py-0.5 ${pendingMediaTotal > 0 ? 'bg-amber-50 text-amber-800' : 'bg-zinc-100 text-zinc-600'}`}>תמונות ממתינות: {pendingMediaTotal}</span>
+              <span className={`rounded-full px-2 py-0.5 ${galleriesTotalPending > 0 ? 'bg-amber-50 text-amber-800' : 'bg-zinc-100 text-zinc-600'}`}>ממתינות לאישור: {galleriesTotalPending}</span>
             </div>
 
             {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
@@ -1540,6 +1533,56 @@ async function loadBlocks() {
                 onChange={e => setSettings({ ...(settings as any), max_blessing_lines: Number(e.target.value) })}
                 placeholder="למשל 50"
               />
+
+
+              <div className="mt-3 rounded-xl border border-zinc-200 p-3 space-y-2" dir="rtl">
+                <p className="text-sm font-medium text-right">עזרה בכתיבת ברכה</p>
+
+                <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                  <input
+                    type="checkbox"
+                    checked={(settings as any).ai_blessing_enabled !== false}
+                    onChange={e => setSettings({ ...(settings as any), ai_blessing_enabled: e.target.checked })}
+                  />
+                  להפעיל עזרה בכתיבת ברכה
+                </label>
+
+                <label className="text-xs text-zinc-500 text-right">מגבלת בקשות ליום לכל מכשיר (ai_blessing_daily_limit)</label>
+                <Input
+                  className="text-right"
+                  dir="rtl"
+                  value={String((settings as any).ai_blessing_daily_limit ?? 3)}
+                  onChange={e => setSettings({ ...(settings as any), ai_blessing_daily_limit: Number(e.target.value) })}
+                  placeholder="למשל 3"
+                />
+
+                <label className="text-xs text-zinc-500 text-right">אפשרויות קרבה לחוגג, שורה לכל אפשרות</label>
+                <Textarea
+                  className="text-right"
+                  dir="rtl"
+                  value={arrayToLines((settings as any).ai_closeness_options)}
+                  onChange={e => setSettings({ ...(settings as any), ai_closeness_options: linesToArray(e.target.value) })}
+                  placeholder={'משפחה\nחברים\nמהעבודה'}
+                />
+
+                <label className="text-xs text-zinc-500 text-right">אפשרויות סגנון כתיבה, שורה לכל אפשרות</label>
+                <Textarea
+                  className="text-right"
+                  dir="rtl"
+                  value={arrayToLines((settings as any).ai_style_options)}
+                  onChange={e => setSettings({ ...(settings as any), ai_style_options: linesToArray(e.target.value) })}
+                  placeholder={'מרגש\nקליל\nרשמי'}
+                />
+
+                <label className="text-xs text-zinc-500 text-right">הצעות מהירות לשדה מי כותב, שורה לכל אפשרות</label>
+                <Textarea
+                  className="text-right"
+                  dir="rtl"
+                  value={arrayToLines((settings as any).ai_writer_suggestions)}
+                  onChange={e => setSettings({ ...(settings as any), ai_writer_suggestions: linesToArray(e.target.value) })}
+                  placeholder={'אבא\nאמא\nסבא\nסבתא\nחבר מהכיתה'}
+                />
+              </div>
 
 
               <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
