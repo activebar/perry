@@ -21,6 +21,17 @@ async function getLatestSettingsRow() {
   return data as any
 }
 
+function shuffleInPlace<T>(arr: T[]) {
+  // Fisher–Yates shuffle
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = arr[i]
+    arr[i] = arr[j]
+    arr[j] = tmp
+  }
+  return arr
+}
+
 type BlockGalleryCfg = {
   gallery_id?: string
   title?: string
@@ -102,10 +113,15 @@ export default async function GalleryIndexPage() {
       const u = (it as any).thumb_url || (it as any).url
       if (!u) continue
       const arr = previewByGalleryId.get(gid) || []
-      if (arr.length < previewLimit) {
-        arr.push(u)
-        previewByGalleryId.set(gid, arr)
-      }
+      // collect more than needed, then shuffle per-gallery so refresh shows a different mix
+      if (arr.length < Math.max(previewLimit * 8, 80)) arr.push(u)
+      previewByGalleryId.set(gid, arr)
+    }
+
+    // Randomize per gallery (server-side, per request)
+    for (const [gid, arr] of previewByGalleryId.entries()) {
+      shuffleInPlace(arr)
+      previewByGalleryId.set(gid, arr.slice(0, previewLimit))
     }
   }
 
@@ -156,15 +172,10 @@ export default async function GalleryIndexPage() {
                       {previews.length ? (
                         <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${previewCols}, minmax(0, 1fr))` }}>
                           {previews.slice(0, previewLimit).map((u, idx) => (
-                            <div key={idx} className="relative aspect-square overflow-hidden rounded-lg bg-zinc-100">
+                            <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-zinc-100">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              {/*
-                                Square previews + portrait-friendly centering:
-                                1) blurred cover image fills the square background
-                                2) main image is object-contain so portrait isn't cropped
-                              */}
-                              <img src={u} alt="" className="absolute inset-0 h-full w-full object-cover object-center blur-md scale-110 opacity-60" />
-                              <img src={u} alt="" className="absolute inset-0 h-full w-full object-contain object-center" />
+                              {/* Match home-page previews: always square tiles with cover + centered */}
+                              <img src={u} alt="" className="h-full w-full object-cover object-center" />
                             </div>
                           ))}
                         </div>
