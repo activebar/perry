@@ -1,7 +1,7 @@
 import { Container, Card } from '@/components/ui'
 import AdminDashboard from './AdminDashboard'
 
-export type AdminMainTab = 'event' | 'blessings' | 'galleries' | 'design' | 'permissions'
+export type AdminMainTab = 'event' | 'blessings' | 'galleries' | 'design' | 'permissions' | 'ai' | 'clone'
 
 export const dynamic = 'force-dynamic'
 

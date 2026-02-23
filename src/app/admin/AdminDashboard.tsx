@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import AdminApp from './ui'
 import type { AdminMainTab } from './page'
 
-type InnerTab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
+type InnerTab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'ai' | 'clone' | 'diag' | 'permissions'
 
 function classNames(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(' ')
@@ -20,7 +20,9 @@ const tabs = useMemo(
       { key: 'blessings', label: 'ברכות' },
       { key: 'galleries', label: 'גלריות' },
       { key: 'design', label: 'עיצוב ותוכן' },
-      { key: 'permissions', label: 'הרשאות' }
+      { key: 'permissions', label: 'הרשאות' },
+      { key: 'ai', label: 'AI' },
+      { key: 'clone', label: 'שכפול' }
     ] as const,
   []
 )
@@ -46,6 +48,12 @@ const tabs = useMemo(
       pendingKind = 'blessing'
     } else if (tab === 'permissions') {
       initialTab = 'permissions'
+      pendingKind = 'blessing'
+    } else if (tab === 'ai') {
+      initialTab = 'ai'
+      pendingKind = 'blessing'
+    } else if (tab === 'clone') {
+      initialTab = 'clone'
       pendingKind = 'blessing'
     }
 
