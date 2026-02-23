@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     const env = getServerEnv()
     const sourceEventId = env.EVENT_SLUG || 'ido'
 
-    const sb = supabaseServiceRole
+    const sb = supabaseServiceRole()
 
     const [blocksRes, galleriesRes, rulesRes, settingsRes] = await Promise.all([
       sb.from('blocks').select('*').eq('event_id', sourceEventId),
