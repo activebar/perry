@@ -567,7 +567,7 @@ async function saveEdit() {
   return (
     <main dir="rtl" className="text-right">
       <Container>
-<Card>
+        <Card>
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
