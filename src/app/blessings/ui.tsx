@@ -601,7 +601,94 @@ async function saveEdit() {
 
                 {file && <p className="text-xs text-zinc-600">נבחר: {file.name}</p>}
               </div>
-              <Button disabled={busy || (!text && !file && !linkUrl)} onClick={submitBlessing}>
+              
+{aiEnabled && (
+  <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
+    <div className="text-sm font-semibold text-right">עזרה בכתיבת ברכה</div>
+
+    <div className="mt-3 text-xs text-right text-zinc-500">בחרו קרבה לחוגג</div>
+    <div className="mt-2 flex flex-wrap gap-2 justify-end">
+      {closenessOptions.map((label) => (
+        <Button
+          key={label}
+          type="button"
+          variant={aiCloseness === label ? 'primary' : 'ghost'}
+          onClick={() => setAiCloseness(label)}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
+
+    <div className="mt-4 text-xs text-right text-zinc-500">בחרו סגנון כתיבה</div>
+    <div className="mt-2 flex flex-wrap gap-2 justify-end">
+      {styleOptions.map((label) => (
+        <Button
+          key={label}
+          type="button"
+          variant={aiStyle === label ? 'primary' : 'ghost'}
+          onClick={() => setAiStyle(label)}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
+
+    <div className="mt-4 text-xs text-right text-zinc-500">מי כותב</div>
+    <Input
+      value={aiWriter}
+      onChange={(e) => setAiWriter(e.target.value)}
+      placeholder="אבא, אמא, סבתא, חבר מהכיתה"
+      className="text-right"
+    />
+    <div className="mt-2 flex flex-wrap gap-2 justify-end">
+      {writerSuggestions.slice(0, 10).map((w) => (
+        <Button key={w} type="button" variant="ghost" onClick={() => setAiWriter(w)}>
+          {w}
+        </Button>
+      ))}
+    </div>
+
+    <div className="mt-4 flex justify-end">
+      <Button type="button" disabled={aiBusy} onClick={runAiImprove}>
+        ✨ שפר לי את הברכה
+      </Button>
+    </div>
+
+    {aiError && <p className="mt-2 text-sm text-red-600 text-right">{aiError}</p>}
+
+    {aiSuggestion && (
+      <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+        <div className="text-sm font-semibold text-right">הצעה</div>
+        <Textarea
+          value={aiSuggestion}
+          onChange={(e) => setAiSuggestion(e.target.value)}
+          className="mt-2 text-right text-base leading-6"
+          rows={10}
+        />
+        <div className="mt-3 flex flex-wrap gap-2 justify-end">
+          <Button
+            type="button"
+            onClick={() => {
+              setText(aiSuggestion)
+              setAiSuggestion('')
+            }}
+          >
+            השתמש בטקסט הזה
+          </Button>
+          <Button type="button" variant="ghost" onClick={runAiImprove} disabled={aiBusy}>
+            נסה שוב
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setAiSuggestion('')}>
+            סגור
+          </Button>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+<Button disabled={busy || (!text && !file && !linkUrl)} onClick={submitBlessing}>
                 {busy ? 'שולח...' : 'שלח ברכה'}
               </Button>
             </div>
