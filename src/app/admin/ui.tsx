@@ -242,7 +242,7 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions' | 'ai' | 'clone'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
@@ -252,6 +252,8 @@ const TAB_LABEL: Record<string, string> = {
   admin_gallery: 'גלריית מנהל',
   diag: 'דיאגנוסטיקה',
   permissions: 'הרשאות',
+  ai: 'AI',
+  clone: 'שכפול',
   login: 'התחברות'
 }
 
@@ -337,6 +339,16 @@ export default function AdminApp({
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
+
+  // AI + clone
+  const [aiConfigText, setAiConfigText] = useState('')
+  const [aiCfgMsg, setAiCfgMsg] = useState<string | null>(null)
+
+  const [cloneKind, setCloneKind] = useState<'bar_mitzvah' | 'wedding' | 'trip'>('bar_mitzvah')
+  const [cloneNewEventId, setCloneNewEventId] = useState('')
+  const [cloneTargetName, setCloneTargetName] = useState('')
+  const [cloneMsg, setCloneMsg] = useState<string | null>(null)
+  const [cloneBusy, setCloneBusy] = useState(false)
 
   // OG default image uploader (1200x630)
   const [ogFile, setOgFile] = useState<File | null>(null)
@@ -593,7 +605,7 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'ai', 'clone', 'diag']
     return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
@@ -625,6 +637,11 @@ export default function AdminApp({
     const s = await jfetch('/api/admin/settings', { method: 'GET', headers: {} as any })
     setSettings(s.settings)
     setStartAtLocal(isoToLocalInput(s.settings?.start_at))
+    try {
+      const cfg = (s.settings as any)?.ai_config
+      if (cfg) setAiConfigText(JSON.stringify(cfg, null, 2))
+    } catch {}
+
   }
 
   async function loadContentRules() {
@@ -755,6 +772,46 @@ export default function AdminApp({
       setErr(friendlyError(e?.message || 'שגיאה בשמירה'))
     } finally {
       setSaving(false)
+    }
+  }
+
+
+  async function saveAiConfig() {
+    setErr(null)
+    setAiCfgMsg(null)
+    try {
+      const parsed = aiConfigText ? JSON.parse(aiConfigText) : null
+      await saveSettings({ ai_config: parsed })
+      setAiCfgMsg('נשמר בהצלחה')
+    } catch (e: any) {
+      setAiCfgMsg(friendlyError(e?.message || 'שגיאה'))
+    }
+  }
+
+  async function runClone() {
+    setErr(null)
+    setCloneMsg(null)
+    const newEventId = (cloneNewEventId || '').trim()
+    if (!newEventId) {
+      setCloneMsg('חובה למלא מזהה אירוע חדש')
+      return
+    }
+    setCloneBusy(true)
+    try {
+      const res = await jfetch('/api/admin/clone-event', {
+        method: 'POST',
+        body: JSON.stringify({
+          source_event_id: activeEventId,
+          new_event_id: newEventId,
+          kind: cloneKind,
+          target_name: cloneTargetName || ''
+        })
+      })
+      setCloneMsg(res?.ok ? 'השכפול בוצע בהצלחה' : 'בוצע')
+    } catch (e: any) {
+      setCloneMsg(friendlyError(e?.message || 'שגיאה'))
+    } finally {
+      setCloneBusy(false)
     }
   }
 
@@ -1134,6 +1191,12 @@ async function loadBlocks() {
     if (tab === 'settings') {
       loadSettings()
       loadContentRules()
+    }
+    if (tab === 'ai') {
+      loadSettings()
+    }
+    if (tab === 'clone') {
+      loadSettings()
     }
     if (tab === 'blocks') loadBlocks()
     if (tab === 'moderation') {

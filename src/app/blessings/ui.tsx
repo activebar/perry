@@ -137,6 +137,10 @@ export default function BlessingsClient({
 
 const aiEnabled = (settings as any)?.ai_blessing_enabled !== false
 
+
+  const aiConfig = (settings as any)?.ai_config || {}
+  const writerOptions: string[] = Array.isArray(aiConfig?.writer_options) ? aiConfig.writer_options : writerSuggestions
+  const manualStyles: string[] = Array.isArray(aiConfig?.manual_styles) ? aiConfig.manual_styles : styleOptions
 const closenessOptions: string[] =
   Array.isArray((settings as any)?.blessings_ai_closeness_options) && (settings as any).blessings_ai_closeness_options.length
     ? (settings as any).blessings_ai_closeness_options
@@ -148,6 +152,20 @@ const styleOptions: string[] =
     : ['מרגש', 'קליל', 'רשמי']
 
 const writerSuggestions: string[] =
+  useEffect(() => {
+    if (!selectedWriter) return
+    if (selectedWriter === 'אחר') {
+      setAiWriter(writerOther || '')
+      return
+    }
+    setAiWriter(selectedWriter)
+  }, [selectedWriter])
+
+  useEffect(() => {
+    if (selectedWriter !== 'אחר') return
+    setAiWriter(writerOther || '')
+  }, [writerOther])
+
   Array.isArray((settings as any)?.blessings_ai_writer_suggestions) && (settings as any).blessings_ai_writer_suggestions.length
     ? (settings as any).blessings_ai_writer_suggestions
     : ['אבא', 'אמא', 'סבתא', 'סבא', 'אח', 'אחות', 'דודה', 'דוד', 'חבר מהכיתה', 'חברה מהכיתה']
@@ -605,24 +623,16 @@ async function saveEdit() {
 {aiEnabled && (
   <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
     <div className="text-sm font-semibold text-right">עזרה בכתיבת ברכה</div>
-
-    <div className="mt-3 text-xs text-right text-zinc-500">בחרו קרבה לחוגג</div>
+    <div className="mt-3 text-xs text-right text-zinc-500">בחרו סגנון כתיבה<\/div>
     <div className="mt-2 flex flex-wrap gap-2 justify-end">
-      {closenessOptions.map((label) => (
-        <Button
-          key={label}
-          type="button"
-          variant={aiCloseness === label ? 'primary' : 'ghost'}
-          onClick={() => setAiCloseness(label)}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
-
-    <div className="mt-4 text-xs text-right text-zinc-500">בחרו סגנון כתיבה</div>
-    <div className="mt-2 flex flex-wrap gap-2 justify-end">
-      {styleOptions.map((label) => (
+      <Button
+        type="button"
+        variant={aiStyle === 'אוטומטי' ? 'primary' : 'ghost'}
+        onClick={() => setAiStyle('אוטומטי')}
+      >
+        אוטומטי
+      </Button>
+      {manualStyles.slice(0, 3).map((label) => (
         <Button
           key={label}
           type="button"
@@ -635,19 +645,25 @@ async function saveEdit() {
     </div>
 
     <div className="mt-4 text-xs text-right text-zinc-500">מי כותב</div>
-    <Input
-      value={aiWriter}
-      onChange={(e) => setAiWriter(e.target.value)}
-      placeholder="אבא, אמא, סבתא, חבר מהכיתה"
-      className="text-right"
-    />
-    <div className="mt-2 flex flex-wrap gap-2 justify-end">
-      {writerSuggestions.slice(0, 10).map((w) => (
-        <Button key={w} type="button" variant="ghost" onClick={() => setAiWriter(w)}>
-          {w}
-        </Button>
+    <select
+      value={selectedWriter}
+      onChange={(e) => setSelectedWriter(e.target.value)}
+      className="w-full rounded-xl border border-zinc-200 bg-white p-2 text-right"
+    >
+      <option value="">בחרו</option>
+      {writerOptions.filter(Boolean).slice(0, 40).map((w) => (
+        <option key={w} value={w}>{w}</option>
       ))}
-    </div>
+      <option value="אחר">אחר</option>
+    </select>
+    {selectedWriter === 'אחר' && (
+      <Input
+        value={writerOther}
+        onChange={(e) => setWriterOther(e.target.value)}
+        placeholder="כתבו מי כותב"
+        className="mt-2 text-right"
+      />
+    )}
 
     <div className="mt-4 flex justify-end">
       <Button type="button" disabled={aiBusy} onClick={runAiImprove}>
