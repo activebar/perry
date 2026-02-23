@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const admin = await getAdminFromRequest(req)
     if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data, error } = await supabaseServiceRole
+    const { data, error } = await supabaseServiceRole()
       .from('site_templates')
       .select('id,name,kind,description,config_json,is_active,created_at,updated_at')
       .order('created_at', { ascending: false })
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (!kind) return NextResponse.json({ error: 'missing kind' }, { status: 400 })
     if (!config_json) return NextResponse.json({ error: 'missing config_json' }, { status: 400 })
 
-    const { data, error } = await supabaseServiceRole
+    const { data, error } = await supabaseServiceRole()
       .from('site_templates')
       .insert([{ name, kind, description: description || null, config_json, is_active }])
       .select('*')
