@@ -145,6 +145,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   const [data, setData] = useState<HomePayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
 
   const base = `/${encodeURIComponent(eventId || '')}`
   const hrefOf = (p: string) => `${base}${p.startsWith('/') ? p : `/${p}`}`
@@ -195,7 +196,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   const visibleTypes = useMemo(() => {
     const s = settings || {}
     const now = new Date()
-    return new Set<string>(
+    return new Set(
       (blocks || [])
         .filter((b: any) => b && b.is_visible)
         .filter((b: any) => {
@@ -233,11 +234,16 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   const shareTitle = String(settings?.share_title || title || '').trim() || title
   const shareBody = String(settings?.share_body || '').trim()
 
-  const shareMsg = buildShareMessage({
-    title: shareTitle,
-    body: shareBody,
-    url: typeof window !== 'undefined' ? window.location.href : ''
-  })
+  const shareLink = typeof window !== 'undefined' ? window.location.href : ''
+  const shareMsg = buildShareMessage(
+    settings?.share_template ?? null,
+    {
+      EVENT_NAME: shareTitle,
+      TEXT: shareBody,
+      LINK: shareLink
+    },
+    ''
+  )
 
   return (
     <main dir="rtl" className="text-right">
@@ -264,7 +270,16 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
 
               {shareEnabled ? (
                 <div className="mt-4 flex justify-end">
-                  <ShareModal title={shareTitle} message={shareMsg} />
+                  <Button type="button" variant="ghost" onClick={() => setShareOpen(true)}>
+                    שיתוף
+                  </Button>
+                  <ShareModal
+                    open={shareOpen}
+                    onClose={() => setShareOpen(false)}
+                    title={shareTitle}
+                    message={shareMsg}
+                    link={shareLink}
+                  />
                 </div>
               ) : null}
             </Card>
