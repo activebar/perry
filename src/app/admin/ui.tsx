@@ -1983,7 +1983,7 @@ async function loadBlocks() {
       )}
 
       {tab === 'clone' && (
-        <ClonePanel eventId={eventId} />
+        <ClonePanel eventId={activeEventId} />
       )}
 
       {tab === 'blocks' && (
