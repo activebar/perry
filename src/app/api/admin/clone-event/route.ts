@@ -68,19 +68,13 @@ export async function POST(req: NextRequest) {
     const rules = Array.isArray(cfg?.content_rules) ? cfg.content_rules : []
     const settings = Array.isArray(cfg?.event_settings) ? cfg.event_settings : []
 
-    // sanity: ensure target does not exist (event_settings rows are our marker)
-    const existsRes = await sb.from('event_settings').select('id').eq('event_id', targetEventId).limit(1)
-    if (existsRes.error) return NextResponse.json({ error: existsRes.error.message }, { status: 400 })
-    if ((existsRes.data || []).length > 0) {
-      return NextResponse.json({ error: 'Target event_id already exists' }, { status: 400 })
-    }
-
     // insert event_settings first
     const settingsRows = settings.map((r: any) => {
       const next = stripRow(r, { event_id: targetEventId })
-      if (targetEventName && (next.key === 'event_name' || next.name === 'event_name')) {
-        next.value = targetEventName
-        next.val = targetEventName
+      // event_settings in this project is a "wide" table (one row per event_id)
+      // so the template row likely contains columns such as event_name.
+      if (targetEventName && Object.prototype.hasOwnProperty.call(next, 'event_name')) {
+        next.event_name = targetEventName
       }
       return next
     })
