@@ -6,7 +6,13 @@ type Vars = {
   DATE?: string
 }
 
-export function buildShareMessage(
+type LegacyInput = {
+  title: string
+  body?: string
+  url: string
+}
+
+function coreBuildShareMessage(
   template: string | null | undefined,
   vars: Vars,
   noTextFallback: string
@@ -28,4 +34,36 @@ export function buildShareMessage(
   let out = safeTemplate
   for (const [k, v] of Object.entries(map)) out = out.split(k).join(v)
   return out.trim()
+}
+
+// Overloads for backward compatibility
+export function buildShareMessage(
+  template: string | null | undefined,
+  vars: Vars,
+  noTextFallback: string
+): string
+export function buildShareMessage(input: LegacyInput): string
+
+// Implementation
+export function buildShareMessage(a: any, b?: any, c?: any) {
+  // Legacy call: buildShareMessage({ title, body, url })
+  if (a && typeof a === 'object' && b === undefined) {
+    const input = a as LegacyInput
+    const title = String(input.title || '').trim()
+    const body = String(input.body || '').trim()
+    const url = String(input.url || '').trim()
+
+    return coreBuildShareMessage(
+      undefined,
+      {
+        EVENT_NAME: title,
+        TEXT: body,
+        LINK: url
+      },
+      ''
+    )
+  }
+
+  // Current call: buildShareMessage(template, vars, noTextFallback)
+  return coreBuildShareMessage(a, b as Vars, String(c ?? ''))
 }
