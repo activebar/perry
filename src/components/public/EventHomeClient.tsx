@@ -193,10 +193,10 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
     return computeEventPhase(settings.start_at)
   }, [settings?.start_at])
 
-  const visibleTypes = useMemo(() => {
+  const visibleTypes = useMemo<Set<string>>(() => {
     const s = settings || {}
     const now = new Date()
-    return new Set(
+    return new Set<string>(
       (blocks || [])
         .filter((b: any) => b && b.is_visible)
         .filter((b: any) => {
