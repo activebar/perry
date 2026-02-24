@@ -4,6 +4,21 @@ import { supabaseServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+function normalizeEventId(raw: string) {
+  let s = String(raw || '').trim().toLowerCase()
+  s = s.replace(/[_\s]+/g, '-')
+  s = s.replace(/[^a-z0-9-]+/g, '-')
+  s = s.replace(/-+/g, '-')
+  s = s.replace(/^-+/, '').replace(/-+$/, '')
+  return s
+}
+
+function isValidEventId(id: string) {
+  if (!id) return false
+  if (id.length > 24) return false
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)
+}
+
 function stripRow(row: any, overrides: Record<string, any>) {
   const copy: any = { ...row }
   // common columns to avoid copying
@@ -23,15 +38,25 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}))
     const sourceEventId = String(body?.source_event_id || '')
-    const targetEventId = String(body?.target_event_id || '').trim()
-    const targetEventName = String(body?.target_event_name || '').trim() || null
+    const targetEventIdRaw = String(body?.target_event_id || '').trim()
+    const targetEventId = normalizeEventId(targetEventIdRaw)
+    const targetEventName = String(body?.target_event_name || '').trim()
     const templateId = String(body?.template_id || '').trim()
 
-    if (!sourceEventId) return NextResponse.json({ error: 'Missing source_event_id' }, { status: 400 })
-    if (!targetEventId) return NextResponse.json({ error: 'Missing target_event_id' }, { status: 400 })
-    if (!templateId) return NextResponse.json({ error: 'Missing template_id' }, { status: 400 })
+    if (!sourceEventId) return NextResponse.json({ error: 'חסר מקור שכפול' }, { status: 400 })
+    if (!targetEventId) return NextResponse.json({ error: 'חובה למלא event id' }, { status: 400 })
+    if (!templateId) return NextResponse.json({ error: 'חובה לבחור תבנית' }, { status: 400 })
+    if (!targetEventName || targetEventName.length < 2) return NextResponse.json({ error: 'חובה למלא שם תצוגה' }, { status: 400 })
+    if (!isValidEventId(targetEventId)) return NextResponse.json({ error: 'event id לא תקין, מותר אנגלית קטנה, מספרים ומקפים, עד 24 תווים' }, { status: 400 })
 
     const sb = supabaseServiceRole()
+
+    // prevent duplicates
+    const existsRes = await sb.from('event_settings').select('id').eq('event_id', targetEventId).limit(1)
+    if (existsRes.error) return NextResponse.json({ error: existsRes.error.message }, { status: 400 })
+    if ((existsRes.data || []).length > 0) {
+      return NextResponse.json({ error: 'event id כבר קיים, בחר שם אחר' }, { status: 409 })
+    }
 
     // load template
     const tplRes = await sb.from('site_templates').select('id,config_json').eq('id', templateId).single()
