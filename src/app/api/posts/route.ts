@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { matchContentRules } from '@/lib/contentRules'
+import { getServerEnv } from '@/lib/env'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 
@@ -12,6 +13,10 @@ function withinOneHour(iso: string) {
 
 export async function POST(req: Request) {
   try {
+    const env = getServerEnv()
+    const url = new URL(req.url)
+    const eventId = String(url.searchParams.get('event') || '').trim() || env.EVENT_SLUG
+
     const body = await req.json()
     const kind = String(body.kind || '')
     if (!ALLOWED_KINDS.has(kind)) return NextResponse.json({ error: 'bad kind' }, { status: 400 })
@@ -29,7 +34,7 @@ if (kind === 'blessing' || kind === 'gallery') {
     link_url: body.link_url || null,
     media_url: body.media_url || null,
     video_url: body.video_url || null
-  })
+  }, { eventId })
   if (m.matched && m.rule?.rule_type === 'block') {
     matchedBlock = true
     moderation = { source: 'content_rules', action: 'pending', rule_id: m.rule.id, matched_on: m.matched_on }
@@ -58,6 +63,7 @@ const device_id = cookies().get('device_id')?.value || null
     const { data: settings, error: serr } = await srv
       .from('event_settings')
       .select('require_approval')
+      .eq('event_id', eventId)
       .limit(1)
       .single()
     if (serr) throw serr
@@ -66,6 +72,7 @@ const device_id = cookies().get('device_id')?.value || null
     const status = matchedBlock ? 'pending' : baseStatus
 
     const insert = {
+      event_id: eventId,
       kind,
       author_name: body.author_name || null,
       text: body.text || null,

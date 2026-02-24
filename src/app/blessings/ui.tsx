@@ -123,74 +123,27 @@ export default function BlessingsClient({
   settings,
   blocks,
   showHeader = true,
+  eventId,
 }: {
   initialFeed: Post[]
   settings?: any
   blocks?: any[]
   showHeader?: boolean
+  eventId?: string
 }) {
   const [items, setItems] = useState<Post[]>(initialFeed || [])
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
-
-
-const aiEnabled = (settings as any)?.ai_blessing_enabled !== false
-
-const closenessOptions: string[] =
-  Array.isArray((settings as any)?.blessings_ai_closeness_options) && (settings as any).blessings_ai_closeness_options.length
-    ? (settings as any).blessings_ai_closeness_options
-    : ['משפחה', 'חברים', 'מהעבודה']
-
-const styleOptions: string[] =
-  Array.isArray((settings as any)?.blessings_ai_style_options) && (settings as any).blessings_ai_style_options.length
-    ? (settings as any).blessings_ai_style_options
-    : ['מרגש', 'קליל', 'רשמי']
-
-const writerSuggestions: string[] =
-  Array.isArray((settings as any)?.blessings_ai_writer_suggestions) && (settings as any).blessings_ai_writer_suggestions.length
-    ? (settings as any).blessings_ai_writer_suggestions
-    : ['אבא', 'אמא', 'סבתא', 'סבא', 'אח', 'אחות', 'דודה', 'דוד', 'חבר מהכיתה', 'חברה מהכיתה']
-
-const [aiCloseness, setAiCloseness] = useState<string>(closenessOptions[0] || '')
-const [aiStyle, setAiStyle] = useState<string>(styleOptions[0] || '')
-const [aiWriter, setAiWriter] = useState<string>('')
-
-const [aiBusy, setAiBusy] = useState(false)
-const [aiError, setAiError] = useState<string | null>(null)
-const [aiSuggestion, setAiSuggestion] = useState<string>('')
-
-async function runAiImprove() {
-  setAiError(null)
-  setAiSuggestion('')
-  if (!text.trim()) {
-    setAiError('כדאי לכתוב טקסט קצר לפני שיפור')
-    return
-  }
-  try {
-    setAiBusy(true)
-    const res = await fetch('/api/ai/blessing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'improve',
-        text,
-        closeness: aiCloseness,
-        style: aiStyle,
-        writer: aiWriter,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data?.error || 'שגיאה')
-    setAiSuggestion(String(data?.suggestion || ''))
-  } catch (e: any) {
-    setAiError(e?.message || 'שגיאה')
-  } finally {
-    setAiBusy(false)
-  }
-}
   const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
+
+  const withEvent = (url: string) => {
+    const eid = String(eventId || '').trim()
+    if (!eid) return url
+    const glue = url.includes('?') ? '&' : '?'
+    return `${url}${glue}event=${encodeURIComponent(eid)}`
+  }
 
   // media pickers (mobile-friendly)
   const pickRef = useRef<HTMLInputElement | null>(null)
@@ -284,7 +237,7 @@ async function runAiImprove() {
 
     async function pull() {
       try {
-        const res = await fetch(`/api/blessings/feed?ts=${Date.now()}`, { cache: 'no-store' })
+    const res = await fetch(withEvent(`/api/blessings/feed?ts=${Date.now()}`), { cache: 'no-store' })
         if (!res.ok) return
         const j = await res.json().catch(() => ({}))
         if (!cancelled && Array.isArray(j.items)) setItems(j.items)
@@ -334,7 +287,7 @@ async function runAiImprove() {
         }
       }
 
-      const res = await jfetch('/api/posts', {
+      const res = await jfetch(withEvent('/api/posts'), {
         method: 'POST',
         body: JSON.stringify({
           kind: 'blessing',
@@ -451,7 +404,7 @@ async function saveEdit() {
       media_url
     }
 
-    const res = await jfetch('/api/posts', { method: 'PUT', body: JSON.stringify(patch) })
+    const res = await jfetch(withEvent('/api/posts'), { method: 'PUT', body: JSON.stringify(patch) })
     setItems((prev: any[]) => prev.map(x => (x.id === res.post.id ? { ...x, ...res.post } : x)))
     setEditOpen(false)
     setEditDraft(null)
@@ -468,7 +421,7 @@ async function saveEdit() {
     if (!confirm('למחוק את הברכה?')) return
     setErr(null)
     try {
-      await jfetch('/api/posts', { method: 'DELETE', body: JSON.stringify({ id }) })
+      await jfetch(withEvent('/api/posts'), { method: 'DELETE', body: JSON.stringify({ id }) })
       setItems(prev => prev.filter(p => p.id !== id))
       setMsg('✅ נמחק')
       setTimeout(() => setMsg(null), 1200)
@@ -601,94 +554,7 @@ async function saveEdit() {
 
                 {file && <p className="text-xs text-zinc-600">נבחר: {file.name}</p>}
               </div>
-              
-{aiEnabled && (
-  <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4">
-    <div className="text-sm font-semibold text-right">עזרה בכתיבת ברכה</div>
-
-    <div className="mt-3 text-xs text-right text-zinc-500">בחרו קרבה לחוגג</div>
-    <div className="mt-2 flex flex-wrap gap-2 justify-end">
-      {closenessOptions.map((label) => (
-        <Button
-          key={label}
-          type="button"
-          variant={aiCloseness === label ? 'primary' : 'ghost'}
-          onClick={() => setAiCloseness(label)}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
-
-    <div className="mt-4 text-xs text-right text-zinc-500">בחרו סגנון כתיבה</div>
-    <div className="mt-2 flex flex-wrap gap-2 justify-end">
-      {styleOptions.map((label) => (
-        <Button
-          key={label}
-          type="button"
-          variant={aiStyle === label ? 'primary' : 'ghost'}
-          onClick={() => setAiStyle(label)}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
-
-    <div className="mt-4 text-xs text-right text-zinc-500">מי כותב</div>
-    <Input
-      value={aiWriter}
-      onChange={(e) => setAiWriter(e.target.value)}
-      placeholder="אבא, אמא, סבתא, חבר מהכיתה"
-      className="text-right"
-    />
-    <div className="mt-2 flex flex-wrap gap-2 justify-end">
-      {writerSuggestions.slice(0, 10).map((w) => (
-        <Button key={w} type="button" variant="ghost" onClick={() => setAiWriter(w)}>
-          {w}
-        </Button>
-      ))}
-    </div>
-
-    <div className="mt-4 flex justify-end">
-      <Button type="button" disabled={aiBusy} onClick={runAiImprove}>
-        ✨ שפר לי את הברכה
-      </Button>
-    </div>
-
-    {aiError && <p className="mt-2 text-sm text-red-600 text-right">{aiError}</p>}
-
-    {aiSuggestion && (
-      <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
-        <div className="text-sm font-semibold text-right">הצעה</div>
-        <Textarea
-          value={aiSuggestion}
-          onChange={(e) => setAiSuggestion(e.target.value)}
-          className="mt-2 text-right text-base leading-6"
-          rows={10}
-        />
-        <div className="mt-3 flex flex-wrap gap-2 justify-end">
-          <Button
-            type="button"
-            onClick={() => {
-              setText(aiSuggestion)
-              setAiSuggestion('')
-            }}
-          >
-            השתמש בטקסט הזה
-          </Button>
-          <Button type="button" variant="ghost" onClick={runAiImprove} disabled={aiBusy}>
-            נסה שוב
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setAiSuggestion('')}>
-            סגור
-          </Button>
-        </div>
-      </div>
-    )}
-  </div>
-)}
-
-<Button disabled={busy || (!text && !file && !linkUrl)} onClick={submitBlessing}>
+              <Button disabled={busy || (!text && !file && !linkUrl)} onClick={submitBlessing}>
                 {busy ? 'שולח...' : 'שלח ברכה'}
               </Button>
             </div>
@@ -731,9 +597,9 @@ async function saveEdit() {
                         aria-label="פתח מדיה"
                       >
                         {video ? (
-                          <video src={mediaUrl} className="h-full w-full object-cover object-top" muted playsInline />
+                          <video src={mediaUrl} className="h-full w-full object-cover" muted playsInline />
                         ) : (
-                          <img src={mediaUrl} alt="" className="h-full w-full object-cover object-top" />
+                          <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
                         )}
                       </button>
                     </div>
@@ -872,7 +738,7 @@ async function saveEdit() {
             {editDraft.media_url && !editRemoveMedia && !editFile && (
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="h-16 w-16 overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
-                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover object-top" />
+                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover" />
                 </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -990,7 +856,7 @@ function LinkPreviewThumb({ url, size }: { url?: string; size: number }) {
       style={{ width: size, height: size }}
       aria-label="פתח קישור"
     >
-      <img src={img} alt="" className="h-full w-full object-cover object-top" />
+      <img src={img} alt="" className="h-full w-full object-cover" />
     </a>
   )
 }

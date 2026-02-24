@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const env = getServerEnv()
+    const url = new URL(req.url)
+    const eventId = String(url.searchParams.get('event') || '').trim() || env.EVENT_SLUG
+
     const device_id = cookies().get('device_id')?.value || null
     const srv = supabaseServiceRole()
 
@@ -17,6 +22,7 @@ export async function GET() {
     const { data: posts, error } = await srv
       .from('posts')
       .select('id, created_at, author_name, text, media_url, video_url, link_url, status, device_id')
+      .eq('event_id', eventId)
       .eq('kind', 'blessing')
       .eq('status', 'approved')
       .order('created_at', { ascending: false })

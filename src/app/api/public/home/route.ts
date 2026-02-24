@@ -1,16 +1,22 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
 
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
-async function fetchSettingsAndBlocks() {
-  const env = getServerEnv()
+async function fetchSettingsAndBlocks(eventId: string) {
   const sb = supabaseAnon()
   const [{ data: settings, error: sErr }, { data: blocks, error: bErr }] = await Promise.all([
-    sb.from('event_settings').select('*').order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(1).single(),
-    sb.from('blocks').select('*').eq('event_id', env.EVENT_SLUG).order('order_index', { ascending: true })
+    sb
+      .from('event_settings')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single(),
+    sb.from('blocks').select('*').eq('event_id', eventId).order('order_index', { ascending: true })
   ])
   if (sErr) throw sErr
   if (bErr) throw bErr
@@ -21,7 +27,7 @@ async function fetchSettingsAndBlocks() {
 // We keep /api/public/home focused on settings + blocks + blessings.
 
 
-async function fetchGalleryPreviews(blocks: any[]) {
+async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
   const sb = supabaseAnon()
   const galleryBlocks = (blocks || []).filter((b: any) => {
     const t = String(b?.type || '')
@@ -36,7 +42,7 @@ async function fetchGalleryPreviews(blocks: any[]) {
   const { data, error } = await sb
     .from('media_items')
     .select('id, gallery_id, url, thumb_url, public_url, storage_path, created_at, kind, is_approved, crop_position')
-    .eq('event_id', getServerEnv().EVENT_SLUG)
+    .eq('event_id', eventId)
     // IMPORTANT: Some rows use kind='galleries' (legacy). Show both.
     .in('kind', ['gallery', 'galleries'])
     .eq('is_approved', true)
@@ -87,21 +93,18 @@ async function fetchGalleryPreviews(blocks: any[]) {
 }
 
 
-async function fetchBlessingsPreview(limit: number, device_id?: string | null) {
+async function fetchBlessingsPreview(eventId: string, limit: number, device_id?: string | null) {
   const sb = supabaseAnon()
   const safeLimit = Math.max(0, Math.min(20, Number(limit || 0)))
   if (!safeLimit) return []
 
-  // Prefer server-side random order via RPC (if exists)
-const { data: rpcPosts, error: rpcErr } = await sb.rpc('get_home_posts_random', { p_limit: safeLimit })
-const posts = (rpcErr ? null : (rpcPosts as any[] | null)) || null
-const error = rpcErr || null
-
-// Fallback: latest first if RPC not installed yet
-const fallback = async () => {
+  // Keep deterministic per-event query here.
+  // We intentionally do not use RPC random functions because they may not filter by event.
+  const fallback = async () => {
   const { data, error } = await sb
     .from('posts')
     .select('id, author_name, text, media_url, link_url, created_at')
+    .eq('event_id', eventId)
     .eq('kind', 'blessing')
     .eq('status', 'approved')
     .order('created_at', { ascending: false })
@@ -109,9 +112,9 @@ const fallback = async () => {
   return { data, error }
 }
 
-const final = !posts ? await fallback() : { data: posts, error: null }
-const postsFinal = final.data as any[] | null
-const errFinal = final.error
+  const final = await fallback()
+  const postsFinal = final.data as any[] | null
+  const errFinal = final.error
 
   if (errFinal || !postsFinal || postsFinal.length === 0) return []
 
@@ -153,9 +156,14 @@ const errFinal = final.error
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const { settings, blocks } = await fetchSettingsAndBlocks()
+    const env = getServerEnv()
+    const url = new URL(req.url)
+    const eventFromQuery = String(url.searchParams.get('event') || '').trim()
+    const eventId = eventFromQuery || env.EVENT_SLUG
+
+    const { settings, blocks } = await fetchSettingsAndBlocks(eventId)
     const device_id = cookies().get('device_id')?.value || null
 
     // visible types
@@ -179,8 +187,8 @@ export async function GET() {
 
     const blessingsPreviewLimit = Number(settings.blessings_preview_limit ?? 3)
 
-    const blessingsPreview = await fetchBlessingsPreview(blessingsPreviewLimit, device_id)
-    const galleryPreviews = await fetchGalleryPreviews(blocks)
+    const blessingsPreview = await fetchBlessingsPreview(eventId, blessingsPreviewLimit, device_id)
+    const galleryPreviews = await fetchGalleryPreviews(eventId, blocks)
 
     return NextResponse.json({
       ok: true,

@@ -64,15 +64,18 @@ export async function fetchActiveContentRules() {
   return (data || []) as ContentRule[]
 }
 
-export async function matchContentRules(input: {
+export async function matchContentRules(
+  input: {
   author_name?: string | null
   text?: string | null
   link_url?: string | null
   media_url?: string | null
   video_url?: string | null
-}) {
+  },
+  opts?: { eventId?: string }
+) {
   const rulesAll = await fetchActiveContentRules()
-  const eventId = getEventId()
+  const eventId = String(opts?.eventId || '').trim() || getEventId()
   // Legacy support: some older rows may have scope='event' but event_id NULL.
   // Treat NULL as "current event" so existing rules still work.
   const rules = rulesAll.filter(
