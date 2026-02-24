@@ -195,7 +195,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   const visibleTypes = useMemo(() => {
     const s = settings || {}
     const now = new Date()
-    return new Set(
+    return new Set<string>(
       (blocks || [])
         .filter((b: any) => b && b.is_visible)
         .filter((b: any) => {
