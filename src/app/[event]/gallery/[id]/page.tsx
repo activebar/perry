@@ -11,14 +11,12 @@ type PageProps = {
   params: { event: string; id: string }
 }
 
-type NavItem = { id: string; title: string }
-
 type BlockGalleryCfg = {
   gallery_id?: string
   title?: string
 }
 
-export default async function GalleryByIdForEvent({ params }: PageProps) {
+export default async function GalleryByIdForEventPage({ params }: PageProps) {
   const eventId = String(params?.event || '').trim()
   const galleryId = decodeURIComponent(params.id)
   const sb = supabaseServiceRole()
@@ -53,60 +51,73 @@ export default async function GalleryByIdForEvent({ params }: PageProps) {
 
   const activeSet = new Set(
     (gRows || [])
-      .filter((r: any) => r && (r as any).is_active === true)
-      .map((r: any) => String((r as any).id))
+      .filter((g: any) => g.is_active !== false)
+      .map((g: any) => String(g.id))
   )
 
-  const nav: NavItem[] = blockItems
-    .filter((x) => activeSet.has(x.galleryId))
-    .map((x) => ({ id: x.galleryId, title: x.title }))
+  const uploadEnabled = Boolean((gRows || []).find((g: any) => String(g.id) === String(galleryId))?.upload_enabled)
 
-  const uploadEnabled = !!(gRows || []).find((r: any) => String(r.id) === galleryId)?.upload_enabled
+  if (!activeSet.has(String(galleryId))) {
+    return (
+      <main dir="rtl" className="text-right">
+        <Container>
+          <Card>
+            <div className="space-y-2 text-right">
+              <div className="text-xl font-semibold">גלריה לא זמינה</div>
+              <Link className="underline" href={`/${encodeURIComponent(eventId)}/gallery`}>
+                חזרה לגלריות
+              </Link>
+            </div>
+          </Card>
+        </Container>
+      </main>
+    )
+  }
 
   const { data: items } = await sb
     .from('media_items')
-    .select('id, url, thumb_url, created_at, editable_until, is_approved, kind, crop_position')
+    .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,editable_until,is_approved,crop_position')
     .eq('event_id', eventId)
-    .in('kind', ['gallery', 'galleries'])
     .eq('gallery_id', galleryId)
     .eq('is_approved', true)
     .order('created_at', { ascending: false })
-    .limit(500)
+    .limit(400)
 
-  const title = nav.find((x) => x.id === galleryId)?.title || 'גלריה'
-  const base = `/${encodeURIComponent(eventId)}`
+  // navigation pills
+  const nav = blockItems.filter((x) => activeSet.has(String(x.galleryId)))
 
   return (
-    <main className="py-10">
+    <main dir="rtl" className="text-right">
       <Container>
-        <div dir="rtl" className="mb-4 text-right">
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          <p className="mt-1 text-sm text-zinc-600">כל התמונות המאושרות בגלריה זו.</p>
-        </div>
-
-        {nav.length > 1 ? (
-          <div dir="rtl" className="mb-5 flex justify-end">
-            <div className="flex max-w-full gap-2 overflow-x-auto pb-2">
-              {nav.map((gx) => (
-                <Link
-                  key={gx.id}
-                  href={`${base}/gallery/${encodeURIComponent(gx.id)}`}
-                  className={`shrink-0 rounded-full border px-3 py-1 text-sm ${gx.id === galleryId ? 'bg-black text-white' : 'bg-white'}`}
-                >
-                  {gx.title}
-                </Link>
-              ))}
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-right">
+              <div className="text-xl font-semibold">תמונות</div>
+              <div className="text-sm opacity-80">בחרו גלריה</div>
             </div>
+            <Link className="underline" href={`/${encodeURIComponent(eventId)}/gallery`}>
+              חזרה
+            </Link>
           </div>
-        ) : null}
 
-        {(items || []).length === 0 ? (
-          <Card dir="rtl">
-            <div className="text-right text-sm text-zinc-600">אין תמונות עדיין.</div>
-          </Card>
-        ) : null}
+          <div className="mt-3 flex flex-wrap gap-2 justify-end">
+            {nav.map((n) => (
+              <Link
+                key={n.galleryId}
+                href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(n.galleryId))}`}
+                className={`px-3 py-1 rounded-full border text-sm ${
+                  String(n.galleryId) === String(galleryId) ? 'bg-zinc-900 text-white' : 'bg-white'
+                }`}
+              >
+                {n.title}
+              </Link>
+            ))}
+          </div>
+        </Card>
 
-        <GalleryClient initialItems={items || []} galleryId={galleryId} uploadEnabled={uploadEnabled} />
+        <div className="mt-4">
+          <GalleryClient initialItems={items || []} galleryId={galleryId} uploadEnabled={uploadEnabled} />
+        </div>
       </Container>
     </main>
   )
