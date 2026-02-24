@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 import PermissionsPanel from './PermissionsPanel'
+import AiPanel from './AiPanel'
+import ClonePanel from './ClonePanel'
 
 const DEFAULT_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
 
@@ -242,7 +244,7 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions' | 'ai' | 'clone'
+type Tab = 'login' | 'settings' | 'ai' | 'clone' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
@@ -252,8 +254,6 @@ const TAB_LABEL: Record<string, string> = {
   admin_gallery: 'גלריית מנהל',
   diag: 'דיאגנוסטיקה',
   permissions: 'הרשאות',
-  ai: 'AI',
-  clone: 'שכפול',
   login: 'התחברות'
 }
 
@@ -339,16 +339,6 @@ export default function AdminApp({
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
-
-  // AI + clone
-  const [aiConfigText, setAiConfigText] = useState('')
-  const [aiCfgMsg, setAiCfgMsg] = useState<string | null>(null)
-
-  const [cloneKind, setCloneKind] = useState<'bar_mitzvah' | 'wedding' | 'trip'>('bar_mitzvah')
-  const [cloneNewEventId, setCloneNewEventId] = useState('')
-  const [cloneTargetName, setCloneTargetName] = useState('')
-  const [cloneMsg, setCloneMsg] = useState<string | null>(null)
-  const [cloneBusy, setCloneBusy] = useState(false)
 
   // OG default image uploader (1200x630)
   const [ogFile, setOgFile] = useState<File | null>(null)
@@ -605,7 +595,7 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'ai', 'clone', 'diag']
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
     return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
@@ -637,11 +627,6 @@ export default function AdminApp({
     const s = await jfetch('/api/admin/settings', { method: 'GET', headers: {} as any })
     setSettings(s.settings)
     setStartAtLocal(isoToLocalInput(s.settings?.start_at))
-    try {
-      const cfg = (s.settings as any)?.ai_config
-      if (cfg) setAiConfigText(JSON.stringify(cfg, null, 2))
-    } catch {}
-
   }
 
   async function loadContentRules() {
@@ -772,46 +757,6 @@ export default function AdminApp({
       setErr(friendlyError(e?.message || 'שגיאה בשמירה'))
     } finally {
       setSaving(false)
-    }
-  }
-
-
-  async function saveAiConfig() {
-    setErr(null)
-    setAiCfgMsg(null)
-    try {
-      const parsed = aiConfigText ? JSON.parse(aiConfigText) : null
-      await saveSettings({ ai_config: parsed })
-      setAiCfgMsg('נשמר בהצלחה')
-    } catch (e: any) {
-      setAiCfgMsg(friendlyError(e?.message || 'שגיאה'))
-    }
-  }
-
-  async function runClone() {
-    setErr(null)
-    setCloneMsg(null)
-    const newEventId = (cloneNewEventId || '').trim()
-    if (!newEventId) {
-      setCloneMsg('חובה למלא מזהה אירוע חדש')
-      return
-    }
-    setCloneBusy(true)
-    try {
-      const res = await jfetch('/api/admin/clone-event', {
-        method: 'POST',
-        body: JSON.stringify({
-          source_event_id: activeEventId,
-          new_event_id: newEventId,
-          kind: cloneKind,
-          target_name: cloneTargetName || ''
-        })
-      })
-      setCloneMsg(res?.ok ? 'השכפול בוצע בהצלחה' : 'בוצע')
-    } catch (e: any) {
-      setCloneMsg(friendlyError(e?.message || 'שגיאה'))
-    } finally {
-      setCloneBusy(false)
     }
   }
 
@@ -1191,12 +1136,6 @@ async function loadBlocks() {
     if (tab === 'settings') {
       loadSettings()
       loadContentRules()
-    }
-    if (tab === 'ai') {
-      loadSettings()
-    }
-    if (tab === 'clone') {
-      loadSettings()
     }
     if (tab === 'blocks') loadBlocks()
     if (tab === 'moderation') {
@@ -1589,71 +1528,6 @@ async function loadBlocks() {
                   checked={settings.link_preview_show_details === true}
                   onChange={e => setSettings({ ...settings, link_preview_show_details: e.target.checked })}
                 />
-
-<div className="mt-6 rounded-2xl border border-zinc-200 p-4">
-  <div className="text-sm font-semibold text-right">AI לברכות</div>
-
-  <label className="mt-3 text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-    <input
-      type="checkbox"
-      checked={(settings as any).ai_blessing_enabled !== false}
-      onChange={e => setSettings({ ...(settings as any), ai_blessing_enabled: e.target.checked })}
-    />
-    להפעיל עזרה בכתיבת ברכה
-  </label>
-
-  <label className="mt-4 text-xs text-zinc-500 text-right">מגבלת שימוש יומית למכשיר (ai_daily_limit). אם הערך 0 אז אין הגבלה.</label>
-  <Input
-    className="text-right"
-    dir="rtl"
-    value={String((settings as any).ai_daily_limit ?? 3)}
-    onChange={e => setSettings({ ...(settings as any), ai_daily_limit: Number(e.target.value) })}
-    placeholder="למשל 3"
-  />
-
-  <label className="mt-4 text-xs text-zinc-500 text-right">אופציות קרבה לחוגג (JSON)</label>
-  <Textarea
-    className="text-right"
-    dir="rtl"
-    rows={3}
-    value={JSON.stringify((settings as any).blessings_ai_closeness_options ?? ['משפחה','חברים','מהעבודה'])}
-    onChange={e => {
-      try {
-        const v = JSON.parse(e.target.value)
-        setSettings({ ...(settings as any), blessings_ai_closeness_options: v })
-      } catch {}
-    }}
-  />
-
-  <label className="mt-4 text-xs text-zinc-500 text-right">אופציות סגנון כתיבה (JSON)</label>
-  <Textarea
-    className="text-right"
-    dir="rtl"
-    rows={3}
-    value={JSON.stringify((settings as any).blessings_ai_style_options ?? ['מרגש','קליל','רשמי'])}
-    onChange={e => {
-      try {
-        const v = JSON.parse(e.target.value)
-        setSettings({ ...(settings as any), blessings_ai_style_options: v })
-      } catch {}
-    }}
-  />
-
-  <label className="mt-4 text-xs text-zinc-500 text-right">הצעות מי כותב (JSON)</label>
-  <Textarea
-    className="text-right"
-    dir="rtl"
-    rows={4}
-    value={JSON.stringify((settings as any).blessings_ai_writer_suggestions ?? ['אבא','אמא','סבתא','סבא','אח','אחות','דודה','דוד','חבר מהכיתה','חברה מהכיתה'])}
-    onChange={e => {
-      try {
-        const v = JSON.parse(e.target.value)
-        setSettings({ ...(settings as any), blessings_ai_writer_suggestions: v })
-      } catch {}
-    }}
-  />
-</div>
-
                 להציג פרטים בקישור (כותרת/תיאור). אם כבוי — תצוגה נקייה.
               </label>
             </div>
@@ -2104,6 +1978,14 @@ async function loadBlocks() {
       )}
 
       {/* ===== BLOCKS ===== */}
+      {tab === 'ai' && (
+        <AiPanel settings={settings} setSettings={setSettings} onSave={saveSettings} saving={saving} />
+      )}
+
+      {tab === 'clone' && (
+        <ClonePanel eventId={eventId} />
+      )}
+
       {tab === 'blocks' && (
         <Card>
           <h3 className="font-semibold">בלוקים</h3>
