@@ -20,5 +20,5 @@ export default async function GiftPageForEvent({ params }: { params: { event: st
     sb.from('blocks').select('*').eq('event_id', eventId).order('order_index', { ascending: true })
   ])
 
-  return <GiftClient settings={settings || {}} blocks={blocks || []} />
+  return <GiftClient settings={settings || {}} blocks={blocks || []} basePath={`/${eventId}`} />
 }
