@@ -31,15 +31,8 @@ export async function POST(req: Request) {
     if (!file) return jsonError('missing file', 400)
 
     const srv = getServerEnv()
-
-function sanitizeEventId(raw: any, fallback: string) {
-  const v = String(raw || '').trim().toLowerCase()
-  const out = v || fallback
-  // allow letters, numbers, underscore, dash. keep it short
-  if (!/^[a-z0-9][a-z0-9_-]{0,50}$/.test(out)) return fallback
-  return out
-}
-    const event_id = (srv.EVENT_SLUG || 'ido').trim().toLowerCase()
+    const providedEventId = String(fd.get('event_id') || '').trim().toLowerCase()
+    const event_id = (providedEventId || (srv.EVENT_SLUG || 'ido')).trim().toLowerCase()
 
     const sb = supabaseServiceRole()
 

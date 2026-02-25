@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Button, Card, Container, Input, Textarea } from '@/components/ui'
 import ShareModal from '@/components/share/ShareModal'
 import { buildShareMessage } from '@/lib/share/buildShareMessage'
@@ -265,7 +266,7 @@ export default function BlessingsClient({
         fd.set('file', outFile)
 
         fd.set('kind', 'blessing')
-        fd.set('event_id', eventId)
+          if (effectiveEventId) fd.append('event_id', effectiveEventId)
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json().catch(() => ({}))
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
@@ -378,7 +379,7 @@ async function saveEdit() {
       const fd = new FormData()
       fd.set('file', editFile)
       fd.set('kind', 'blessing')
-        fd.set('event_id', eventId)
+          if (effectiveEventId) fd.append('event_id', effectiveEventId)
 
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
       const upJson = await up.json()
