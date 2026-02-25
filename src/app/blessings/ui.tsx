@@ -123,13 +123,11 @@ export default function BlessingsClient({
   settings,
   blocks,
   showHeader = true,
-  eventId,
 }: {
   initialFeed: Post[]
   settings?: any
   blocks?: any[]
   showHeader?: boolean
-  eventId?: string
 }) {
   const [items, setItems] = useState<Post[]>(initialFeed || [])
   const [author, setAuthor] = useState('')
@@ -137,13 +135,6 @@ export default function BlessingsClient({
   const [linkUrl, setLinkUrl] = useState('')
   const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
-
-  const withEvent = (url: string) => {
-    const eid = String(eventId || '').trim()
-    if (!eid) return url
-    const glue = url.includes('?') ? '&' : '?'
-    return `${url}${glue}event=${encodeURIComponent(eid)}`
-  }
 
   // media pickers (mobile-friendly)
   const pickRef = useRef<HTMLInputElement | null>(null)
@@ -237,7 +228,7 @@ export default function BlessingsClient({
 
     async function pull() {
       try {
-    const res = await fetch(withEvent(`/api/blessings/feed?ts=${Date.now()}`), { cache: 'no-store' })
+        const res = await fetch(`/api/blessings/feed?ts=${Date.now()}`, { cache: 'no-store' })
         if (!res.ok) return
         const j = await res.json().catch(() => ({}))
         if (!cancelled && Array.isArray(j.items)) setItems(j.items)
@@ -274,6 +265,7 @@ export default function BlessingsClient({
         fd.set('file', outFile)
 
         fd.set('kind', 'blessing')
+        fd.set('event_id', eventId)
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json().catch(() => ({}))
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
@@ -287,7 +279,7 @@ export default function BlessingsClient({
         }
       }
 
-      const res = await jfetch(withEvent('/api/posts'), {
+      const res = await jfetch('/api/posts', {
         method: 'POST',
         body: JSON.stringify({
           kind: 'blessing',
@@ -386,6 +378,7 @@ async function saveEdit() {
       const fd = new FormData()
       fd.set('file', editFile)
       fd.set('kind', 'blessing')
+        fd.set('event_id', eventId)
 
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
       const upJson = await up.json()
@@ -404,7 +397,7 @@ async function saveEdit() {
       media_url
     }
 
-    const res = await jfetch(withEvent('/api/posts'), { method: 'PUT', body: JSON.stringify(patch) })
+    const res = await jfetch('/api/posts', { method: 'PUT', body: JSON.stringify(patch) })
     setItems((prev: any[]) => prev.map(x => (x.id === res.post.id ? { ...x, ...res.post } : x)))
     setEditOpen(false)
     setEditDraft(null)
@@ -421,7 +414,7 @@ async function saveEdit() {
     if (!confirm('למחוק את הברכה?')) return
     setErr(null)
     try {
-      await jfetch(withEvent('/api/posts'), { method: 'DELETE', body: JSON.stringify({ id }) })
+      await jfetch('/api/posts', { method: 'DELETE', body: JSON.stringify({ id }) })
       setItems(prev => prev.filter(p => p.id !== id))
       setMsg('✅ נמחק')
       setTimeout(() => setMsg(null), 1200)

@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 import PermissionsPanel from './PermissionsPanel'
-import AiPanel from './AiPanel'
-import ClonePanel from './ClonePanel'
 
 const DEFAULT_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
 
@@ -244,7 +242,7 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'ai' | 'clone' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
@@ -314,21 +312,18 @@ function parseLinesToArray(s: string) {
 export default function AdminApp({
   initialTab,
   initialPendingKind,
-  embeddedMode,
-  eventIdOverride,
+  embeddedMode
 }: {
   initialTab?: Tab
   initialPendingKind?: 'blessing' | 'gallery'
   embeddedMode?: boolean
-  eventIdOverride?: string
 } = {}) {
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [tab, setTab] = useState<Tab>(initialTab || 'login')
   const [err, setErr] = useState<string | null>(null)
 
-  // active event id: prefer master override (via /admin?event=...), then session, then env
-  const masterOverride = admin?.role === 'master' ? String(eventIdOverride || '').trim() : ''
-  const activeEventId = (masterOverride || admin?.event_id || String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || DEFAULT_EVENT_ID).trim()
+  // active event id: prefer event-access session, fallback to env
+  const activeEventId = (admin?.event_id || String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || DEFAULT_EVENT_ID).trim()
 
   // login
   const [username, setUsername] = useState('')
@@ -777,6 +772,7 @@ export default function AdminApp({
         const fd = new FormData()
         fd.set('file', f)
         fd.set('kind', 'hero')
+        fd.set('event_id', activeEventId)
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json()
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
@@ -934,6 +930,7 @@ async function loadBlocks() {
       const fd = new FormData()
       fd.set('file', file)
       fd.set('kind', 'blessing')
+      fd.set('event_id', activeEventId)
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
       const upJson = await up.json().catch(() => ({}))
       if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
@@ -1003,6 +1000,7 @@ async function loadBlocks() {
         const fd = new FormData()
         fd.set('file', f)
         fd.set('kind', 'gallery_admin')
+        fd.set('event_id', activeEventId)
 
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json().catch(() => ({}))
@@ -1981,14 +1979,6 @@ async function loadBlocks() {
       )}
 
       {/* ===== BLOCKS ===== */}
-      {tab === 'ai' && (
-        <AiPanel settings={settings} setSettings={setSettings} onSave={saveSettings} saving={saving} />
-      )}
-
-      {tab === 'clone' && (
-        <ClonePanel eventId={activeEventId} />
-      )}
-
       {tab === 'blocks' && (
         <Card>
           <h3 className="font-semibold">בלוקים</h3>
