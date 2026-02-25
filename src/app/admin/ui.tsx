@@ -242,7 +242,7 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
+type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions' | 'ai' | 'clone'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
@@ -252,6 +252,8 @@ const TAB_LABEL: Record<string, string> = {
   admin_gallery: 'גלריית מנהל',
   diag: 'דיאגנוסטיקה',
   permissions: 'הרשאות',
+  ai: 'AI',
+  clone: 'שכפול',
   login: 'התחברות'
 }
 
@@ -593,7 +595,7 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'ai', 'clone', 'diag']
     return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
@@ -772,7 +774,6 @@ export default function AdminApp({
         const fd = new FormData()
         fd.set('file', f)
         fd.set('kind', 'hero')
-        fd.set('event_id', activeEventId)
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json()
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
@@ -930,7 +931,6 @@ async function loadBlocks() {
       const fd = new FormData()
       fd.set('file', file)
       fd.set('kind', 'blessing')
-      fd.set('event_id', activeEventId)
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
       const upJson = await up.json().catch(() => ({}))
       if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
@@ -1000,7 +1000,6 @@ async function loadBlocks() {
         const fd = new FormData()
         fd.set('file', f)
         fd.set('kind', 'gallery_admin')
-        fd.set('event_id', activeEventId)
 
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json().catch(() => ({}))
