@@ -27,30 +27,26 @@ function NavButton({
 
 export default function SiteChrome({
   children,
+  basePath,
   eventName,
   footerEnabled,
   footerLabel,
   footerUrl,
-
-  // extra footer line (optional)
   footerLine2Enabled,
   footerLine2Label,
   footerLine2Url,
-
-  // gift nav control (optional)
   showGiftNavButton,
   giftNavLabel,
 }: {
   children: React.ReactNode
+  basePath?: string
   eventName?: string
   footerEnabled?: boolean
   footerLabel?: string | null
   footerUrl?: string | null
-
-  footerLine2Enabled?: boolean
+  footerLine2Enabled?: boolean | null
   footerLine2Label?: string | null
   footerLine2Url?: string | null
-
   showGiftNavButton?: boolean
   giftNavLabel?: string
 }) {
@@ -59,16 +55,13 @@ export default function SiteChrome({
   // No public chrome in admin area
   if (pathname.startsWith('/admin')) return <>{children}</>
 
-  // supports both: /, /gallery... AND /ido, /ido/gallery...
-  const parts = pathname.split('/').filter(Boolean)
-  const first = parts[0] || ''
-  const isReserved = first === 'gallery' || first === 'blessings' || first === 'gift' || first === 'admin'
-  const base = isReserved ? '' : `/${first}`
+  const base = (basePath || '').replace(/\/$/, '')
+  const relPath = base && pathname.startsWith(base) ? (pathname.slice(base.length) || '/') : pathname
 
-  const isHome = pathname === '/' || pathname === base
-  const isGalleries = pathname === `${base}/gallery` || pathname.startsWith(`${base}/gallery/`)
-  const isBlessings = pathname === `${base}/blessings` || pathname.startsWith(`${base}/blessings/`)
-  const isGift = pathname === `${base}/gift` || pathname.startsWith(`${base}/gift/`)
+  const isHome = relPath === '/'
+  const isGalleries = relPath === '/gallery' || relPath.startsWith('/gallery/')
+  const isBlessings = relPath === '/blessings' || relPath.startsWith('/blessings/')
+  const isGift = relPath === '/gift' || relPath.startsWith('/gift/')
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -80,53 +73,69 @@ export default function SiteChrome({
             </div>
           </div>
 
-          {/* RTL: keep "בית" visually on the right */}
           <nav className="flex shrink-0 items-center gap-2">
-            <div className="flex flex-row-reverse items-center gap-2">
-              <NavButton href={`${base}/`} label="בית" active={isHome} />
-              <NavButton href={`${base}/gallery`} label="גלריות" active={isGalleries} />
-              <NavButton href={`${base}/blessings`} label="ברכות" active={isBlessings} />
-              {showGiftNavButton ? (
-                <NavButton href={`${base}/gift`} label={giftNavLabel || 'מתנה'} active={isGift} />
-              ) : null}
-            </div>
-          </nav>
+  {/* RTL: keep 'בית' visually on the right */}
+  <div className="flex flex-row-reverse items-center gap-2">
+    <NavButton href={`${base || '/'}`} label="בית" active={isHome} />
+    <NavButton href={`${base}/gallery`} label="גלריות" active={isGalleries} />
+    <NavButton href={`${base}/blessings`} label="ברכות" active={isBlessings} />
+    {showGiftNavButton ? (
+  <Link
+    href={`${base}/gift`}
+    className={[
+      'rounded-full px-4 py-2 text-sm transition',
+      isGift ? 'bg-black text-white' : 'bg-white text-zinc-900 hover:bg-zinc-100',
+    ].join(' ')}
+  >
+    {giftNavLabel || 'מתנה'}
+  </Link>
+) : null}
+  </div>
+</nav>
+
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">{children}</main>
 
       <footer className="mt-10 border-t border-zinc-200 bg-white">
-        <div className="mx-auto w-full max-w-3xl px-4 py-6 text-center text-sm text-zinc-500 space-y-2">
-          {/* line 1 */}
-          <div>
-            {footerEnabled ? (
-              footerUrl ? (
-                <a href={footerUrl} className="underline decoration-zinc-300 underline-offset-4">
-                  {footerLabel || 'צור קשר'}
-                </a>
-              ) : (
-                <span>{footerLabel || 'צור קשר'}</span>
-              )
-            ) : (
-              <span className="opacity-70"> </span>
-            )}
-          </div>
+  <div className="mx-auto w-full max-w-3xl px-4 py-6 text-center text-sm text-zinc-500">
+    <div className="space-y-2">
+      <div>
+        {footerEnabled ? (
+          footerUrl ? (
+            <a href={footerUrl} className="underline decoration-zinc-300 underline-offset-4">
+              {footerLabel || 'צור קשר'}
+            </a>
+          ) : (
+            <span>{footerLabel || 'צור קשר'}</span>
+          )
+        ) : null}
+      </div>
 
-          {/* line 2 */}
-          {footerLine2Enabled ? (
-            <div>
-              {footerLine2Url ? (
-                <a href={footerLine2Url} className="underline decoration-zinc-300 underline-offset-4">
-                  {footerLine2Label || ''}
-                </a>
-              ) : (
-                <span>{footerLine2Label || ''}</span>
-              )}
-            </div>
-          ) : null}
-        </div>
-      </footer>
+      <div>
+        {footerLine2Enabled ? (
+          footerLine2Url ? (
+            <a href={String(footerLine2Url)} className="underline decoration-zinc-300 underline-offset-4">
+              {footerLine2Label || ''}
+            </a>
+          ) : (
+            <span>{footerLine2Label || ''}</span>
+          )
+        ) : null}
+      </div>
+
+      {!footerEnabled && !footerLine2Enabled ? (
+        <div className="opacity-70">{eventName ? `${eventName} • ` : ''}מופעל ע״י ActiveBar</div>
+      ) : null}
+      <div className="mt-2 text-[10px] opacity-40" dir="ltr">build v13.21</div>
+
+    </div>
+  </div>
+</footer>
+
+
+
     </div>
   )
 }

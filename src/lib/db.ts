@@ -54,13 +54,6 @@ export type EventSettings = {
   blessings_preview_limit?: number | null
   blessings_show_all_button?: boolean | null
 
-  // AI blessings
-  ai_blessing_enabled?: boolean | null
-  ai_blessing_daily_limit?: number | null
-  ai_closeness_options?: any[] | null
-  ai_style_options?: any[] | null
-  ai_writer_suggestions?: any[] | null
-
   approval_lock_after_days?: number | null
 
   created_at?: string
@@ -86,14 +79,14 @@ export function getBlockTitle(blocks: Block[] | null | undefined, type: string, 
  * There should be only ONE row in event_settings.
  * During dev multiple rows might exist. We always pick the latest edited row.
  */
-export async function fetchSettings(): Promise<EventSettings> {
+export async function fetchSettings(eventId?: string): Promise<EventSettings> {
   noStore()
-  const eventId = getEventId()
+  const eid = eventId || getEventId()
   const sb = supabaseAnon()
   const { data, error } = await sb
     .from('event_settings')
     .select('*')
-    .eq('event_id', eventId)
+    .eq('event_id', eid)
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)
@@ -103,14 +96,14 @@ export async function fetchSettings(): Promise<EventSettings> {
   return data as any
 }
 
-export async function fetchBlocks(): Promise<Block[]> {
+export async function fetchBlocks(eventId?: string): Promise<Block[]> {
   noStore()
-  const eventId = getEventId()
+  const eid = eventId || getEventId()
   const sb = supabaseAnon()
   const { data, error } = await sb
     .from('blocks')
     .select('*')
-    .eq('event_id', eventId)
+    .eq('event_id', eid)
     .order('order_index', { ascending: true })
   if (error) throw error
   return (data || []) as any
