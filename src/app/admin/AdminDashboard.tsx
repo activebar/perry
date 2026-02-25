@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import AdminApp from './ui'
 import type { AdminMainTab } from './page'
 
@@ -12,7 +13,9 @@ function classNames(...xs: Array<string | false | null | undefined>) {
 }
 
 export default function AdminDashboard({ tab }: { tab: AdminMainTab }) {
-  
+  const searchParams = useSearchParams()
+  const eventIdOverride = (searchParams?.get('event') || '').trim() || undefined
+
 const tabs = useMemo(
   () =>
     [
@@ -67,7 +70,7 @@ const tabs = useMemo(
         {tabs.map(t => (
           <Link
             key={t.key}
-            href={`/admin?tab=${t.key}`}
+            href={eventIdOverride ? `/admin?tab=${t.key}&event=${encodeURIComponent(eventIdOverride)}` : `/admin?tab=${t.key}`}
             className={classNames(
               'rounded-xl px-4 py-2 text-sm border',
               tab === t.key
@@ -87,6 +90,7 @@ const tabs = useMemo(
           initialTab={initial.initialTab}
           initialPendingKind={initial.pendingKind}
           embeddedMode
+          eventIdOverride={eventIdOverride}
         />
       </div>
     </div>

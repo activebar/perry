@@ -64,9 +64,15 @@ export default async function RootDemoPage() {
                   <div className="text-lg font-bold truncate">{e.event_name}</div>
                   <div className="text-xs text-zinc-600" dir="ltr">/{e.event_id}</div>
                 </div>
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex justify-end gap-2">
                   <Link href={`/${encodeURIComponent(e.event_id)}`}>
                     <Button>פתח אתר</Button>
+                  </Link>
+
+                  <Link href={`/admin?event=${encodeURIComponent(e.event_id)}`}>
+                    <Button variant="ghost" className="border border-zinc-200 bg-white hover:bg-zinc-50">
+                      ניהול
+                    </Button>
                   </Link>
                 </div>
               </Card>
