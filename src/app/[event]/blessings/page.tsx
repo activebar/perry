@@ -49,7 +49,7 @@ export default async function BlessingsPageForEvent({ params }: { params: { even
     <main className="py-10">
       <Container>
         <BlessingsShareHeader settings={settings || {}} />
-        <BlessingsClient settings={settings || {}} blocks={blocks || []} initialFeed={(posts || []) as any} eventId={eventId} />
+        <BlessingsClient settings={settings || {}} blocks={blocks || []} initialFeed={(posts || []) as any} />
       </Container>
     </main>
   )
