@@ -314,18 +314,20 @@ function parseLinesToArray(s: string) {
 export default function AdminApp({
   initialTab,
   initialPendingKind,
-  embeddedMode
+  embeddedMode,
+  eventIdOverride,
 }: {
   initialTab?: Tab
   initialPendingKind?: 'blessing' | 'gallery'
   embeddedMode?: boolean
+  eventIdOverride?: string
 } = {}) {
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [tab, setTab] = useState<Tab>(initialTab || 'login')
   const [err, setErr] = useState<string | null>(null)
 
   // active event id: prefer event-access session, fallback to env
-  const activeEventId = (admin?.event_id || String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || DEFAULT_EVENT_ID).trim()
+  const activeEventId = (eventIdOverride || admin?.event_id || String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || DEFAULT_EVENT_ID).trim()
 
   // login
   const [username, setUsername] = useState('')
