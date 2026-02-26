@@ -137,6 +137,12 @@ export default function BlessingsClient({
   const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
 
+
+  const pathname = usePathname()
+
+  // URL pattern: /ido/blessings -> ["", "ido", "blessings"]
+  const effectiveEventId = pathname?.split('/')[1] || null
+
   // media pickers (mobile-friendly)
   const pickRef = useRef<HTMLInputElement | null>(null)
   const cameraPhotoRef = useRef<HTMLInputElement | null>(null)
