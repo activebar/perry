@@ -17,6 +17,7 @@ type HomePayload = {
   guestPreview?: any[]
   adminPreview?: any[]
   blessingsPreview: any[]
+  galleryPreviews?: Record<string, any[]>
 }
 
 function fmt(dt: string) {
@@ -186,7 +187,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId])
 
-  const { settings, blocks, blessingsPreview } = data || ({} as any)
+  const { settings, blocks, blessingsPreview, galleryPreviews } = data || ({} as any)
 
   const phase = useMemo(() => {
     if (!settings?.start_at) return 'pre'
@@ -213,6 +214,13 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   const getBlock = (type: string) => (blocks || []).find((b: any) => String(b?.type) === type)
 
   const heroCfg = getBlock('hero')?.config || {}
+  // Backward compat: allow hero images to come from event_settings.hero_images
+  if ((!Array.isArray((heroCfg as any).images) || !(heroCfg as any).images.length) && Array.isArray((settings as any)?.hero_images)) {
+    ;(heroCfg as any).images = (settings as any).hero_images
+  }
+  if (!Number((heroCfg as any).rotate_seconds) && Number((settings as any)?.hero_rotate_seconds)) {
+    ;(heroCfg as any).rotate_seconds = Number((settings as any).hero_rotate_seconds)
+  }
   const showHero = visibleTypes.has('hero')
 
   const blessingCfg = getBlock('blessings')?.config || {}
@@ -295,6 +303,32 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                   </Link>
                 </div>
                 <p className="mt-2 text-sm text-zinc-600">תמונות מהאירוע</p>
+                {(() => {
+                  const pv = (galleryPreviews as any) || {}
+                  const all = Object.values(pv).flat() as any[]
+                  const lim = Number((settings as any)?.home_gallery_preview_limit ?? 6) || 6
+                  const items = all.slice(0, lim)
+                  if (!items.length) return null
+                  return (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {items.map((it: any) => {
+                        const url = it.thumb_url || it.public_url || it.url
+                        if (!url) return null
+                        return (
+                          <button
+                            key={String(it.id || url)}
+                            type="button"
+                            className="aspect-square overflow-hidden rounded-xl bg-zinc-50"
+                            onClick={() => setLightbox({ url: it.url || url, isVideo: false })}
+                            aria-label="פתח תמונה"
+                          >
+                            <img src={url} alt="" className="h-full w-full object-cover" />
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               </Card>
             ) : null}
 
