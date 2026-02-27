@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     return jsonError('forbidden', 403)
   }
 
-  const eventId = admin.event_id || getEventId()
+  const eventId = admin.event_id || getEventIdFromRequest(req)
 
   const sb = supabaseServiceRole()
   const { data, error } = await sb
@@ -95,7 +95,7 @@ export async function PUT(req: NextRequest) {
   if (body.upload_default_hours !== undefined) patch.upload_default_hours = Number(body.upload_default_hours) || 8
 
   const sb = supabaseServiceRole()
-  const eventId = admin.event_id || getEventId()
+  const eventId = admin.event_id || getEventIdFromRequest(req)
 
   // If title is changed here, also sync the matching gallery block config.title
   // so Admin "עיצוב ותוכן" and Admin galleries tab stay aligned.
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
   const action = String(body.action || '').trim()
 
   const sb = supabaseServiceRole()
-  const eventId = admin.event_id || getEventId()
+  const eventId = admin.event_id || getEventIdFromRequest(req)
 
   // ===== create a new gallery + matching block =====
   if (action === 'create') {
