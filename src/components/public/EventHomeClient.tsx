@@ -90,7 +90,7 @@ function useUnfurl(url?: string) {
   return data
 }
 
-function HomeLinkThumb({ url }: { url?: string | null }) {
+function HomeLinkThumb({ url, sizePx }: { url?: string | null; sizePx: number }) {
   const d = useUnfurl(url || undefined)
   if (!url) return null
   if (!d) return null
@@ -109,7 +109,13 @@ function HomeLinkThumb({ url }: { url?: string | null }) {
   )
 }
 
-function HomeLinkMeta({ url, showDetails = false }: { url?: string | null; showDetails?: boolean }) {
+function HomeLinkMeta({
+  url,
+  showDetails = false,
+}: {
+  url?: string | null
+  showDetails?: boolean
+}) {
   const d = useUnfurl(url || undefined)
   if (!url) return null
   if (!d) return null
@@ -143,13 +149,12 @@ function HomeLinkMeta({ url, showDetails = false }: { url?: string | null; showD
 
 export default function EventHomeClient({ eventId }: { eventId: string }) {
   const router = useRouter()
-  const [data, setData] = useState<HomePayload | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
-  const [shareOpen, setShareOpen] = useState(false)
 
   const base = `/${encodeURIComponent(eventId || '')}`
   const hrefOf = (p: string) => `${base}${p.startsWith('/') ? p : `/${p}`}`
+  const [data, setData] = useState<HomePayload | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
 
   async function triggerDownload(url: string) {
     try {
@@ -171,9 +176,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   async function load() {
     setErr(null)
     try {
-      const res = await fetch(`/api/public/home?event=${encodeURIComponent(eventId)}&ts=${Date.now()}`, {
-        cache: 'no-store'
-      })
+      const res = await fetch(`/api/public/home?ts=${Date.now()}`, { cache: 'no-store' })
       const json = (await res.json().catch(() => ({}))) as HomePayload
       if (!res.ok) throw new Error((json as any)?.error || 'Request failed')
       setData(json)
@@ -185,253 +188,507 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId])
+  }, [])
 
-  const { settings, blocks, blessingsPreview, galleryPreviews } = data || ({} as any)
+  const { settings, blocks, blessingsPreview } = data || ({} as any)
 
   const phase = useMemo(() => {
     if (!settings?.start_at) return 'pre'
     return computeEventPhase(settings.start_at)
   }, [settings?.start_at])
 
-  const visibleTypes = useMemo<Set<string>>(() => {
+  const visibleTypes = useMemo(() => {
     const s = settings || {}
     const now = new Date()
-    return new Set<string>(
+    return new Set(
       (blocks || [])
-        .filter((b: any) => b && b.is_visible)
         .filter((b: any) => {
-          const showFrom = (b as any)?.show_from ? new Date((b as any).show_from) : null
-          const showUntil = (b as any)?.show_until ? new Date((b as any).show_until) : null
-          if (showFrom && !Number.isNaN(showFrom.getTime()) && now < showFrom) return false
-          if (showUntil && !Number.isNaN(showUntil.getTime()) && now > showUntil) return false
+          if (!b?.is_visible) return false
+          if (b.type === 'gift' && b.config?.auto_hide_after_hours) {
+            const hours = Number(b.config.auto_hide_after_hours)
+            if (Number.isFinite(hours) && hours > 0) {
+              const start = new Date(s.start_at)
+              const hideAt = new Date(start.getTime() + hours * 60 * 60 * 1000)
+              if (now > hideAt) return false
+            }
+          }
           return true
         })
-        .map((b: any) => String(b.type))
+        .map((b: any) => b.type)
     )
   }, [blocks, settings])
 
-  const getBlock = (type: string) => (blocks || []).find((b: any) => String(b?.type) === type)
-
-  const heroCfg = getBlock('hero')?.config || {}
-  // Backward compat: allow hero images to come from event_settings.hero_images
-  if ((!Array.isArray((heroCfg as any).images) || !(heroCfg as any).images.length) && Array.isArray((settings as any)?.hero_images)) {
-    ;(heroCfg as any).images = (settings as any).hero_images
-  }
-  if (!Number((heroCfg as any).rotate_seconds) && Number((settings as any)?.hero_rotate_seconds)) {
-    ;(heroCfg as any).rotate_seconds = Number((settings as any).hero_rotate_seconds)
-  }
   const showHero = visibleTypes.has('hero')
+  const showMenu = visibleTypes.has('menu')
+  const showGalleryBlock = Array.from(visibleTypes).some((t) => t === 'gallery' || (typeof t === 'string' && t.startsWith('gallery')))
+  const showBlessingsBlock = visibleTypes.has('blessings')
+  const showGiftBlock = visibleTypes.has('gift')
 
-  const blessingCfg = getBlock('blessings')?.config || {}
-  const showBlessings = visibleTypes.has('blessings')
+  const orderedBlocks = useMemo(() => {
+    return (blocks || [])
+      .slice()
+      .sort((a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0))
+  }, [blocks])
 
-  const galleryCfg = getBlock('gallery')?.config || {}
-  const showGallery = visibleTypes.has('gallery') || [...visibleTypes].some((t) => t.startsWith('gallery_'))
+  const galleryLabel = useMemo(() => {
+    const b = (blocks || []).find((x: any) => String(x?.type) === 'gallery')
+    const t = String(b?.config?.title || '').trim()
+    return t || 'גלריה'
+  }, [blocks])
 
-  const giftCfg = getBlock('gift')?.config || {}
-  const showGift = visibleTypes.has('gift')
+  const giftLabel = useMemo(() => {
+    const b = (blocks || []).find((x: any) => String(x?.type) === 'gift')
+    const t = String(b?.config?.title || '').trim()
+    return t || 'מתנה'
+  }, [blocks])
 
-  const title = (settings?.event_name || settings?.title || '').trim() || 'אירוע'
-  const locationText = (settings?.location_text || '').trim()
-  const wazeUrl = (settings?.waze_url || '').trim()
+  const guestTitle = settings?.guest_gallery_title || 'גלריית אורחים'
+  const adminTitle = settings?.admin_gallery_title || 'גלריית מנהל'
+  const guestShowAll = settings?.guest_gallery_show_all_button !== false
+  const adminShowAll = settings?.admin_gallery_show_all_button !== false
 
-  const startAt = settings?.start_at ? fmt(settings.start_at) : ''
+  const blessingsPreviewLimit = Number(settings?.blessings_preview_limit ?? 3)
+  const blessingsShowAll = settings?.blessings_show_all_button !== false
+
+  // Blessings labels (dynamic for white-label reuse)
+  const blessingsTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
+  const blessingsSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה/וידאו או קישור.') as string
+
+  const heroImages = Array.isArray(settings?.hero_images) ? settings.hero_images : []
+  const heroSeconds = Number(settings?.hero_rotate_seconds ?? 4)
+
+  const mediaSize = Number(settings?.blessings_media_size ?? 140)
+  // Link preview is controlled via event_settings (global)
+  const linkPreviewEnabled = settings?.link_preview_enabled === true
+  const linkPreviewShowDetails = settings?.link_preview_show_details === true
+
+  const heroPre =
+    settings?.hero_pre_text ||
+    `מחכים לכם באירוע 🎉\n${settings?.location_text || ''}`.trim()
+
+  const heroLive =
+    settings?.hero_live_text ||
+    'האירוע התחיל! 📸\nהעלו תמונות, כתבו ברכות, ותעשו שמח.'.trim()
+
+  const heroPost =
+    settings?.hero_post_text ||
+    (settings?.thank_you_text || 'תודה שבאתם ❤️ נשמח שתמשיכו להעלות תמונות וברכות למזכרת.')
+
+  const heroText = phase === 'pre' ? heroPre : phase === 'live' ? heroLive : heroPost
+
+  async function react(postId: string, emoji: string) {
+    try {
+      const res = await fetch(`/api/reactions/toggle?event=${encodeURIComponent(eventId)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ post_id: postId, emoji })
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'Request failed')
+
+      setData(prev => {
+        if (!prev) return prev
+        const upd = (arr: any[]) =>
+          (arr || []).map(p => (p.id === postId ? { ...p, reaction_counts: json.counts, my_reactions: json.my } : p))
+        return { ...prev, blessingsPreview: upd(prev.blessingsPreview) }
+      })
+    } catch {}
+  }
+
+  // Share (Home blessings preview)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [sharePayload, setSharePayload] = useState<{ message: string; link: string } | null>(null)
 
   const shareEnabled = settings?.share_enabled !== false
-  const shareTitle = String(settings?.share_title || title || '').trim() || title
-  const shareBody = String(settings?.share_body || '').trim()
+  const shareUsePermalink = settings?.share_use_permalink !== false
+  const shareWhatsappEnabled = settings?.share_whatsapp_enabled !== false
+  const shareWebshareEnabled = settings?.share_webshare_enabled !== false
 
-  const shareLink = typeof window !== 'undefined' ? window.location.href : ''
-  const shareMsg = buildShareMessage(
-    settings?.share_template ?? null,
-    {
-      EVENT_NAME: shareTitle,
-      TEXT: shareBody,
-      LINK: shareLink
-    },
-    ''
-  )
+  function buildLinkForPost(postId?: string) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const baseUrl = origin ? `${origin}${base}` : base
+  const blessings = `${baseUrl}/blessings`
+  if (postId && shareUsePermalink) {
+    const code = String(postId).split('-')[0]
+    return `${baseUrl}/bl/${code}`
+  }
+  return blessings
+}
+
+  async function shareBlessing(p: any) {
+    if (!shareEnabled) return
+    const link = buildLinkForPost(p?.id)
+    const eventName = String(settings?.event_name || 'Event')
+    const template = settings?.share_message_template || null
+    const noTextFallback = String(settings?.share_no_text_fallback || 'נשלחה ברכה מהממת 💙')
+    const message = buildShareMessage(
+      template,
+      {
+        EVENT_NAME: eventName,
+        AUTHOR_NAME: p?.author_name || '',
+        TEXT: p?.text || '',
+        LINK: link,
+        DATE: p?.created_at || ''
+      },
+      noTextFallback
+    )
+
+    const canNative = shareWebshareEnabled && typeof navigator !== 'undefined' && (navigator as any).share
+    if (canNative) {
+      try {
+        // Pass URL separately so WhatsApp/Facebook can generate a rich preview,
+        // while keeping the text clean (no duplicated links).
+        const textOnly = message.split(link).join('').trim() || message
+        await (navigator as any).share({ title: eventName, text: textOnly, url: link })
+        return
+      } catch {
+        // fall back
+      }
+    }
+
+    setSharePayload({ message, link })
+    setShareOpen(true)
+  }
+
+  if (!data) {
+    return (
+      <main>
+        <Container>
+          <Card dir="rtl">
+            <div className="text-right">
+              <p className="font-semibold">טוען…</p>
+              {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+            </div>
+          </Card>
+        </Container>
+      </main>
+    )
+  }
 
   return (
-    <main dir="rtl" className="text-right">
+    <main>
       <Container>
-        <div className="mt-4 space-y-4">
-          {showHero ? (
-            <Card>
-              <div className="space-y-2 text-right">
-                <div className="text-2xl font-bold">{title}</div>
-                {startAt ? <div className="text-sm text-zinc-600">{startAt}</div> : null}
-                {locationText ? <div className="text-sm text-zinc-600">{locationText}</div> : null}
-                {wazeUrl ? (
-                  <a href={wazeUrl} target="_blank" rel="noreferrer">
-                    <Button className="mt-2">Waze</Button>
-                  </a>
-                ) : null}
-              </div>
-
-              {Array.isArray(heroCfg?.images) && heroCfg.images.length ? (
-                <div className="mt-4">
-                  <HeroRotator images={heroCfg.images} seconds={Number(heroCfg.rotate_seconds || 4) || 4} />
-                </div>
-              ) : null}
-
-              {shareEnabled ? (
-                <div className="mt-4 flex justify-end">
-                  <Button type="button" variant="ghost" onClick={() => setShareOpen(true)}>
-                    שיתוף
-                  </Button>
-                  <ShareModal
-                    open={shareOpen}
-                    onClose={() => setShareOpen(false)}
-                    title={shareTitle}
-                    message={shareMsg}
-                    link={shareLink}
-                  />
-                </div>
-              ) : null}
-            </Card>
-          ) : null}
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {showGallery ? (
-              <Card>
-                <div className="flex items-center justify-between">
-                  <div className="text-lg font-bold">{String(galleryCfg?.title || 'גלריות')}</div>
-                  <Link href={hrefOf('/gallery')}>
-                    <Button variant="ghost">פתח</Button>
-                  </Link>
-                </div>
-                <p className="mt-2 text-sm text-zinc-600">תמונות מהאירוע</p>
-                {(() => {
-                  const pv = (galleryPreviews as any) || {}
-                  const all = Object.values(pv).flat() as any[]
-                  const lim = Number((settings as any)?.home_gallery_preview_limit ?? 6) || 6
-                  const items = all.slice(0, lim)
-                  if (!items.length) return null
-                  return (
-                    <div className="mt-3 grid grid-cols-3 gap-2">
-                      {items.map((it: any) => {
-                        const url = it.thumb_url || it.public_url || it.url
-                        if (!url) return null
-                        return (
-                          <button
-                            key={String(it.id || url)}
-                            type="button"
-                            className="aspect-square overflow-hidden rounded-xl bg-zinc-50"
-                            onClick={() => setLightbox({ url: it.url || url, isVideo: false })}
-                            aria-label="פתח תמונה"
-                          >
-                            <img src={url} alt="" className="h-full w-full object-cover" />
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )
-                })()}
-              </Card>
-            ) : null}
-
-            {showBlessings ? (
-              <Card>
-                <div className="flex items-center justify-between">
-                  <div className="text-lg font-bold">{String(blessingCfg?.title || 'ברכות')}</div>
-                  <Link href={hrefOf('/blessings')}>
-                    <Button variant="ghost">פתח</Button>
-                  </Link>
-                </div>
-                <p className="mt-2 text-sm text-zinc-600">כתבו ברכה והשאירו מזכרת</p>
-              </Card>
-            ) : null}
-
-            {showGift ? (
-              <Card>
-                <div className="flex items-center justify-between">
-                  <div className="text-lg font-bold">{String(giftCfg?.title || 'מתנה')}</div>
-                  <Link href={hrefOf('/gift')}>
-                    <Button variant="ghost">פתח</Button>
-                  </Link>
-                </div>
-                <p className="mt-2 text-sm text-zinc-600">אפשרות למתנה דיגיטלית</p>
-              </Card>
-            ) : null}
-
-            <Card>
-              <div className="flex items-center justify-between">
-                <div className="text-lg font-bold">מנהל</div>
-                <Link href="/admin">
-                  <Button variant="ghost">פתח</Button>
-                </Link>
-              </div>
-              <p className="mt-2 text-sm text-zinc-600">ניהול תוכן, גלריות, ברכות ושכפול</p>
-            </Card>
+        <div className="flex items-center justify-between gap-3" dir="rtl">
+          <div className="text-right">
+            <h1 className="text-2xl font-bold">{settings?.event_name}</h1>
+            {settings?.start_at && <p className="text-sm text-zinc-600">{fmt(settings.start_at)}</p>}
           </div>
 
-          {showBlessings && (blessingsPreview || []).length ? (
-            <Card>
-              <div className="flex items-center justify-between">
-                <div className="text-lg font-bold">ברכות אחרונות</div>
-                <Link href={hrefOf('/blessings')}>
-                  <Button variant="ghost">לכל הברכות</Button>
+          {showMenu && (
+            <div className="flex gap-2">
+              <Link href={hrefOf("/gallery")}>
+                <Button variant="ghost">{galleryLabel}</Button>
+              </Link>
+              <Link href={hrefOf("/blessings")}>
+                <Button variant="ghost">{blessingsTitle}</Button>
+              </Link>
+              {showGiftBlock && (
+                <Link href={hrefOf("/gift")}>
+                  <Button>{giftLabel}</Button>
                 </Link>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {(blessingsPreview || []).slice(0, 6).map((p: any) => (
-                  <div key={p.id} className="rounded-2xl border border-zinc-200 p-3">
-                    <div className="text-sm font-semibold">{String(p.author_name || '').trim() || 'אורח'}</div>
-                    <div className="mt-1 whitespace-pre-wrap text-sm">{String(p.text || '').trim()}</div>
-                    {p.media_url ? (
-                      <div className="mt-2">
-                        <img
-                          src={String(p.media_url)}
-                          alt=""
-                          className="w-full rounded-2xl object-cover aspect-square"
-                          onClick={() => setLightbox({ url: String(p.media_url), isVideo: false })}
-                        />
-                      </div>
-                    ) : null}
-                    {p.link_url ? (
-                      <div className="mt-2">
-                        <HomeLinkThumb url={String(p.link_url)} />
-                        <HomeLinkMeta url={String(p.link_url)} showDetails={settings?.link_preview_show_details === true} />
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          ) : null}
-
-          {err ? (
-            <Card>
-              <div className="text-sm text-red-600">{err}</div>
-              <div className="mt-3 flex justify-end">
-                <Button onClick={load}>נסה שוב</Button>
-              </div>
-            </Card>
-          ) : null}
-        </div>
-      </Container>
-
-      {lightbox ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setLightbox(null)}
-        >
-          <div className="max-h-[90vh] w-full max-w-[720px]" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-end gap-2 pb-2">
-              <Button variant="ghost" onClick={() => setLightbox(null)}>
-                סגור
-              </Button>
-              <Button variant="ghost" onClick={() => triggerDownload(lightbox.url)}>
-                הורד
-              </Button>
+              )}
+              <Link href="/admin">
+                <Button variant="ghost">מנהל</Button>
+              </Link>
             </div>
-            <img src={lightbox.url} alt="" className="max-h-[80vh] w-full rounded-2xl object-contain bg-black" />
-          </div>
+          )}
         </div>
-      ) : null}
+
+        <div className="mt-4 space-y-4">
+          {orderedBlocks
+            .filter((b: any) => !!b?.is_visible && String(b?.type) !== 'menu')
+            .map((b: any) => {
+              const type = String(b?.type || '')
+              if (type === 'hero') {
+                return (
+                  <Card key={b.id} dir="rtl">
+                    <div className="space-y-3 text-right">
+                      {heroImages.length > 0 && <HeroRotator images={heroImages} seconds={heroSeconds} />}
+                      <div className="whitespace-pre-wrap text-sm text-zinc-700">{heroText}</div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {settings?.waze_url && (
+                          <a href={settings.waze_url} target="_blank" rel="noreferrer">
+                            <Button>Waze</Button>
+                          </a>
+                        )}
+                        {showGiftBlock && (
+                          <Link href={hrefOf("/gift")}>
+                            <Button variant="ghost">{giftLabel}</Button>
+                          </Link>
+                        )}
+                        {showGalleryBlock && (
+                          <Link href={hrefOf("/gallery")}>
+                            <Button variant="ghost">{galleryLabel}</Button>
+                          </Link>
+                        )}
+                        {showBlessingsBlock && (
+                          <Link href={hrefOf("/blessings")}>
+                            <Button variant="ghost">{blessingsTitle}</Button>
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                )
+              }
+
+              // Home shows ONLY gallery blocks defined in `blocks` (gallery_1/2/3...). Legacy types like `gallery`/`gallery_admin` are ignored.
+              if (type.startsWith('gallery_')) {
+                const cfg = (b as any)?.config || {}
+                const galleryId = String(cfg.gallery_id || cfg.galleryId || b.id)
+                const title = String(cfg.title || b.title || cfg.label || cfg.name || b.type || 'גלריה')
+                const subtitle = String(cfg.subtitle || cfg.description || 'תמונות מהאירוע.')
+                const buttonLabel = String(cfg.button_label || 'לכל התמונות')
+
+                const previews: any[] = (data as any)?.galleryPreviews?.[galleryId] || []
+
+                return (
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push(hrefOf(`/gallery/${encodeURIComponent(galleryId)}`))}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="font-semibold">{title}</p>
+                        <p className="text-sm text-zinc-600">{subtitle}</p>
+                      </div>
+                      <Link href={hrefOf(`/gallery/${encodeURIComponent(galleryId)}`)}>
+                        <Button>{buttonLabel}</Button>
+                      </Link>
+                    </div>
+
+                    {previews.length === 0 ? (
+                      <div className="mt-3 rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-600">אין תמונות עדיין.</div>
+                    ) : (
+                      <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(1, Number(settings?.home_gallery_preview_cols || 3))}, minmax(0, 1fr))` }}>
+                        {previews.slice(0, Math.max(1, Number(settings?.home_gallery_preview_limit || 6))).map((it: any) => {
+                          const url = String(it.thumb_url || it.url || '')
+                          return (
+                            <div
+                              key={String(it.id)}
+                              className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-200"
+                            >
+                              {url ? (
+                                <img
+                                  src={url}
+                                  alt=""
+                                  className={"absolute inset-0 h-full w-full object-cover " + (it.crop_position === 'top' ? 'object-top' : 'object-center')}
+                                />
+                              ) : null}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </Card>
+                )
+              }
+
+              if (type === 'blessings') {
+                return (
+                  <Card key={b.id} dir="rtl">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="font-semibold">{blessingsTitle}</p>
+                        <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה ותנו ריאקשן.</p>
+                      </div>
+                      <Link href={hrefOf("/blessings")}>
+                        <Button>לכל הברכות</Button>
+                      </Link>
+                    </div>
+
+                    {Array.isArray(blessingsPreview) && blessingsPreview.length > 0 ? (
+                      <div className="mt-3 space-y-3">
+                        {blessingsPreview.map((p: any) => (
+                          <div key={p.id} className="rounded-2xl bg-zinc-50 p-3">
+                            <div dir="rtl" className="space-y-2">
+                              {/* Name row */}
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0 flex-1 text-right">
+                                  <div className="truncate text-sm font-semibold">{p.author_name || 'אנונימי'}</div>
+                                </div>
+                              </div>
+
+                              {/* If no media, show link thumbnail under name (image-only even when details hidden) */}
+                              {!p.media_url && linkPreviewEnabled && p.link_url ? (
+                                <div className="text-right">
+                                  <HomeLinkThumb url={p.link_url} sizePx={Math.max(120, Math.min(220, mediaSize))} />
+                                  {linkPreviewShowDetails ? <HomeLinkMeta url={p.link_url} /> : null}
+                                </div>
+                              ) : null}
+
+                              {/* Media centered */}
+                              {p.media_url ? (
+                                <div className="flex justify-center">
+                                  <button
+                                    type="button"
+                                    className="relative overflow-hidden rounded-2xl bg-zinc-200"
+                                    style={{ width: Math.max(120, Math.min(260, mediaSize)), height: Math.max(120, Math.min(260, mediaSize)) }}
+                                    onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
+                                  >
+                                    <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                  </button>
+                                </div>
+                              ) : null}
+
+                              {/* Text right */}
+                              {p.text ? <div className="whitespace-pre-wrap text-right text-sm text-zinc-700">{p.text}</div> : null}
+
+                              {/* If media exists, show link preview under text */}
+                              {p.media_url && linkPreviewEnabled && p.link_url ? (
+                                <div className="text-right">
+                                  <HomeLinkThumb url={p.link_url} sizePx={Math.max(120, Math.min(220, mediaSize))} />
+                                  {linkPreviewShowDetails ? <HomeLinkMeta url={p.link_url} /> : null}
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-2 space-y-2">
+                              {/* Row 1: reactions */}
+                              <div className="flex flex-wrap items-center justify-center gap-2">
+                                {EMOJIS.map(e => (
+                                  <button
+                                    key={e}
+                                    type="button"
+                                    className={`rounded-full border px-3 py-1 text-sm whitespace-nowrap ${
+                                      (p.my_reactions || []).includes(e) ? 'bg-black text-white' : 'bg-white'
+                                    }`}
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api/reactions/toggle?event=${encodeURIComponent(eventId)}`, {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ post_id: p.id, emoji: e }),
+                                        })
+                                        if (!res.ok) return
+                                        const j = await res.json().catch(() => ({} as any))
+                                        setData(prev => {
+                                          if (!prev) return prev
+                                          const next = { ...prev } as any
+                                          next.blessingsPreview = (next.blessingsPreview || []).map((x: any) => {
+                                            if (x.id !== p.id) return x
+                                            return {
+                                              ...x,
+                                              reaction_counts: j.counts || x.reaction_counts || {},
+                                              my_reactions: j.my || x.my_reactions || [],
+                                            }
+                                          })
+                                          return next
+                                        })
+                                      } catch {}
+                                    }}
+                                  >
+                                    {e} {Number((p.reaction_counts || ({} as any))[e] || 0)}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Row 2: share icon (right) + write blessing (left) */}
+                              <div dir="rtl" className="flex items-center justify-between gap-2">
+                                {shareEnabled ? (
+                                  <button
+                                    type="button"
+                                    className="shrink-0 rounded-full border px-3 py-1 text-sm bg-white"
+                                    onClick={() => shareBlessing(p)}
+                                    aria-label="שתף"
+                                    title="שתף"
+                                  >
+                                    🔗
+                                  </button>
+                                ) : (
+                                  <span className="w-10" />
+                                )}
+
+                                <Link href={hrefOf("/blessings")} className="flex-1">
+                                  <Button variant="ghost" className="w-full">
+                                    כתוב ברכה
+                                  </Button>
+                                </Link>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-right text-sm text-zinc-600">עדיין אין ברכות. תהיו הראשונים 😊</div>
+                    )}
+                  </Card>
+                )
+              }
+
+              if (type === 'gift') {
+                return (
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push('/gift')}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="font-semibold">{giftLabel}</p>
+                        <p className="text-sm text-zinc-600">לתרומה/מתנה באהבה.</p>
+                      </div>
+                      <Link href={hrefOf("/gift")}>
+                        <Button>{giftLabel}</Button>
+                      </Link>
+                    </div>
+                  </Card>
+                )
+              }
+
+              return null
+            })}
+        </div>
+
+        {lightbox && (
+  <div className="fixed inset-0 z-50 bg-black/80 p-4" onClick={() => setLightbox(null)}>
+    <div className="mx-auto flex h-full max-w-5xl items-center justify-center">
+      <div className="w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          {!lightbox.isVideo && (
+            <Button
+              variant="ghost"
+              className="bg-white/90 text-black shadow hover:bg-white"
+              onClick={() => triggerDownload(lightbox.url)}
+              type="button"
+            >
+              הורד תמונה
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            className="bg-white/90 text-black shadow hover:bg-white"
+            onClick={() => setLightbox(null)}
+            type="button"
+          >
+            סגור
+          </Button>
+        </div>
+        <div className="w-full overflow-hidden rounded-2xl bg-black">
+          {lightbox.isVideo ? (
+            <video
+              src={lightbox.url}
+              controls
+              autoPlay
+              playsInline
+              className="max-h-[85vh] w-full object-contain"
+            />
+          ) : (
+            <img src={lightbox.url} alt="" className="max-h-[85vh] w-full object-contain" />
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{sharePayload && (
+  <ShareModal
+    open={shareOpen}
+    onClose={() => setShareOpen(false)}
+    title={String(settings?.share_modal_title || 'שיתוף')}
+    message={sharePayload.message}
+    link={sharePayload.link}
+    whatsappEnabled={shareWhatsappEnabled}
+    whatsappLabel={String(settings?.share_whatsapp_button_label || 'שתף בוואטסאפ')}
+    copyLabel={String(settings?.qr_btn_copy_label || 'העתק קישור')}
+  />
+)}
+      </Container>
     </main>
   )
 }
