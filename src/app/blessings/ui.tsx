@@ -587,6 +587,7 @@ async function saveEdit() {
                 {/* media (centered) */}
                 {(() => {
                   const mediaUrl = (p.video_url || p.media_url) as string | null
+                  const mediaThumbUrl = (p as any).media_thumb_url || (p as any).thumb_url || null
                   if (!mediaUrl) return null
                   const video = !!p.video_url || isVideo(mediaUrl)
                   return (
@@ -601,7 +602,7 @@ async function saveEdit() {
                         {video ? (
                           <video src={mediaUrl} className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} muted playsInline />
                         ) : (
-                          <img src={mediaUrl} alt="" className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} />
+                          <img src={mediaThumbUrl || mediaUrl} alt="" className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} />
                         )}
                       </button>
                     </div>

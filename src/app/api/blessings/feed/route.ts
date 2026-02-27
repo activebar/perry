@@ -30,6 +30,29 @@ export async function GET(req: Request) {
 
     if (error) throw error
 
+// Enrich image posts with thumb URLs from media_items (for fast grids)
+try {
+  const urls = (posts || [])
+    .map((p: any) => p.media_url)
+    .filter((u: any) => typeof u === 'string' && u.length > 0)
+  const uniq = Array.from(new Set(urls))
+  if (uniq.length) {
+    const { data: mediaRows } = await srv
+      .from('media_items')
+      .select('url, thumb_url')
+      .eq('event_id', eventId)
+      .in('url', uniq.slice(0, 200))
+    const map = new Map<string, string>()
+    ;(mediaRows || []).forEach((r: any) => {
+      if (r?.url && r?.thumb_url) map.set(String(r.url), String(r.thumb_url))
+    })
+    ;(posts || []).forEach((p: any) => {
+      const tu = map.get(String(p.media_url || ''))
+      if (tu) (p as any).media_thumb_url = tu
+    })
+  }
+} catch {}
+
     const items = posts || []
     if (!items.length) return NextResponse.json({ ok: true, items: [] })
 
