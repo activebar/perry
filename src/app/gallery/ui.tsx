@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
@@ -139,6 +139,40 @@ export default function GalleryClient({
       crop_position: x.crop_position ?? null
     }))
   )
+  useEffect(() => {
+    // Fix for client-side navigation sometimes hydrating with empty items on first entry (demo/wedding),
+    // while a hard refresh shows the correct list.
+    if (items.length > 0) return
+    try {
+      const parts = String(window.location.pathname || '').split('/').filter(Boolean)
+      const maybeEvent = parts[0] || ''
+      // If the first segment is a known route, it means we're on the root event (env.EVENT_SLUG) site.
+      const known = new Set(['gallery', 'galleries', 'blessings', 'gift', 'media', 'admin', 'gl', 'bl'])
+      const event = known.has(maybeEvent) ? '' : maybeEvent
+      const qs = new URLSearchParams()
+      qs.set('gallery_id', String(galleryId))
+      if (event) qs.set('event', event)
+      fetch(`/api/public/gallery-items?${qs.toString()}`, { cache: 'no-store' })
+        .then((r) => r.json().catch(() => ({})))
+        .then((j) => {
+          const list = Array.isArray(j?.items) ? j.items : []
+          if (!list.length) return
+          setItems(
+            list.map((x: any) => ({
+              id: x.id,
+              url: x.url || x.media_url || x.public_url || '',
+              created_at: x.created_at,
+              editable_until: x.editable_until ?? null,
+              is_approved: x.is_approved ?? true,
+              crop_position: x.crop_position ?? null
+            }))
+          )
+        })
+        .catch(() => {})
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [galleryId])
+
   const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)

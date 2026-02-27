@@ -6,6 +6,7 @@ import { supabaseServiceRole } from '@/lib/supabase'
 import GalleryClient from '@/app/gallery/ui'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 type PageProps = {
   params: { event: string; id: string }
