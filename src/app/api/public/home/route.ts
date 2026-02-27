@@ -190,19 +190,10 @@ export async function GET(req: NextRequest) {
     const blessingsPreview = await fetchBlessingsPreview(eventId, blessingsPreviewLimit, device_id)
     const galleryPreviews = await fetchGalleryPreviews(eventId, blocks)
 
-    return NextResponse.json({
-      ok: true,
-      settings,
-      blocks,
-      blessingsPreview,
-      galleryPreviews
-    })
-  } catch (e: any) {
-    
-// Enrich blessing preview items with thumb URLs for fast loading
+// Enrich blessing preview items with thumb URLs for fast loading (use thumb_url in grids)
 try {
   const urls = (blessingsPreview || [])
-    .map((p: any) => p.media_url)
+    .map((p: any) => (p as any).media_url)
     .filter((u: any) => typeof u === 'string' && u.length > 0)
   const uniq = Array.from(new Set(urls))
   if (uniq.length) {
@@ -216,12 +207,21 @@ try {
       if (r?.url && r?.thumb_url) map.set(String(r.url), String(r.thumb_url))
     })
     ;(blessingsPreview || []).forEach((p: any) => {
-      const tu = map.get(String(p.media_url || ''))
+      const tu = map.get(String((p as any).media_url || ''))
       if (tu) (p as any).media_thumb_url = tu
     })
   }
 } catch {}
 
-return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
+    return NextResponse.json({
+      ok: true,
+      settings,
+      blocks,
+      blessingsPreview,
+      galleryPreviews
+    })
+  } catch (e: any) {
+
+    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
 }
