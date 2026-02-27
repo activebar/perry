@@ -3,6 +3,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, Button, Input, Textarea } from '@/components/ui'
 
+function addEventParam(url: string) {
+  // If admin is opened as /admin?event=ido, ensure every admin API call keeps the event context.
+  if (typeof window === 'undefined') return url
+  const e = new URLSearchParams(window.location.search).get('event')
+  if (!e) return url
+  // don't double-append
+  if (/[?&]event=/.test(url)) return url
+  return url + (url.includes('?') ? '&' : '?') + 'event=' + encodeURIComponent(e)
+}
+
+
 async function jfetch(url: string, opts?: RequestInit) {
   const res = await fetch(addEventParam(url), {
     ...opts,
