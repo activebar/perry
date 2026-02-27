@@ -112,7 +112,9 @@ export async function PUT(req: NextRequest) {
     }
 
     // continue with same patch below
-    try {
+  const eventId = getEventIdFromRequest(req)
+
+  try {
       const row = await getLatestSettingsRow(eventId)
 
       const srv = supabaseServiceRole()
