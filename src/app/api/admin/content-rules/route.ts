@@ -78,6 +78,8 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const eventId = getEventIdFromRequest(req)
+
   try {
     requireMaster(admin)
   } catch (e: any) {
