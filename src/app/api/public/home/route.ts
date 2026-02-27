@@ -197,7 +197,8 @@ try {
     .filter((u: any) => typeof u === 'string' && u.length > 0)
   const uniq = Array.from(new Set(urls))
   if (uniq.length) {
-    const { data: mediaRows } = await sb
+    const sbThumb = supabaseAnon()
+    const { data: mediaRows } = await sbThumb
       .from('media_items')
       .select('url, thumb_url')
       .eq('event_id', eventId)
