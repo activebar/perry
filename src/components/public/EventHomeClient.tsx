@@ -150,7 +150,7 @@ function HomeLinkMeta({
 export default function EventHomeClient({ eventId }: { eventId: string }) {
   const router = useRouter()
 
-  const base = `/${encodeURIComponent(eventId || '')}`
+  const base = eventId ? `/${encodeURIComponent(eventId)}` : ''
   const hrefOf = (p: string) => `${base}${p.startsWith('/') ? p : `/${p}`}`
   const [data, setData] = useState<HomePayload | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -470,7 +470,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                 <img
                                   src={url}
                                   alt=""
-                                  className={"absolute inset-0 h-full w-full object-cover " + (it.crop_position === 'top' ? 'object-top' : 'object-center')}
+                                  className={"absolute inset-0 h-full w-full object-cover " + (it.crop_position === 'center' ? 'object-center' : 'object-top')}
                                 />
                               ) : null}
                             </div>
