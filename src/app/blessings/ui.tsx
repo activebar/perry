@@ -599,9 +599,9 @@ async function saveEdit() {
                         aria-label="פתח מדיה"
                       >
                         {video ? (
-                          <video src={mediaUrl} className="h-full w-full object-cover" muted playsInline />
+                          <video src={mediaUrl} className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} muted playsInline />
                         ) : (
-                          <img src={mediaUrl} alt="" className="h-full w-full object-cover" />
+                          <img src={mediaUrl} alt="" className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} />
                         )}
                       </button>
                     </div>
@@ -740,7 +740,7 @@ async function saveEdit() {
             {editDraft.media_url && !editRemoveMedia && !editFile && (
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="h-16 w-16 overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
-                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover" />
+                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} />
                 </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -858,7 +858,7 @@ function LinkPreviewThumb({ url, size }: { url?: string; size: number }) {
       style={{ width: size, height: size }}
       aria-label="פתח קישור"
     >
-      <img src={img} alt="" className="h-full w-full object-cover" />
+      <img src={img} alt="" className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} />
     </a>
   )
 }
