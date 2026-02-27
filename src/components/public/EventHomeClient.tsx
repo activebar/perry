@@ -176,7 +176,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   async function load() {
     setErr(null)
     try {
-      const res = await fetch(`/api/public/home?ts=${Date.now()}`, { cache: 'no-store' })
+      const res = await fetch(`/api/public/home?event=${encodeURIComponent(eventId)}&ts=${Date.now()}`, { cache: 'no-store' })
       const json = (await res.json().catch(() => ({}))) as HomePayload
       if (!res.ok) throw new Error((json as any)?.error || 'Request failed')
       setData(json)
@@ -524,7 +524,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                     style={{ width: Math.max(120, Math.min(260, mediaSize)), height: Math.max(120, Math.min(260, mediaSize)) }}
                                     onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
                                   >
-                                    <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                    <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
                                   </button>
                                 </div>
                               ) : null}
