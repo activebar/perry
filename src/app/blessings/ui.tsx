@@ -143,6 +143,8 @@ export default function BlessingsClient({
   // URL pattern: /ido/blessings -> ["", "ido", "blessings"]
   const effectiveEventId = pathname?.split('/')[1] || null
 
+  const eventQuery = effectiveEventId ? `?event=${encodeURIComponent(effectiveEventId)}` : ''
+
   // media pickers (mobile-friendly)
   const pickRef = useRef<HTMLInputElement | null>(null)
   const cameraPhotoRef = useRef<HTMLInputElement | null>(null)
@@ -235,7 +237,7 @@ export default function BlessingsClient({
 
     async function pull() {
       try {
-        const res = await fetch(`/api/blessings/feed?ts=${Date.now()}`, { cache: 'no-store' })
+        const res = await fetch(`/api/blessings/feed?ts=${Date.now()}${effectiveEventId ? `&event=${encodeURIComponent(effectiveEventId)}` : ''}`, { cache: 'no-store' })
         if (!res.ok) return
         const j = await res.json().catch(() => ({}))
         if (!cancelled && Array.isArray(j.items)) setItems(j.items)
@@ -286,7 +288,7 @@ export default function BlessingsClient({
         }
       }
 
-      const res = await jfetch('/api/posts', {
+      const res = await jfetch(`/api/posts${eventQuery}`, {
         method: 'POST',
         body: JSON.stringify({
           kind: 'blessing',
@@ -317,7 +319,7 @@ export default function BlessingsClient({
   async function toggleReaction(post_id: string, emoji: string) {
     setErr(null)
     try {
-      const res = await jfetch('/api/reactions/toggle', { method: 'POST', body: JSON.stringify({ post_id, emoji }) })
+      const res = await jfetch(`/api/reactions/toggle${eventQuery}`, { method: 'POST', body: JSON.stringify({ post_id, emoji }) })
       setItems(prev =>
         prev.map(p =>
           p.id === post_id
@@ -404,7 +406,7 @@ async function saveEdit() {
       media_url
     }
 
-    const res = await jfetch('/api/posts', { method: 'PUT', body: JSON.stringify(patch) })
+    const res = await jfetch(`/api/posts${eventQuery}`, { method: 'PUT', body: JSON.stringify(patch) })
     setItems((prev: any[]) => prev.map(x => (x.id === res.post.id ? { ...x, ...res.post } : x)))
     setEditOpen(false)
     setEditDraft(null)
@@ -421,7 +423,7 @@ async function saveEdit() {
     if (!confirm('למחוק את הברכה?')) return
     setErr(null)
     try {
-      await jfetch('/api/posts', { method: 'DELETE', body: JSON.stringify({ id }) })
+      await jfetch(`/api/posts${eventQuery}`, { method: 'DELETE', body: JSON.stringify({ id }) })
       setItems(prev => prev.filter(p => p.id !== id))
       setMsg('✅ נמחק')
       setTimeout(() => setMsg(null), 1200)
@@ -455,7 +457,7 @@ async function saveEdit() {
     const code = (p.id || '').slice(0, 8)
     // Ensure the short link exists in DB so /b/{code} can always be resolved
     try {
-      await fetch('/api/short-links', {
+      await fetch(`/api/short-links${eventQuery}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
