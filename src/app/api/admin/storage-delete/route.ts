@@ -56,14 +56,18 @@ export async function DELETE(req: NextRequest) {
 
       const storagePath = String((row as any)?.storage_path || '').trim()
       if (storagePath) {
-        await sb.storage.from('uploads').remove([storagePath]).catch(() => null as any)
-        await sb.from('media_items').delete().eq('event_id', eventId).eq('id', String((row as any).id)).catch(() => null as any)
+        try {
+          await sb.storage.from('uploads').remove([storagePath])
+        } catch (_) {}
+        try {
+          await sb.from('media_items').delete().eq('event_id', eventId).eq('id', String((row as any).id))
+        } catch (_) {}
         deleted++
       } else {
         // best-effort: try to parse uploads path from URL
         const p = extractUploadsPathFromUrl(u)
         if (p) {
-          await sb.storage.from('uploads').remove([p]).catch(() => null as any)
+          await sb.storage.from('uploads').remove([p])
           deleted++
         }
       }
@@ -71,7 +75,7 @@ export async function DELETE(req: NextRequest) {
 
     // 2) direct paths
     if (paths.length) {
-      await sb.storage.from('uploads').remove(paths).catch(() => null as any)
+      await sb.storage.from('uploads').remove(paths)
       deleted += paths.length
     }
 
