@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest, requireAnyPermission, requirePermission } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
+import { getEventIdFromRequest } from '@/lib/event-id'
 
 /**
  * NOTE:
