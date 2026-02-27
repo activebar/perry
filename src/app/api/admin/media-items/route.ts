@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   let q = sb
     .from('media_items')
     .select('id, url, thumb_url, kind, gallery_id, is_approved, editable_until, storage_path, created_at, uploader_device_id')
-    .eq('event_id', (admin as any).event_id || getEventId())
+    .eq('event_id', (admin as any).event_id || getEventIdFromRequest(req))
     .in('kind', ['gallery', 'galleries'])
     .order('created_at', { ascending: false })
 
@@ -56,7 +56,7 @@ export async function PUT(req: NextRequest) {
   const { data, error } = await sb
     .from('media_items')
     .update({ is_approved })
-    .eq('event_id', (admin as any).event_id || getEventId())
+    .eq('event_id', (admin as any).event_id || getEventIdFromRequest(req))
     .eq('id', id)
     .select('*')
     .single()
@@ -80,7 +80,7 @@ export async function DELETE(req: NextRequest) {
   const { data: row, error: rerr } = await sb
     .from('media_items')
     .select('id, storage_path')
-    .eq('event_id', (admin as any).event_id || getEventId())
+    .eq('event_id', (admin as any).event_id || getEventIdFromRequest(req))
     .eq('id', id)
     .single()
   if (rerr) return jsonError(rerr.message, 500)
@@ -94,7 +94,7 @@ export async function DELETE(req: NextRequest) {
   const { error: derr } = await sb
     .from('media_items')
     .delete()
-    .eq('event_id', (admin as any).event_id || getEventId())
+    .eq('event_id', (admin as any).event_id || getEventIdFromRequest(req))
     .eq('id', id)
   if (derr) return jsonError(derr.message, 500)
 
