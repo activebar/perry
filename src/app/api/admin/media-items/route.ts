@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
-import { getEventId } from '@/lib/event-id'
+import { getEventIdFromRequest } from '@/lib/event-id'
 
 function jsonError(msg: string, status = 400) {
   return NextResponse.json({ error: msg }, { status })

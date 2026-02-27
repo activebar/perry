@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest, requireMaster } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
-import { getEventId } from '@/lib/event-id'
+import { getEventIdFromRequest } from '@/lib/event-id'
 
-function pickRule(body: any) {
+function pickRule(body: any, eventId: string) {
   const rule_type = (body?.rule_type === 'allow' ? 'allow' : 'block') as 'allow' | 'block'
   const scope = (body?.scope === 'global' ? 'global' : 'event') as 'global' | 'event'
   const match_type = (body?.match_type === 'exact' ? 'exact' : body?.match_type === 'word' ? 'word' : 'contains') as 'exact' | 'contains' | 'word'
@@ -13,7 +13,7 @@ function pickRule(body: any) {
 
   // Important: event-scoped rules must be tied to the current event_id, otherwise
   // they will never match in public moderation.
-  const event_id = scope === 'event' ? getEventId() : null
+  const event_id = scope === 'event' ? eventId : null
 
   return { rule_type, scope, event_id, match_type, expression, note, is_active }
 }
@@ -27,11 +27,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
   }
 
+  const eventId = getEventIdFromRequest(req)
+
   try {
     const srv = supabaseServiceRole()
     const { data, error } = await srv
       .from('content_rules')
       .select('*')
+      .or(`scope.eq.global,event_id.eq.${eventId}`)
       .order('updated_at', { ascending: false })
       .order('id', { ascending: false })
 
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const row = pickRule(body)
+    const row = pickRule(body, eventId)
     if (!row.expression) return NextResponse.json({ error: 'missing expression' }, { status: 400 })
 
     const srv = supabaseServiceRole()
@@ -84,7 +87,7 @@ export async function PUT(req: NextRequest) {
     const id = Number(body?.id)
     if (!Number.isFinite(id)) return NextResponse.json({ error: 'missing id' }, { status: 400 })
 
-    const patch = pickRule(body)
+    const patch = pickRule(body, eventId)
     if (!patch.expression) return NextResponse.json({ error: 'missing expression' }, { status: 400 })
 
     const srv = supabaseServiceRole()

@@ -11,6 +11,8 @@ export async function DELETE(req: NextRequest) {
     if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const env = getServerEnv()
+  const url = new URL(req.url)
+  const eventId = String(url.searchParams.get('event') || '').trim() || env.EVENT_SLUG
     const body = await req.json().catch(() => ({}))
     const id = body?.id as string | undefined
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })

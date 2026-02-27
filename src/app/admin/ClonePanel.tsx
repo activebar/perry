@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card, Button, Input, Textarea } from '@/components/ui'
 
 async function jfetch(url: string, opts?: RequestInit) {
-  const res = await fetch(url, {
+  const res = await fetch(addEventParam(url), {
     ...opts,
     headers: { 'content-type': 'application/json', ...(opts?.headers || {}) }
   })

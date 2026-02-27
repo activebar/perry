@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
 
     const buf = Buffer.from(await file.arrayBuffer())
     const srv = getServerEnv()
-    const path = `${srv.EVENT_SLUG}/og/default.jpg`
+    const url = new URL(req.url)
+    const eventId = String(url.searchParams.get('event') || '').trim() || srv.EVENT_SLUG
+    const path = `${eventId}/og/default.jpg`
 
     const sb = supabaseServiceRole()
     const { error } = await sb.storage.from('uploads').upload(path, buf, {
@@ -32,6 +34,9 @@ export async function POST(req: NextRequest) {
 const { data: settingsRow, error: sErr } = await sb
   .from('event_settings')
   .select('id')
+  .eq('event_id', eventId)
+  .order('updated_at', { ascending: false })
+  .order('created_at', { ascending: false })
   .limit(1)
   .maybeSingle()
 
@@ -42,6 +47,7 @@ const { error: upErr } = await sb
   .from('event_settings')
   .update({ og_default_image_url: publicUrl })
   .eq('id', settingsRow.id)
+  .eq('event_id', eventId)
 
 if (upErr) throw upErr
 

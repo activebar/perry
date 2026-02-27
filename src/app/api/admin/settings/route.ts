@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest, requireAnyPermission, requirePermission } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
 
 /**
  * NOTE:
@@ -8,11 +9,12 @@ import { supabaseServiceRole } from '@/lib/supabase'
  * The site homepage reads the *latest* row (updated_at/created_at desc).
  * To keep admin + homepage in sync, the admin API must also read/update the same latest row.
  */
-async function getLatestSettingsRow() {
+async function getLatestSettingsRow(eventId: string) {
   const srv = supabaseServiceRole()
   const { data, error } = await srv
     .from('event_settings')
     .select('*')
+    .eq('event_id', eventId)
     .order('updated_at', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)
@@ -22,12 +24,24 @@ async function getLatestSettingsRow() {
   return data as any
 }
 
+function resolveEventId(req: NextRequest, admin?: any) {
+  // Event-admin (code login) is always scoped to its event_id.
+  if (admin?.event_id) return String(admin.event_id)
+  const q = (req.nextUrl.searchParams.get('event') || '').trim()
+  if (q) return q
+  // Fallback to server ENV
+  return getServerEnv().EVENT_SLUG
+}
+
+
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   try {
-    let row = await getLatestSettingsRow()
+    const eventId = resolveEventId(req, admin)
+
+    let row = await getLatestSettingsRow(eventId)
 
     const lockDays = Number((row as any).approval_lock_after_days ?? 7)
     const startAt = new Date((row as any).start_at)
@@ -36,7 +50,7 @@ export async function GET(req: NextRequest) {
 
     if (isLocked && (row as any).require_approval === false) {
       await supabaseServiceRole().from('event_settings').update({ require_approval: true }).eq('id', (row as any).id)
-      row = await getLatestSettingsRow()
+      row = await getLatestSettingsRow(eventId)
     }
     return NextResponse.json({ ok: true, settings: row })
   } catch (e: any) {
@@ -99,13 +113,14 @@ export async function PUT(req: NextRequest) {
 
     // continue with same patch below
     try {
-      const row = await getLatestSettingsRow()
+      const row = await getLatestSettingsRow(eventId)
 
       const srv = supabaseServiceRole()
       const { data, error } = await srv
         .from('event_settings')
         .update(patch)
         .eq('id', row.id)
+        .eq('event_id', eventId)
         .select('*')
         .single()
 
@@ -119,13 +134,14 @@ export async function PUT(req: NextRequest) {
 
   try {
     const patch = await req.json()
-    const row = await getLatestSettingsRow()
+    const row = await getLatestSettingsRow(eventId)
 
     const srv = supabaseServiceRole()
     const { data, error } = await srv
       .from('event_settings')
       .update(patch)
       .eq('id', row.id)
+        .eq('event_id', eventId)
       .select('*')
       .single()
 

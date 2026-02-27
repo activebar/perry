@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest, requirePermission } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 const ALLOWED_STATUS = new Set(['pending', 'approved', 'deleted'])
 
+function resolveEventId(req: NextRequest, admin?: any) {
+  // Event-admin (code login) is always scoped to its event_id.
+  if (admin?.event_id) return String(admin.event_id)
+  const q = (req.nextUrl.searchParams.get('event') || '').trim()
+  if (q) return q
+  // Fallback to server ENV
+  return getServerEnv().EVENT_SLUG
+}
+
+
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const eventId = resolveEventId(req, admin)
 
   const kind = (req.nextUrl.searchParams.get('kind') || '').trim()
   // permission gate
@@ -24,8 +37,8 @@ export async function GET(req: NextRequest) {
   const srv = supabaseServiceRole()
   let q = srv.from('posts').select('*').order('created_at', { ascending: false }).limit(500)
 
-  // Scope event-access (code login) to its event
-  if (admin.event_id) q = q.eq('event_id', admin.event_id)
+  // Scope to the selected event (or the admin's event_id)
+  q = q.eq('event_id', eventId)
 
   if (kind && ALLOWED_KINDS.has(kind)) q = q.eq('kind', kind)
   if (status && ALLOWED_STATUS.has(status)) q = q.eq('status', status)
@@ -38,6 +51,8 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  const eventId = resolveEventId(req, admin)
 
   try {
     const body = await req.json()

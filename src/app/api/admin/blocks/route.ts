@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest, requireMaster } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
-import { getEventId } from '@/lib/event-id'
+import { getEventIdFromRequest } from '@/lib/event-id'
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'forbidden' }, { status: (e as any)?.status || 403 })
   }
   const srv = supabaseServiceRole()
-  const eventId = getEventId()
+  const eventId = getEventIdFromRequest(req)
   const { data, error } = await srv
     .from('blocks')
     .select('*')
@@ -33,7 +33,7 @@ export async function PUT(req: NextRequest) {
   const patch = await req.json()
   if (!patch?.id) return NextResponse.json({ error: 'missing id' }, { status: 400 })
   const srv = supabaseServiceRole()
-  const eventId = getEventId()
+  const eventId = getEventIdFromRequest(req)
   const { data, error } = await srv
     .from('blocks')
     .update(patch)
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
   const { ids } = await req.json()
   if (!Array.isArray(ids) || ids.length === 0) return NextResponse.json({ error: 'missing ids' }, { status: 400 })
   const srv = supabaseServiceRole()
-  const eventId = getEventId()
+  const eventId = getEventIdFromRequest(req)
 
   // IMPORTANT:
   // We must NOT use upsert() here.

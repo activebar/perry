@@ -257,8 +257,22 @@ const TAB_LABEL: Record<string, string> = {
   login: 'התחברות'
 }
 
+function addEventParam(url: string) {
+  // Admin runs in the browser; we use the current URL query (?event=ido) to scope admin API calls.
+  try {
+    const ev = new URLSearchParams(window.location.search).get('event')
+    if (!ev) return url
+
+    const u = new URL(url, window.location.origin)
+    if (!u.searchParams.get('event')) u.searchParams.set('event', ev)
+    return u.pathname + (u.search || '')
+  } catch {
+    return url
+  }
+}
+
 async function jfetch(url: string, opts?: RequestInit) {
-  const res = await fetch(url, {
+  const res = await fetch(addEventParam(url), {
     ...opts,
     headers: { 'content-type': 'application/json', ...(opts?.headers || {}) }
   })
@@ -818,7 +832,7 @@ export default function AdminApp({
       const blob = await makeOgJpeg(ogFile, ogFocus.x, ogFocus.y)
       const fd = new FormData()
       fd.append('file', new File([blob], 'og-default.jpg', { type: 'image/jpeg' }))
-      const res = await fetch('/api/admin/og-default', { method: 'POST', body: fd })
+      const res = await fetch(addEventParam('/api/admin/og-default'), { method: 'POST', body: fd })
       const j = await res.json()
       if (!res.ok || !j?.ok) throw new Error(j?.error || 'upload failed')
       const publicUrl = String(j.publicUrl || '')

@@ -8,3 +8,16 @@ export function getEventId(): string {
     'default'
   )
 }
+
+
+export function getEventIdFromRequest(req: { url: string }): string {
+  try {
+    const u = new URL(req.url)
+    const q = String(u.searchParams.get('event') || '').trim()
+    if (q) return q
+    // Also support path-based routing: /{event}/...
+    const parts = u.pathname.split('/').filter(Boolean)
+    if (parts.length > 0) return parts[0]
+  } catch {}
+  return getEventId()
+}
