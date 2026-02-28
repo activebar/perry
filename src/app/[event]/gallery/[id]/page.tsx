@@ -116,7 +116,11 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
         </Card>
 
         <div className="mt-4">
-          <GalleryClient initialItems={items || []} galleryId={galleryId} uploadEnabled={uploadEnabled} />
+          <GalleryClient
+            initialItems={items || []}
+            galleryId={galleryId}
+            uploadEnabled={uploadEnabled}
+/>
         </div>
       </Container>
     </main>

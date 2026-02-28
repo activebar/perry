@@ -79,7 +79,7 @@ export async function DELETE(req: NextRequest) {
   const sb = supabaseServiceRole()
   const { data: row, error: rerr } = await sb
     .from('media_items')
-    .select('id, storage_path')
+    .select('id, storage_path, url, thumb_url')
     .eq('event_id', (admin as any).event_id || getEventIdFromRequest(req))
     .eq('id', id)
     .single()
@@ -87,11 +87,23 @@ export async function DELETE(req: NextRequest) {
 
   // delete storage file first (best-effort) + delete thumb if present
   const path = (row as any)?.storage_path
-  if (path) {
-    const paths: string[] = [path]
+  const url = (row as any)?.url
+  const thumbUrl = (row as any)?.thumb_url
+
+  const derivePath = (u: any): string | null => {
+    if (typeof u !== 'string') return null
+    const m = u.match(/\/storage\/v1\/object\/public\/uploads\/(.+)$/)
+    return m?.[1] ? String(m[1]) : null
+  }
+
+  const base = (typeof path === 'string' && path.trim()) ? path.trim() : (derivePath(url) || derivePath(thumbUrl))
+  if (base) {
+    const paths: string[] = [base]
     // Thumb convention: "<original>.thumb.webp" (e.g. .jpg.thumb.webp)
-    if (!path.endsWith('.thumb.webp')) paths.push(`${path}.thumb.webp`)
-    await sb.storage.from('uploads').remove(paths).catch(() => null as any)
+    if (!base.endsWith('.thumb.webp')) paths.push(`${base}.thumb.webp`)
+    // If caller passed thumb as base, also attempt original (best-effort)
+    if (base.endsWith('.thumb.webp')) paths.push(base.replace(/\.thumb\.webp$/, ''))
+    await sb.storage.from('uploads').remove(Array.from(new Set(paths))).catch(() => null as any)
   }
 
   const { error: derr } = await sb

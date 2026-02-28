@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
@@ -123,11 +124,13 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
 export default function GalleryClient({
   initialItems,
   galleryId,
-  uploadEnabled
+  uploadEnabled,
+  eventId
 }: {
   initialItems: any[]
   galleryId: string
   uploadEnabled: boolean
+  eventId?: string
 }) {
   const [items, setItems] = useState<Item[]>(
     (initialItems || []).map((x: any) => ({
@@ -144,6 +147,52 @@ export default function GalleryClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
+
+  // Event slug: prefer server-provided prop, otherwise derive from URL.
+  const pathname = usePathname()
+  const derivedEventId = useMemo(() => {
+    const seg = String(pathname || '').split('/').filter(Boolean)
+    // expected: /:event/gallery/:id
+    return seg[0] || ''
+  }, [pathname])
+  const effectiveEventId = String(eventId || derivedEventId || '').trim()
+
+  const abortRef = useRef<AbortController | null>(null)
+
+  const refreshFromApi = useCallback(async () => {
+    if (!effectiveEventId || !galleryId) return
+    abortRef.current?.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+    try {
+      const res = await fetch(
+        `/api/public/gallery-items?event=${encodeURIComponent(effectiveEventId)}&gallery_id=${encodeURIComponent(
+          galleryId
+        )}`,
+        { cache: 'no-store', signal: ac.signal }
+      )
+      if (!res.ok) return
+      const j = await res.json().catch(() => null)
+      const next = Array.isArray(j?.items) ? (j.items as any[]) : []
+      if (!next.length) return
+      const nextIds = next.map((x) => String(x?.id || '')).join(',')
+      const curIds = (items || []).map((x) => String((x as any)?.id || '')).join(',')
+      if (nextIds && nextIds !== curIds) {
+        setItems(
+          next.map((x: any) => ({
+            id: x.id,
+            url: x.url || x.media_url || x.public_url || '',
+            created_at: x.created_at,
+            editable_until: x.editable_until ?? null,
+            is_approved: x.is_approved ?? true,
+            crop_position: x.crop_position ?? null
+          }))
+        )
+      }
+    } catch {
+      // ignore
+    }
+  }, [effectiveEventId, galleryId, items])
 
   // When navigating between galleries via client-side routing, this component can
   // remain mounted. Since we initialize state from props only once, the first
@@ -163,7 +212,10 @@ export default function GalleryClient({
     setSelected({})
     setMsg(null)
     setErr(null)
-  }, [galleryId, initialItems])
+    // Self-heal: when navigating client-side, the first RSC payload can be stale/empty.
+    // This fetch corrects it without requiring a full browser refresh.
+    void refreshFromApi()
+  }, [galleryId, initialItems, refreshFromApi])
 
   // Select + ZIP (client-side)
     const DIRECT_MAX = 8

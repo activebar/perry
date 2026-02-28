@@ -46,16 +46,9 @@ export async function POST(req: NextRequest) {
     let eventFromReferer = ''
     try {
       const u = new URL(referer)
-      // Admin UI is usually /admin?event=ido -> prefer the query param when present.
-      const qEvent = (u.searchParams.get('event') || '').trim().toLowerCase()
-      if (qEvent && /^[a-z0-9_-]{2,32}$/.test(qEvent)) {
-        eventFromReferer = qEvent
-      } else {
-        // Otherwise, path is like /ido/... so first segment.
-        const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
-        // Don't treat internal routes like /admin as an event slug.
-        if (seg && seg !== 'admin' && /^[a-z0-9_-]{2,32}$/.test(seg)) eventFromReferer = seg
-      }
+      const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
+      // only accept simple slugs (avoid weird paths)
+      if (/^[a-z0-9_-]{2,32}$/.test(seg)) eventFromReferer = seg
     } catch {
       // ignore
     }
@@ -144,28 +137,6 @@ export async function POST(req: NextRequest) {
 
     const publicUrl = getPublicUploadUrl(path)
 
-    // Best-effort thumbnail generation (for faster grid/home loading)
-    // Creates: <originalPath>.thumb.webp
-    let thumbUrl = publicUrl
-    if (isImage) {
-      try {
-        const thumbBuf = await sharp(buf)
-          .rotate()
-          .resize({ width: 800, withoutEnlargement: true })
-          .webp({ quality: 70 })
-          .toBuffer()
-
-        const thumbPath = `${path}.thumb.webp`
-        const { error: terr } = await sb.storage.from('uploads').upload(thumbPath, thumbBuf, {
-          contentType: 'image/webp',
-          upsert: false
-        })
-        if (!terr) thumbUrl = getPublicUploadUrl(thumbPath)
-      } catch {
-        // ignore thumbnail errors
-      }
-    }
-
     const device_id = cookies().get('device_id')?.value || null
     const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
@@ -174,7 +145,7 @@ export async function POST(req: NextRequest) {
       event_id,
       gallery_id,
       url: publicUrl,
-      thumb_url: thumbUrl,
+      thumb_url: publicUrl,
       width,
       height,
       crop_position: isImage ? crop_position : 'center',
@@ -217,7 +188,7 @@ export async function DELETE(req: NextRequest) {
 
     const { data: item, error: rerr } = await sb
       .from('media_items')
-      .select('id, storage_path, deleted_at')
+      .select('id, storage_path, url, thumb_url, deleted_at')
       .eq('id', id)
       .maybeSingle()
 
@@ -229,8 +200,15 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: true, alreadyDeleted: true })
     }
 
+    const derivePath = (u: any): string | null => {
+      if (typeof u !== 'string') return null
+      const m = u.match(/\/storage\/v1\/object\/public\/uploads\/(.+)$/)
+      return m?.[1] ? String(m[1]) : null
+    }
+
     const storagePath = String((item as any).storage_path || '').trim()
-    if (!storagePath) {
+    const basePath = storagePath || derivePath((item as any).url) || derivePath((item as any).thumb_url) || ''
+    if (!basePath) {
       // If no storage_path, still mark deleted to hide it
       const { error: uerr } = await sb
         .from('media_items')
@@ -240,9 +218,11 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: true, storageDeleted: false })
     }
 
-    // Remove from storage first (original + thumbnail)
-    const candidates = [storagePath, `${storagePath}.thumb.webp`]
-    const { error: derr } = await sb.storage.from('uploads').remove(candidates)
+    // Remove from storage first (also thumb)
+    const toRemove = [basePath]
+    if (!basePath.endsWith('.thumb.webp')) toRemove.push(`${basePath}.thumb.webp`)
+    if (basePath.endsWith('.thumb.webp')) toRemove.push(basePath.replace(/\.thumb\.webp$/, ''))
+    const { error: derr } = await sb.storage.from('uploads').remove(Array.from(new Set(toRemove)))
     if (derr) {
       // If storage delete fails, do not mark deleted_at (so we don't lose trace)
       return jsonError(`storage delete failed: ${derr.message}`, 500)
