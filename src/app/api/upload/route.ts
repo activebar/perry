@@ -46,9 +46,16 @@ export async function POST(req: NextRequest) {
     let eventFromReferer = ''
     try {
       const u = new URL(referer)
-      const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
-      // only accept simple slugs (avoid weird paths)
-      if (/^[a-z0-9_-]{2,32}$/.test(seg)) eventFromReferer = seg
+      // Admin UI is usually /admin?event=ido -> prefer the query param when present.
+      const qEvent = (u.searchParams.get('event') || '').trim().toLowerCase()
+      if (qEvent && /^[a-z0-9_-]{2,32}$/.test(qEvent)) {
+        eventFromReferer = qEvent
+      } else {
+        // Otherwise, path is like /ido/... so first segment.
+        const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
+        // Don't treat internal routes like /admin as an event slug.
+        if (seg && seg !== 'admin' && /^[a-z0-9_-]{2,32}$/.test(seg)) eventFromReferer = seg
+      }
     } catch {
       // ignore
     }
@@ -137,30 +144,6 @@ export async function POST(req: NextRequest) {
 
     const publicUrl = getPublicUploadUrl(path)
 
-    // Generate and upload a lightweight thumbnail for faster grids/previews.
-    // We keep the thumb path deterministic so deletes can remove both files.
-    let thumbUrl = publicUrl
-    if (isImage) {
-      const thumbPath = `${path}.thumb.webp`
-      try {
-        const thumbBuf = await sharp(buf)
-          .rotate()
-          .resize({ width: 900, withoutEnlargement: true })
-          .webp({ quality: 70 })
-          .toBuffer()
-
-        const thumbUp = await sb.storage.from('uploads').upload(thumbPath, thumbBuf, {
-          contentType: 'image/webp',
-          upsert: true,
-          cacheControl: '31536000',
-        })
-        if (!thumbUp.error) thumbUrl = getPublicUploadUrl(thumbPath)
-      } catch (e) {
-        // best-effort only
-      }
-    }
-
-
     const device_id = cookies().get('device_id')?.value || null
     const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
@@ -169,7 +152,7 @@ export async function POST(req: NextRequest) {
       event_id,
       gallery_id,
       url: publicUrl,
-      thumb_url: thumbUrl,
+      thumb_url: publicUrl,
       width,
       height,
       crop_position: isImage ? crop_position : 'center',
