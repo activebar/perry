@@ -145,6 +145,26 @@ export default function GalleryClient({
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
 
+  // When navigating between galleries via client-side routing, this component can
+  // remain mounted. Since we initialize state from props only once, the first
+  // navigation may show stale/empty items until a full refresh.
+  // Sync state whenever the gallery (or server props) change.
+  useEffect(() => {
+    setItems(
+      (initialItems || []).map((x: any) => ({
+        id: x.id,
+        url: x.url || x.media_url || x.public_url || '',
+        created_at: x.created_at,
+        editable_until: x.editable_until ?? null,
+        is_approved: x.is_approved ?? true,
+        crop_position: x.crop_position ?? null
+      }))
+    )
+    setSelected({})
+    setMsg(null)
+    setErr(null)
+  }, [galleryId, initialItems])
+
   // Select + ZIP (client-side)
     const DIRECT_MAX = 8
     const ZIP_MAX = 20

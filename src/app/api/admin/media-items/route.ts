@@ -85,10 +85,13 @@ export async function DELETE(req: NextRequest) {
     .single()
   if (rerr) return jsonError(rerr.message, 500)
 
-  // delete storage file first (best-effort)
+  // delete storage file first (best-effort) + delete thumb if present
   const path = (row as any)?.storage_path
   if (path) {
-    await sb.storage.from('uploads').remove([path]).catch(() => null as any)
+    const paths: string[] = [path]
+    // Thumb convention: "<original>.thumb.webp" (e.g. .jpg.thumb.webp)
+    if (!path.endsWith('.thumb.webp')) paths.push(`${path}.thumb.webp`)
+    await sb.storage.from('uploads').remove(paths).catch(() => null as any)
   }
 
   const { error: derr } = await sb
