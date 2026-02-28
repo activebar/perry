@@ -120,8 +120,7 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
             initialItems={items || []}
             galleryId={galleryId}
             uploadEnabled={uploadEnabled}
-            eventId={String(params.event)}
-          />
+/>
         </div>
       </Container>
     </main>
