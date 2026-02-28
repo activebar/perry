@@ -137,6 +137,30 @@ export async function POST(req: NextRequest) {
 
     const publicUrl = getPublicUploadUrl(path)
 
+    // Generate and upload a lightweight thumbnail for faster grids/previews.
+    // We keep the thumb path deterministic so deletes can remove both files.
+    let thumbUrl = publicUrl
+    if (isImage) {
+      const thumbPath = `${path}.thumb.webp`
+      try {
+        const thumbBuf = await sharp(buf)
+          .rotate()
+          .resize({ width: 900, withoutEnlargement: true })
+          .webp({ quality: 70 })
+          .toBuffer()
+
+        const thumbUp = await sb.storage.from('uploads').upload(thumbPath, thumbBuf, {
+          contentType: 'image/webp',
+          upsert: true,
+          cacheControl: '31536000',
+        })
+        if (!thumbUp.error) thumbUrl = getPublicUploadUrl(thumbPath)
+      } catch (e) {
+        // best-effort only
+      }
+    }
+
+
     const device_id = cookies().get('device_id')?.value || null
     const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
@@ -145,7 +169,7 @@ export async function POST(req: NextRequest) {
       event_id,
       gallery_id,
       url: publicUrl,
-      thumb_url: publicUrl,
+      thumb_url: thumbUrl,
       width,
       height,
       crop_position: isImage ? crop_position : 'center',

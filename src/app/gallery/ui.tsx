@@ -5,7 +5,6 @@ import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
 type Item = {
-  thumb_url?: string | null
   id: string
   url: string
   created_at?: string
@@ -134,7 +133,6 @@ export default function GalleryClient({
     (initialItems || []).map((x: any) => ({
       id: x.id,
       url: x.url || x.media_url || x.public_url || '',
-      thumb_url: x.thumb_url || null,
       created_at: x.created_at,
       editable_until: x.editable_until ?? null,
       is_approved: x.is_approved ?? true,
@@ -456,7 +454,7 @@ export default function GalleryClient({
               onClick={() => onThumbClick(it)}
               type="button"
             >
-              <img src={(it.thumb_url || it.url)} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
+              <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
 
               {selectMode ? (
                 <div className="absolute left-2 top-2">

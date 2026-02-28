@@ -271,17 +271,6 @@ function addEventParam(url: string) {
   }
 }
 
-
-function getScopedEventId(fallback?: string) {
-  try {
-    const ev = new URLSearchParams(window.location.search).get('event')
-    if (ev) return String(ev).trim().toLowerCase()
-  } catch {}
-  return String(fallback || '').trim().toLowerCase()
-}
-
-
-
 async function jfetch(url: string, opts?: RequestInit) {
   const res = await fetch(addEventParam(url), {
     ...opts,
@@ -801,8 +790,7 @@ export default function AdminApp({
         const fd = new FormData()
         fd.set('file', f)
         fd.set('kind', 'hero')
-        fd.append('event_id', getScopedEventId(activeEventId))
-        const up = await fetch(addEventParam('/api/upload'), { method: 'POST', body: fd })
+        const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json()
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
         uploaded.push(upJson.publicUrl)
@@ -830,11 +818,6 @@ export default function AdminApp({
     const next = prev.filter((u: string) => u !== url)
     const patch = { ...settings, hero_images: next }
     setSettings(patch)
-    try {
-      await jfetch('/api/admin/storage-delete', { method: 'DELETE', body: JSON.stringify({ url }) })
-    } catch (e: any) {
-      // best-effort; ignore storage delete errors
-    }
     await saveSettings(patch)
   }
 
@@ -964,8 +947,7 @@ async function loadBlocks() {
       const fd = new FormData()
       fd.set('file', file)
       fd.set('kind', 'blessing')
-      fd.append('event_id', getScopedEventId(activeEventId))
-      const up = await fetch(addEventParam('/api/upload'), { method: 'POST', body: fd })
+      const up = await fetch('/api/upload', { method: 'POST', body: fd })
       const upJson = await up.json().catch(() => ({}))
       if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
@@ -1034,9 +1016,8 @@ async function loadBlocks() {
         const fd = new FormData()
         fd.set('file', f)
         fd.set('kind', 'gallery_admin')
-        fd.append('event_id', getScopedEventId(activeEventId))
 
-        const up = await fetch(addEventParam('/api/upload'), { method: 'POST', body: fd })
+        const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json().catch(() => ({}))
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
