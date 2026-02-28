@@ -36,10 +36,9 @@ export async function POST(req: NextRequest) {
 
     if (event) q = q.eq('event_id', event)
 
-    // backfill only rows where thumb_url is missing or equals url
-    q = q.or('thumb_url.is.null,thumb_url.eq.url')
-
-    const { data: rows, error } = await q
+    // backfill rows where thumb_url is missing OR not a real thumb (doesn't end with .thumb.webp)
+    q = q.or('thumb_url.is.null,thumb_url.not.like.%.thumb.webp')
+const { data: rows, error } = await q
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     let processed = 0
