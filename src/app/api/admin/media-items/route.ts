@@ -88,7 +88,7 @@ export async function DELETE(req: NextRequest) {
   // delete storage file first (best-effort)
   const path = (row as any)?.storage_path
   if (path) {
-    await sb.storage.from('uploads').remove([path, `${path}.thumb.webp`]).catch(() => null as any)
+    await sb.storage.from('uploads').remove([path]).catch(() => null as any)
   }
 
   const { error: derr } = await sb

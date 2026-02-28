@@ -37,7 +37,7 @@ export async function DELETE(req: NextRequest) {
 
     if (item.storage_path) {
       // uploads/<event>/<kind>/...
-      await srv.storage.from('uploads').remove([String(item.storage_path), `${String(item.storage_path)}.thumb.webp`])
+      await srv.storage.from('uploads').remove([String(item.storage_path)])
     }
 
     await srv.from('media_items').delete().eq('id', id)
