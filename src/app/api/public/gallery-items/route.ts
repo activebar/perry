@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseServerClient } from '@/lib/supabase/server'
+import { supabaseAnon } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const sb = getSupabaseServerClient()
+    const sb = supabaseAnon()
 
     const { data } = await sb
       .from('media_items')
