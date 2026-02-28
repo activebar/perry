@@ -1,0 +1,568 @@
+'use client'
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
+import JSZip from 'jszip'
+import { Button, Card } from '@/components/ui'
+
+type Item = {
+  id: string
+  url: string
+  created_at?: string
+  editable_until?: string | null
+  is_approved?: boolean
+  crop_position?: string | null
+}
+
+async function downloadUrl(url: string) {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const fileName = (url.split('/').pop() || 'image').split('?')[0] || 'image'
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1500)
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+}
+
+async function shareUrl(url: string) {
+  const clean = String(url || '').trim()
+  if (!clean) return
+  try {
+    if ((navigator as any).share) {
+      await (navigator as any).share({ url: clean })
+      return
+    }
+  } catch {}
+  try {
+    await navigator.clipboard.writeText(clean)
+    alert('הקישור הועתק ✅')
+  } catch {
+    window.open(clean, '_blank', 'noopener,noreferrer')
+  }
+}
+
+async function ensureShortLinkForMedia(mediaItemId: string) {
+  const id = String(mediaItemId || '').trim()
+  if (!id) return null
+  const code = id.slice(0, 8)
+  try {
+    await fetch('/api/short-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'gl',
+        mediaItemId: id,
+        code,
+        targetPath: `/media/${id}`,
+      }),
+    })
+  } catch {
+    // ignore
+  }
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return origin ? `${origin}/gl/${code}` : `/gl/${code}`
+}
+
+async function fileToImageBitmap(file: File) {
+  // createImageBitmap is fast and widely supported
+  return await createImageBitmap(file)
+}
+
+async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2_500_000): Promise<Blob> {
+  const bmp = await fileToImageBitmap(file)
+  const srcW = bmp.width
+  const srcH = bmp.height
+  const srcPixels = srcW * srcH
+
+  // Scale down to meet maxPixels (2MP) while preserving aspect ratio
+  let scale = 1
+  if (srcPixels > maxPixels) {
+    scale = Math.sqrt(maxPixels / srcPixels)
+  }
+
+  // Also cap the longest side (helps very tall/wide images)
+  const maxLongSide = 2200
+  const longSide = Math.max(srcW, srcH)
+  if (longSide * scale > maxLongSide) {
+    scale = maxLongSide / longSide
+  }
+
+  const dstW = Math.max(1, Math.round(srcW * scale))
+  const dstH = Math.max(1, Math.round(srcH * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = dstW
+  canvas.height = dstH
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas not supported')
+  ctx.drawImage(bmp, 0, 0, dstW, dstH)
+
+  // Try a few quality levels to stay under maxBytes
+  const qualities = [0.86, 0.82, 0.78, 0.72, 0.66, 0.6]
+  for (const q of qualities) {
+    const blob: Blob = await new Promise((resolve, reject) =>
+      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', q)
+    )
+    if (blob.size <= maxBytes) return blob
+  }
+
+  // Last resort: return lowest quality blob
+  const finalBlob: Blob = await new Promise((resolve, reject) =>
+    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', 0.55)
+  )
+  return finalBlob
+}
+
+export default function GalleryClient({
+  initialItems,
+  galleryId,
+  uploadEnabled,
+  eventId
+}: {
+  initialItems: any[]
+  galleryId: string
+  uploadEnabled: boolean
+  eventId?: string
+}) {
+  const [items, setItems] = useState<Item[]>(
+    (initialItems || []).map((x: any) => ({
+      id: x.id,
+      url: x.url || x.media_url || x.public_url || '',
+      created_at: x.created_at,
+      editable_until: x.editable_until ?? null,
+      is_approved: x.is_approved ?? true,
+      crop_position: x.crop_position ?? null
+    }))
+  )
+  const [files, setFiles] = useState<File[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<string | null>(null)
+
+  // Event slug: prefer server-provided prop, otherwise derive from URL.
+  const pathname = usePathname()
+  const derivedEventId = useMemo(() => {
+    const seg = String(pathname || '').split('/').filter(Boolean)
+    // expected: /:event/gallery/:id
+    return seg[0] || ''
+  }, [pathname])
+  const effectiveEventId = String(eventId || derivedEventId || '').trim()
+
+  const abortRef = useRef<AbortController | null>(null)
+
+  const refreshFromApi = useCallback(async () => {
+    if (!effectiveEventId || !galleryId) return
+    abortRef.current?.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+    try {
+      const res = await fetch(
+        `/api/public/gallery-items?event=${encodeURIComponent(effectiveEventId)}&gallery_id=${encodeURIComponent(
+          galleryId
+        )}`,
+        { cache: 'no-store', signal: ac.signal }
+      )
+      if (!res.ok) return
+      const j = await res.json().catch(() => null)
+      const next = Array.isArray(j?.items) ? (j.items as any[]) : []
+      if (!next.length) return
+      const nextIds = next.map((x) => String(x?.id || '')).join(',')
+      const curIds = (items || []).map((x) => String((x as any)?.id || '')).join(',')
+      if (nextIds && nextIds !== curIds) {
+        setItems(
+          next.map((x: any) => ({
+            id: x.id,
+            url: x.url || x.media_url || x.public_url || '',
+            created_at: x.created_at,
+            editable_until: x.editable_until ?? null,
+            is_approved: x.is_approved ?? true,
+            crop_position: x.crop_position ?? null
+          }))
+        )
+      }
+    } catch {
+      // ignore
+    }
+  }, [effectiveEventId, galleryId, items])
+
+  // When navigating between galleries via client-side routing, this component can
+  // remain mounted. Since we initialize state from props only once, the first
+  // navigation may show stale/empty items until a full refresh.
+  // Sync state whenever the gallery (or server props) change.
+  useEffect(() => {
+    setItems(
+      (initialItems || []).map((x: any) => ({
+        id: x.id,
+        url: x.url || x.media_url || x.public_url || '',
+        created_at: x.created_at,
+        editable_until: x.editable_until ?? null,
+        is_approved: x.is_approved ?? true,
+        crop_position: x.crop_position ?? null
+      }))
+    )
+    setSelected({})
+    setMsg(null)
+    setErr(null)
+    // Self-heal: when navigating client-side, the first RSC payload can be stale/empty.
+    // This fetch corrects it without requiring a full browser refresh.
+    void refreshFromApi()
+  }, [galleryId, initialItems, refreshFromApi])
+
+  // Select + ZIP (client-side)
+    const DIRECT_MAX = 8
+    const ZIP_MAX = 20
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [zipBusy, setZipBusy] = useState(false)
+
+  const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
+
+    const isIOSSafari = useMemo(() => {
+      if (typeof navigator === 'undefined') return false
+      const ua = navigator.userAgent || ''
+      const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+      const safari = /^((?!chrome|android).)*safari/i.test(ua)
+      return iOS && safari
+    }, [])
+
+    const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
+
+
+  const clearSelected = () => {
+    setSelected({})
+  }
+
+  const toggleSelected = (id: string) => {
+    setErr(null)
+    setMsg(null)
+    setSelected(prev => {
+      const next = { ...prev }
+      if (next[id]) {
+        delete next[id]
+        return next
+      }
+      if (Object.keys(next).length >= ZIP_MAX) {
+        setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
+        return next
+      }
+      next[id] = true
+      return next
+    })
+  }
+
+  const onThumbClick = (it: Item) => {
+    if (selectMode) {
+      toggleSelected(it.id)
+      return
+    }
+    setLightbox(it.url)
+  }
+
+    const downloadSelectedDirect = async () => {
+      try {
+        setErr(null)
+        setMsg(null)
+        const ids = Object.keys(selected)
+        if (ids.length === 0) return
+
+        setZipBusy(true)
+
+        // Direct download (1-8): fetch each file and force a short filename: activebar_01.jpg ...
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i]
+          const it = items.find(x => x.id === id)
+          if (!it?.url) continue
+
+          const res = await fetch(it.url)
+          if (!res.ok) throw new Error('download failed')
+          const blob = await res.blob()
+          const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+          const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
+
+          const href = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = href
+          a.download = name
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          URL.revokeObjectURL(href)
+
+          // small delay so browsers don't block multiple downloads aggressively
+          await new Promise(r => setTimeout(r, 250))
+        }
+
+        setMsg('✅ ההורדות התחילו')
+        clearSelected()
+        setSelectMode(false)
+      } catch (e: any) {
+        setErr(e?.message || 'שגיאה בהורדה')
+      } finally {
+        setZipBusy(false)
+      }
+    }
+
+    const downloadSelectedZip = async () => {
+    try {
+      setErr(null)
+      setMsg(null)
+      const ids = Object.keys(selected)
+      if (ids.length === 0) return
+
+      setZipBusy(true)
+      const zip = new JSZip()
+
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const it = items.find(x => x.id === id)
+        if (!it?.url) continue
+        const res = await fetch(it.url)
+        const blob = await res.blob()
+        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+        zip.file(`activebar_${String(i + 1).padStart(2, '0')}.${ext}`, blob)
+      }
+
+      const out = await zip.generateAsync({ type: 'blob' })
+      const href = URL.createObjectURL(out)
+      const a = document.createElement('a')
+      a.href = href
+      a.download = `activebar_${(galleryId || '').slice(0, 6)}.zip`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(href)
+
+      setMsg('הורדת ZIP התחילה')
+      clearSelected()
+      setSelectMode(false)
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בהורדת ZIP')
+    } finally {
+      setZipBusy(false)
+    }
+  }
+
+
+  const pickerRef = useRef<HTMLInputElement | null>(null)
+
+  const feed = useMemo(() => (items || []).filter(i => i.url), [items])
+
+  async function shareItem(it: Item) {
+    const short = await ensureShortLinkForMedia(it.id)
+    await shareUrl(short || it.url)
+  }
+
+  function addFiles(list: FileList | null) {
+    const arr = Array.from(list || []).filter(f => (f.type || '').startsWith('image/'))
+    if (arr.length === 0) return
+    setFiles(prev => [...prev, ...arr].slice(0, 50))
+  }
+
+  async function upload() {
+    if (!uploadEnabled) {
+      setErr('העלאה סגורה כרגע ע״י מנהל')
+      return
+    }
+    if (files.length === 0) return
+    setErr(null)
+    setMsg(null)
+    setBusy(true)
+    try {
+            for (const f of files) {
+        const blob = await compressToJpeg2MP(f)
+        const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
+
+        const fd = new FormData()
+        fd.append('file', out)
+        fd.append('kind', 'gallery')
+        fd.append('gallery_id', galleryId)
+
+        const res = await fetch('/api/upload', { method: 'POST', body: fd })
+        const j = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(j?.error || 'upload failed')
+
+        if (j?.publicUrl) {
+          const created: Item = { id: j.path || crypto.randomUUID(), url: j.publicUrl, created_at: new Date().toISOString(), is_approved: !!j.is_approved }
+          if (j.is_approved) {
+            setItems(prev => [created, ...prev])
+          } else {
+            setMsg('✅ הועלה וממתין לאישור מנהל')
+          }
+        }
+      }
+      setFiles([])
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בהעלאה')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div dir="rtl" className="grid gap-4">
+      <Card>
+        <div className="flex flex-col gap-3 sm:flex-row-reverse sm:items-center sm:justify-between">
+          <div className="text-right">
+            <h3 className="text-lg font-semibold">תמונות בגלריה</h3>
+            <p className="text-sm text-zinc-600">העלאה פתוחה רק אם מנהל פתח אותה.</p>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+            <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
+              {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
+            </Button>
+            <input
+              ref={pickerRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={e => addFiles(e.target.files)}
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+              disabled={!uploadEnabled}
+            />
+          </div>
+        </div>
+
+        {/* Select + ZIP */}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
+          {!selectMode ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setErr(null)
+                setMsg(null)
+                clearSelected()
+                setSelectMode(true)
+              }}
+              disabled={zipBusy}
+            >
+              בחר תמונות
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+              <Button onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip} disabled={zipBusy || selectedCount === 0}>
+                {zipBusy ? (useDirect ? 'מוריד…' : 'מכין ZIP…') : (selectedCount <= DIRECT_MAX ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})` : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setSelectMode(false)
+                  clearSelected()
+                  setErr(null)
+                  setMsg(null)
+                }}
+                disabled={zipBusy}
+              >
+                ביטול
+              </Button>
+            </div>
+          )}
+
+          {selectMode ? (
+            <p className="text-xs text-zinc-500 text-right">סמן עד {ZIP_MAX} תמונות. 1–{DIRECT_MAX} יורד ישיר, {DIRECT_MAX + 1}–{ZIP_MAX} יורד ZIP. אחרי הורדה אפשר לבחור שוב.</p>
+          ) : (
+            <span />
+          )}
+        </div>
+
+        {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+        {msg && <p className="mt-2 text-sm text-zinc-700">{msg}</p>}
+        {!uploadEnabled && <p className="mt-2 text-xs text-zinc-500">העלאה סגורה כעת.</p>}
+      </Card>
+
+      {lightbox && (
+        <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
+          <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => downloadUrl(lightbox)}
+                className="bg-white/90 text-black shadow hover:bg-white"
+                type="button"
+              >
+                הורד
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  const current = feed.find(x => x.url === lightbox)
+                  if (current) return shareItem(current)
+                  return shareUrl(lightbox)
+                }}
+                className="bg-white/90 text-black shadow hover:bg-white"
+                type="button"
+              >
+                שתף
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setLightbox(null)}
+                className="bg-white/90 text-black shadow hover:bg-white"
+                type="button"
+              >
+                סגור
+              </Button>
+            </div>
+
+            <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {feed.map(it => (
+          <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
+            <button
+              className="relative block aspect-square w-full bg-zinc-50"
+              onClick={() => onThumbClick(it)}
+              type="button"
+            >
+              <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
+
+              {selectMode ? (
+                <div className="absolute left-2 top-2">
+                  <div
+                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
+                    aria-hidden
+                  >
+                    {selected[it.id] ? '✓' : ''}
+                  </div>
+                </div>
+              ) : null}
+            </button>
+
+            <div className="p-3 flex gap-2">
+              {!selectMode ? (
+                <>
+                  <Button variant="ghost" onClick={() => shareItem(it)} type="button">
+                    שתף
+                  </Button>
+                  <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
+                    הורד
+                  </Button>
+                </>
+              ) : (
+                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {feed.length === 0 && (
+        <Card>
+          <p className="text-sm text-zinc-600">אין עדיין תמונות מאושרות.</p>
+        </Card>
+      )}
+    </div>
+  )
+}
