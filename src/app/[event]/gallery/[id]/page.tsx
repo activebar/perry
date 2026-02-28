@@ -6,6 +6,7 @@ import { supabaseServiceRole } from '@/lib/supabase'
 import GalleryClient from '@/app/gallery/ui'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 type PageProps = {
   params: { event: string; id: string }
@@ -116,11 +117,7 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
         </Card>
 
         <div className="mt-4">
-          <GalleryClient
-            initialItems={items || []}
-            galleryId={galleryId}
-            uploadEnabled={uploadEnabled}
-/>
+          <GalleryClient initialItems={items || []} galleryId={galleryId} uploadEnabled={uploadEnabled} />
         </div>
       </Container>
     </main>

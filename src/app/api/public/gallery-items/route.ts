@@ -1,39 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAnon } from '@/lib/supabase'
+import { supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url)
-    const eventId = String(url.searchParams.get('event') || '').trim()
     const galleryId = String(url.searchParams.get('gallery_id') || '').trim()
-    if (!eventId || !galleryId) {
-      return NextResponse.json(
-        { ok: false, error: 'missing_event_or_gallery' },
-        { status: 400, headers: { 'Cache-Control': 'no-store' } }
-      )
-    }
+    const event = String(url.searchParams.get('event') || '').trim()
 
-    const sb = supabaseAnon()
+    const env = getServerEnv()
+    const eventId = event || env.EVENT_SLUG
 
-    const { data } = await sb
+    if (!galleryId) return NextResponse.json({ error: 'missing gallery_id' }, { status: 400 })
+
+    const sb = supabaseServiceRole()
+    const { data, error } = await sb
       .from('media_items')
-      .select('id,url,thumb_url,created_at,editable_until,is_approved,crop_position')
+      .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,editable_until,is_approved,crop_position')
       .eq('event_id', eventId)
-      .eq('kind', 'gallery')
       .eq('gallery_id', galleryId)
       .eq('is_approved', true)
       .order('created_at', { ascending: false })
+      .limit(400)
 
-    return NextResponse.json(
-      { ok: true, items: data || [] },
-      { headers: { 'Cache-Control': 'no-store' } }
-    )
+    if (error) throw error
+    return NextResponse.json({ items: data || [] })
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message || 'error' },
-      { status: 500, headers: { 'Cache-Control': 'no-store' } }
-    )
+    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
 }
