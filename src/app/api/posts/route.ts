@@ -6,6 +6,54 @@ import { getServerEnv } from '@/lib/env'
 
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 
+function extractUploadsPathFromUrl(u: string) {
+  try {
+    const marker = '/storage/v1/object/public/uploads/'
+    const idx = u.indexOf(marker)
+    if (idx === -1) return null
+    const raw = u.slice(idx + marker.length)
+    return decodeURIComponent(raw).replace(/^\/+/, '')
+  } catch {
+    return null
+  }
+}
+
+function ensureThumbPath(storagePath: string) {
+  return storagePath.endsWith('.thumb.webp') ? storagePath : `${storagePath}.thumb.webp`
+}
+
+function stripThumbSuffix(storagePath: string) {
+  return storagePath.endsWith('.thumb.webp') ? storagePath.replace(/\.thumb\.webp$/, '') : storagePath
+}
+
+async function deletePostMediaBestEffort(opts: {
+  srv: ReturnType<typeof supabaseServiceRole>
+  eventId: string
+  mediaPath?: string | null
+  mediaUrl?: string | null
+}) {
+  const { srv, eventId } = opts
+  const sp = (opts.mediaPath && String(opts.mediaPath)) || (opts.mediaUrl ? extractUploadsPathFromUrl(String(opts.mediaUrl)) : null)
+  if (!sp) return
+
+  const base = stripThumbSuffix(sp)
+  const paths = [base, ensureThumbPath(base)]
+
+  try {
+    await srv.storage.from('uploads').remove(paths)
+  } catch (_) {}
+
+  // best-effort DB cleanup for media_items (scoped by event when possible)
+  try {
+    await srv.from('media_items').delete().eq('event_id', eventId).eq('storage_path', base)
+  } catch (_) {}
+  if (opts.mediaUrl) {
+    try {
+      await srv.from('media_items').delete().eq('event_id', eventId).eq('url', String(opts.mediaUrl))
+    } catch (_) {}
+  }
+}
+
 function withinOneHour(iso: string) {
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString()
   return { since }
@@ -151,8 +199,26 @@ export async function PUT(req: Request) {
       }
     }
 
-const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
+    const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
     if (error) throw error
+
+    // If media was cleared/replaced, delete the previous blob + media_items (best-effort)
+    const incomingMediaUrl = 'media_url' in patch ? patch.media_url : undefined
+    const incomingMediaPath = 'media_path' in patch ? patch.media_path : undefined
+
+    const clearedMedia = incomingMediaUrl === null || incomingMediaPath === null
+    const replacedMedia =
+      (typeof incomingMediaUrl === 'string' && post.media_url && incomingMediaUrl !== post.media_url) ||
+      (typeof incomingMediaPath === 'string' && post.media_path && incomingMediaPath !== post.media_path)
+
+    if ((clearedMedia || replacedMedia) && post?.event_id && (post.media_url || post.media_path)) {
+      await deletePostMediaBestEffort({
+        srv,
+        eventId: String(post.event_id),
+        mediaUrl: post.media_url,
+        mediaPath: post.media_path,
+      })
+    }
 
     // attach media_items if a new media_path is provided
     if (patch.media_path) {
@@ -192,6 +258,16 @@ export async function DELETE(req: Request) {
 
     const { error } = await srv.from('posts').update({ status: 'deleted' }).eq('id', postId)
     if (error) throw error
+
+    // best-effort cleanup of the media blob + media_items row
+    if (post?.event_id && (post?.media_url || post?.media_path)) {
+      await deletePostMediaBestEffort({
+        srv,
+        eventId: String(post.event_id),
+        mediaUrl: post.media_url,
+        mediaPath: post.media_path,
+      })
+    }
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })

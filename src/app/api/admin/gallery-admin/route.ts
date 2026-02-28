@@ -5,6 +5,10 @@ import { getServerEnv } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
+function thumbPathFromStoragePath(storagePath: string) {
+  return `${storagePath}.thumb.webp`
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const admin = await getAdminFromRequest(req)
@@ -36,8 +40,11 @@ export async function DELETE(req: NextRequest) {
     }
 
     if (item.storage_path) {
-      // uploads/<event>/<kind>/...
-      await srv.storage.from('uploads').remove([String(item.storage_path)])
+      // uploads/<event>/<kind>/... (best-effort: remove both original and thumb)
+      const sp = String(item.storage_path)
+      try {
+        await srv.storage.from('uploads').remove([sp, thumbPathFromStoragePath(sp)])
+      } catch (_) {}
     }
 
     await srv.from('media_items').delete().eq('id', id)

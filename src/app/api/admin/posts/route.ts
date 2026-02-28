@@ -6,6 +6,54 @@ import { getServerEnv } from '@/lib/env'
 const ALLOWED_KINDS = new Set(['blessing', 'gallery', 'gallery_admin'])
 const ALLOWED_STATUS = new Set(['pending', 'approved', 'deleted'])
 
+function extractUploadsPathFromUrl(u: string) {
+  try {
+    const marker = '/storage/v1/object/public/uploads/'
+    const idx = u.indexOf(marker)
+    if (idx === -1) return null
+    const raw = u.slice(idx + marker.length)
+    return decodeURIComponent(raw).replace(/^\/+/, '')
+  } catch {
+    return null
+  }
+}
+
+function ensureThumbPath(storagePath: string) {
+  return storagePath.endsWith('.thumb.webp') ? storagePath : `${storagePath}.thumb.webp`
+}
+
+function stripThumbSuffix(storagePath: string) {
+  return storagePath.endsWith('.thumb.webp') ? storagePath.replace(/\.thumb\.webp$/, '') : storagePath
+}
+
+async function deletePostMediaBestEffort(opts: {
+  srv: ReturnType<typeof supabaseServiceRole>
+  eventId: string
+  mediaPath?: string | null
+  mediaUrl?: string | null
+}) {
+  const { srv, eventId } = opts
+  const sp = (opts.mediaPath && String(opts.mediaPath)) || (opts.mediaUrl ? extractUploadsPathFromUrl(String(opts.mediaUrl)) : null)
+  if (!sp) return
+
+  const base = stripThumbSuffix(sp)
+  const paths = [base, ensureThumbPath(base)]
+
+  try {
+    await srv.storage.from('uploads').remove(paths)
+  } catch (_) {}
+
+  // best-effort DB cleanup for media_items
+  try {
+    await srv.from('media_items').delete().eq('event_id', eventId).eq('storage_path', base)
+  } catch (_) {}
+  if (opts.mediaUrl) {
+    try {
+      await srv.from('media_items').delete().eq('event_id', eventId).eq('url', String(opts.mediaUrl))
+    } catch (_) {}
+  }
+}
+
 function resolveEventId(req: NextRequest, admin?: any) {
   // Event-admin (code login) is always scoped to its event_id.
   if (admin?.event_id) return String(admin.event_id)
@@ -88,12 +136,36 @@ export async function PUT(req: NextRequest) {
     }
 
     const srv = supabaseServiceRole()
+
+    // Fetch existing row before update (so we can delete old media best-effort)
+    let preq = srv.from('posts').select('id, event_id, media_url, media_path, status').eq('id', id)
+    if (admin.event_id) preq = preq.eq('event_id', admin.event_id)
+    const { data: existing } = await preq.maybeSingle()
+
     let uq = srv.from('posts').update(patch).eq('id', id)
     // Scope event-access (code login) to its event
     if (admin.event_id) uq = uq.eq('event_id', admin.event_id)
 
     const { data, error } = await uq.select('*').single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // If media was cleared/replaced, or the post was deleted, cleanup blob + media_items (best-effort)
+    if (existing) {
+      const incomingMediaUrl = 'media_url' in patch ? (patch as any).media_url : undefined
+      const incomingMediaPath = 'media_path' in patch ? (patch as any).media_path : undefined
+      const incomingStatus = 'status' in patch ? (patch as any).status : undefined
+
+      const deleted = incomingStatus === 'deleted'
+      const clearedMedia = incomingMediaUrl === null || incomingMediaPath === null
+      const replacedMedia =
+        (typeof incomingMediaUrl === 'string' && existing.media_url && incomingMediaUrl !== existing.media_url) ||
+        (typeof incomingMediaPath === 'string' && existing.media_path && incomingMediaPath !== existing.media_path)
+
+      const ev = String(existing.event_id || admin.event_id || '')
+      if (ev && (deleted || clearedMedia || replacedMedia) && (existing.media_url || existing.media_path)) {
+        await deletePostMediaBestEffort({ srv, eventId: ev, mediaUrl: existing.media_url, mediaPath: existing.media_path })
+      }
+    }
     return NextResponse.json({ ok: true, post: data })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })

@@ -22,7 +22,11 @@ function extractUploadsPathFromUrl(url: string): string {
 }
 
 function thumbPathFromStoragePath(storagePath: string) {
-  return `${storagePath}.thumb.webp`
+  return storagePath.endsWith('.thumb.webp') ? storagePath : `${storagePath}.thumb.webp`
+}
+
+function basePathFromThumb(storagePath: string) {
+  return storagePath.endsWith('.thumb.webp') ? storagePath.replace(/\.thumb\.webp$/, '') : storagePath
 }
 
 export async function DELETE(req: NextRequest) {
@@ -61,8 +65,9 @@ export async function DELETE(req: NextRequest) {
 
       const storagePath = String((row as any)?.storage_path || '').trim()
       if (storagePath) {
+        const base = basePathFromThumb(storagePath)
         try {
-          await sb.storage.from('uploads').remove([storagePath, thumbPathFromStoragePath(storagePath)])
+          await sb.storage.from('uploads').remove([base, thumbPathFromStoragePath(base)])
         } catch (_) {}
         try {
           await sb.from('media_items').delete().eq('event_id', eventId).eq('id', String((row as any).id))
@@ -72,8 +77,9 @@ export async function DELETE(req: NextRequest) {
         // best-effort: try to parse uploads path from URL
         const p = extractUploadsPathFromUrl(u)
         if (p) {
+          const base = basePathFromThumb(p)
           try {
-            await sb.storage.from('uploads').remove([p, thumbPathFromStoragePath(p)])
+            await sb.storage.from('uploads').remove([base, thumbPathFromStoragePath(base)])
           } catch (_) {}
           deleted++
         }
@@ -82,7 +88,10 @@ export async function DELETE(req: NextRequest) {
 
     // 2) direct paths
     if (paths.length) {
-      const expanded = paths.flatMap((p) => [p, thumbPathFromStoragePath(p)])
+      const expanded = paths.flatMap((p) => {
+        const base = basePathFromThumb(p)
+        return [base, thumbPathFromStoragePath(base)]
+      })
       await sb.storage.from('uploads').remove(expanded)
       deleted += paths.length
     }
