@@ -218,7 +218,9 @@ export default function GalleryClient({
     // the first RSC payload can sometimes be stale/empty. Fetch correct items
     // without requiring a full browser refresh.
     const key = `${effectiveEventId}:${galleryId}`
-    if ((initialItems || []).length === 0 && effectiveEventId && galleryId && !healedRef.current[key]) {
+    // Always do a single no-store refresh on first mount per (event,gallery) to avoid
+    // App Router navigation showing stale/empty content until a hard refresh.
+    if (effectiveEventId && galleryId && !healedRef.current[key]) {
       healedRef.current[key] = true
       void refreshFromApi()
     }
