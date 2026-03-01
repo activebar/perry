@@ -96,13 +96,26 @@ export async function DELETE(req: NextRequest) {
     return m?.[1] ? String(m[1]) : null
   }
 
+  const thumbCandidates = (basePath: string): string[] => {
+    const out = new Set<string>()
+    // Current convention: original.ext.thumb.webp
+    out.add(`${basePath}.thumb.webp`)
+    // Fallback convention: original.thumb.webp (strip extension)
+    const stripped = basePath.replace(/\.[^./]+$/, '')
+    if (stripped && stripped !== basePath) out.add(`${stripped}.thumb.webp`)
+    return Array.from(out)
+  }
+
   const base = (typeof path === 'string' && path.trim()) ? path.trim() : (derivePath(url) || derivePath(thumbUrl))
   if (base) {
     const paths: string[] = [base]
-    // Thumb convention: "<original>.thumb.webp" (e.g. .jpg.thumb.webp)
-    if (!base.endsWith('.thumb.webp')) paths.push(`${base}.thumb.webp`)
-    // If caller passed thumb as base, also attempt original (best-effort)
-    if (base.endsWith('.thumb.webp')) paths.push(base.replace(/\.thumb\.webp$/, ''))
+    // Thumb variants (best-effort)
+    if (!base.endsWith('.thumb.webp')) {
+      paths.push(...thumbCandidates(base))
+    } else {
+      // If caller passed thumb as base, also attempt original (best-effort)
+      paths.push(base.replace(/\.thumb\.webp$/, ''))
+    }
     await sb.storage.from('uploads').remove(Array.from(new Set(paths))).catch(() => null as any)
   }
 

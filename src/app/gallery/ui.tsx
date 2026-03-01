@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
@@ -123,11 +124,13 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
 export default function GalleryClient({
   initialItems,
   galleryId,
-  uploadEnabled
+  uploadEnabled,
+  eventId
 }: {
   initialItems: any[]
   galleryId: string
   uploadEnabled: boolean
+  eventId?: string
 }) {
   const [items, setItems] = useState<Item[]>(
     (initialItems || []).map((x: any) => ({
@@ -139,45 +142,87 @@ export default function GalleryClient({
       crop_position: x.crop_position ?? null
     }))
   )
-  useEffect(() => {
-    // Fix for client-side navigation sometimes hydrating with empty items on first entry (demo/wedding),
-    // while a hard refresh shows the correct list.
-    if (items.length > 0) return
-    try {
-      const parts = String(window.location.pathname || '').split('/').filter(Boolean)
-      const maybeEvent = parts[0] || ''
-      // If the first segment is a known route, it means we're on the root event (env.EVENT_SLUG) site.
-      const known = new Set(['gallery', 'galleries', 'blessings', 'gift', 'media', 'admin', 'gl', 'bl'])
-      const event = known.has(maybeEvent) ? '' : maybeEvent
-      const qs = new URLSearchParams()
-      qs.set('gallery_id', String(galleryId))
-      if (event) qs.set('event', event)
-      fetch(`/api/public/gallery-items?${qs.toString()}`, { cache: 'no-store' })
-        .then((r) => r.json().catch(() => ({})))
-        .then((j) => {
-          const list = Array.isArray(j?.items) ? j.items : []
-          if (!list.length) return
-          setItems(
-            list.map((x: any) => ({
-              id: x.id,
-              url: x.url || x.media_url || x.public_url || '',
-              created_at: x.created_at,
-              editable_until: x.editable_until ?? null,
-              is_approved: x.is_approved ?? true,
-              crop_position: x.crop_position ?? null
-            }))
-          )
-        })
-        .catch(() => {})
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [galleryId])
-
   const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
+
+  // Event slug: prefer server-provided prop, otherwise derive from URL.
+  const pathname = usePathname()
+  const derivedEventId = useMemo(() => {
+    const seg = String(pathname || '').split('/').filter(Boolean)
+    // expected: /:event/gallery/:id
+    return seg[0] || ''
+  }, [pathname])
+  const effectiveEventId = String(eventId || derivedEventId || '').trim()
+
+  const abortRef = useRef<AbortController | null>(null)
+
+  const refreshFromApi = useCallback(async () => {
+    if (!effectiveEventId || !galleryId) return
+    abortRef.current?.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+    try {
+      const res = await fetch(
+        `/api/public/gallery-items?event=${encodeURIComponent(effectiveEventId)}&gallery_id=${encodeURIComponent(
+          galleryId
+        )}`,
+        { cache: 'no-store', signal: ac.signal }
+      )
+      if (!res.ok) return
+      const j = await res.json().catch(() => null)
+      const next = Array.isArray(j?.items) ? (j.items as any[]) : []
+      if (!next.length) return
+      setItems((prev) => {
+        const nextIds = next.map((x) => String(x?.id || '')).join(',')
+        const curIds = (prev || []).map((x) => String((x as any)?.id || '')).join(',')
+        if (!nextIds || nextIds === curIds) return prev
+        return next.map((x: any) => ({
+          id: x.id,
+          url: x.url || x.media_url || x.public_url || '',
+          created_at: x.created_at,
+          editable_until: x.editable_until ?? null,
+          is_approved: x.is_approved ?? true,
+          crop_position: x.crop_position ?? null
+        }))
+      })
+    } catch {
+      // ignore
+    }
+  }, [effectiveEventId, galleryId])
+
+  // Prevent infinite client-side refetch loops.
+  const healedRef = useRef<Record<string, boolean>>({})
+
+  // When navigating between galleries via client-side routing, this component can
+  // remain mounted. Since we initialize state from props only once, the first
+  // navigation may show stale/empty items until a full refresh.
+  // Sync state whenever the gallery (or server props) change.
+  useEffect(() => {
+    setItems(
+      (initialItems || []).map((x: any) => ({
+        id: x.id,
+        url: x.url || x.media_url || x.public_url || '',
+        created_at: x.created_at,
+        editable_until: x.editable_until ?? null,
+        is_approved: x.is_approved ?? true,
+        crop_position: x.crop_position ?? null
+      }))
+    )
+    setSelected({})
+    setMsg(null)
+    setErr(null)
+    // Self-heal (only once per event+gallery): when navigating client-side,
+    // the first RSC payload can sometimes be stale/empty. Fetch correct items
+    // without requiring a full browser refresh.
+    const key = `${effectiveEventId}:${galleryId}`
+    if ((initialItems || []).length === 0 && effectiveEventId && galleryId && !healedRef.current[key]) {
+      healedRef.current[key] = true
+      void refreshFromApi()
+    }
+  }, [galleryId, initialItems, effectiveEventId, refreshFromApi])
 
   // Select + ZIP (client-side)
     const DIRECT_MAX = 8

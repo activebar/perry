@@ -220,7 +220,13 @@ export async function DELETE(req: NextRequest) {
 
     // Remove from storage first (also thumb)
     const toRemove = [basePath]
-    if (!basePath.endsWith('.thumb.webp')) toRemove.push(`${basePath}.thumb.webp`)
+    if (!basePath.endsWith('.thumb.webp')) {
+      // Current convention: original.ext.thumb.webp
+      toRemove.push(`${basePath}.thumb.webp`)
+      // Fallback convention: original.thumb.webp
+      const stripped = basePath.replace(/\.[^./]+$/, '')
+      if (stripped && stripped !== basePath) toRemove.push(`${stripped}.thumb.webp`)
+    }
     if (basePath.endsWith('.thumb.webp')) toRemove.push(basePath.replace(/\.thumb\.webp$/, ''))
     const { error: derr } = await sb.storage.from('uploads').remove(Array.from(new Set(toRemove)))
     if (derr) {
