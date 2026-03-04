@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
       event_id,
       gallery_id,
       url: publicUrl,
-      thumb_url: thumbUrl ?? publicUrl,
+      thumb_url: publicUrl,
       width,
       height,
       crop_position: isImage ? crop_position : 'center',
