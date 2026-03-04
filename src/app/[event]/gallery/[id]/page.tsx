@@ -3,8 +3,7 @@ import Link from 'next/link'
 import { Container, Card } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
 
-// Use relative imports to avoid path-alias / root-dir edge cases on deployments
-import GalleryClient from '../../../gallery/ui'
+import GalleryClient from '../ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,12 +116,7 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
         </Card>
 
         <div className="mt-4">
-          <GalleryClient
-            key={`${String(params.event)}:${galleryId}`}
-            initialItems={items || []}
-            galleryId={galleryId}
-            uploadEnabled={uploadEnabled}
-/>
+          <GalleryClient initialItems={items || []} galleryId={galleryId} uploadEnabled={uploadEnabled} />
         </div>
       </Container>
     </main>

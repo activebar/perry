@@ -137,28 +137,6 @@ export async function POST(req: NextRequest) {
 
     const publicUrl = getPublicUploadUrl(path)
 
-    // Best-effort: generate and upload a lightweight thumbnail for faster grid rendering.
-    // Stored as: <original_path>.thumb.webp
-    let thumbPublicUrl: string | null = null
-    if (isImage) {
-      try {
-        const thumbBuf = await sharp(buf)
-          .resize({ width: 900, withoutEnlargement: true })
-          .webp({ quality: 70 })
-          .toBuffer()
-
-        const thumbPath = `${path}.thumb.webp`
-        await sb.storage.from('uploads').upload(thumbPath, thumbBuf, {
-          contentType: 'image/webp',
-          upsert: false
-        })
-        thumbPublicUrl = getPublicUploadUrl(thumbPath)
-      } catch {
-        // ignore thumbnail errors (we can always fall back to the original URL)
-        thumbPublicUrl = null
-      }
-    }
-
     const device_id = cookies().get('device_id')?.value || null
     const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
@@ -167,7 +145,7 @@ export async function POST(req: NextRequest) {
       event_id,
       gallery_id,
       url: publicUrl,
-      thumb_url: thumbPublicUrl || publicUrl,
+      thumb_url: thumbUrl ?? publicUrl,
       width,
       height,
       crop_position: isImage ? crop_position : 'center',
@@ -210,7 +188,7 @@ export async function DELETE(req: NextRequest) {
 
     const { data: item, error: rerr } = await sb
       .from('media_items')
-      .select('id, storage_path, url, thumb_url, deleted_at')
+      .select('id, storage_path, deleted_at')
       .eq('id', id)
       .maybeSingle()
 
@@ -222,15 +200,8 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: true, alreadyDeleted: true })
     }
 
-    const derivePath = (u: any): string | null => {
-      if (typeof u !== 'string') return null
-      const m = u.match(/\/storage\/v1\/object\/public\/uploads\/(.+)$/)
-      return m?.[1] ? String(m[1]) : null
-    }
-
     const storagePath = String((item as any).storage_path || '').trim()
-    const basePath = storagePath || derivePath((item as any).url) || derivePath((item as any).thumb_url) || ''
-    if (!basePath) {
+    if (!storagePath) {
       // If no storage_path, still mark deleted to hide it
       const { error: uerr } = await sb
         .from('media_items')
@@ -240,17 +211,8 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: true, storageDeleted: false })
     }
 
-    // Remove from storage first (also thumb)
-    const toRemove = [basePath]
-    if (!basePath.endsWith('.thumb.webp')) {
-      // Current convention: original.ext.thumb.webp
-      toRemove.push(`${basePath}.thumb.webp`)
-      // Fallback convention: original.thumb.webp
-      const stripped = basePath.replace(/\.[^./]+$/, '')
-      if (stripped && stripped !== basePath) toRemove.push(`${stripped}.thumb.webp`)
-    }
-    if (basePath.endsWith('.thumb.webp')) toRemove.push(basePath.replace(/\.thumb\.webp$/, ''))
-    const { error: derr } = await sb.storage.from('uploads').remove(Array.from(new Set(toRemove)))
+    // Remove from storage first
+    const { error: derr } = await sb.storage.from('uploads').remove([storagePath, `${storagePath}.thumb.webp`])
     if (derr) {
       // If storage delete fails, do not mark deleted_at (so we don't lose trace)
       return jsonError(`storage delete failed: ${derr.message}`, 500)
