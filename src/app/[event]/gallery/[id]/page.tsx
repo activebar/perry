@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { Container, Card } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
 
-import GalleryClient from '@/app/gallery/ui'
+// Use relative imports to avoid path-alias / root-dir edge cases on deployments
+import GalleryClient from '../../../gallery/ui'
 
 export const dynamic = 'force-dynamic'
 

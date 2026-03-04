@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 
-import BlessingsClient from '@/app/blessings/ui'
-import BlessingsShareHeader from '@/app/blessings/BlessingsShareHeader'
+// Use relative imports to avoid path-alias / root-dir edge cases on deployments
+import BlessingsClient from '../../blessings/ui'
+import BlessingsShareHeader from '../../blessings/BlessingsShareHeader'
 import { Container } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { toAbsoluteUrl } from '@/lib/site-url'

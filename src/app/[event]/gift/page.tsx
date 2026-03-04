@@ -1,4 +1,5 @@
-import GiftClient from '@/app/gift/ui'
+// Use relative imports to avoid path-alias / root-dir edge cases on deployments
+import GiftClient from '../../gift/ui'
 import { supabaseAnon } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
