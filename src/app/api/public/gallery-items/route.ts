@@ -1,34 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseServiceRole } from '@/lib/supabase'
-import { getServerEnv } from '@/lib/env'
+import { supabaseServiceRole, getPublicUploadUrl } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   try {
-    const url = new URL(req.url)
-    const galleryId = String(url.searchParams.get('gallery_id') || '').trim()
-    const event = String(url.searchParams.get('event') || '').trim()
-
-    const env = getServerEnv()
-    const eventId = event || env.EVENT_SLUG
-
-    if (!galleryId) return NextResponse.json({ error: 'missing gallery_id' }, { status: 400 })
+    const { searchParams } = new URL(req.url)
+    const event = searchParams.get('event') || ''
+    const gallery_id = searchParams.get('gallery_id') || ''
+    if (!event || !gallery_id) {
+      return NextResponse.json({ error: 'Missing event or gallery_id' }, { status: 400 })
+    }
 
     const sb = supabaseServiceRole()
     const { data, error } = await sb
       .from('media_items')
-      .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,editable_until,is_approved,crop_position')
-      .eq('event_id', eventId)
-      .eq('gallery_id', galleryId)
+      .select('id,event_id,kind,gallery_id,storage_path,public_url,thumb_url,created_at,editable_until,is_approved,crop_position')
+      .eq('event_id', event)
+      .eq('kind', 'gallery')
+      .eq('gallery_id', gallery_id)
       .eq('is_approved', true)
       .order('created_at', { ascending: false })
-      .limit(400)
 
-    if (error) throw error
-    return NextResponse.json({ items: data || [] })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    const items = (data || []).map((x: any) => {
+      const public_url = x.public_url || (x.storage_path ? getPublicUploadUrl(x.storage_path) : '')
+      const thumb_url = x.thumb_url || (x.storage_path ? getPublicUploadUrl(`${x.storage_path}.thumb.webp`) : public_url)
+      return {
+        ...x,
+        public_url,
+        thumb_url,
+        url: public_url
+      }
+    })
+
+    return NextResponse.json({ items })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
+    return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
   }
 }
