@@ -100,7 +100,7 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
                   <Button variant="ghost">חזרה לגלריה</Button>
                 </Link>
               ) : (
-                <Link href="/gallery">
+                <Link href="/">
                   <Button variant="ghost">לכל הגלריות</Button>
                 </Link>
               )}
