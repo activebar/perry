@@ -567,10 +567,10 @@ export default function GalleryClient({
 
                     {edit ? (
                       <div className="flex flex-row-reverse items-center gap-2">
-                        <Button variant="outline" onClick={() => pickReplace(it)} type="button" disabled={busy}>
+                        <Button variant="ghost" onClick={() => pickReplace(it)} type="button" disabled={busy}>
                           עריכה/החלפה
                         </Button>
-                        <Button variant="outline" onClick={() => onDelete(it)} type="button" disabled={busy}>
+                        <Button variant="ghost" onClick={() => onDelete(it)} type="button" disabled={busy}>
                           מחיקה
                         </Button>
                       </div>
