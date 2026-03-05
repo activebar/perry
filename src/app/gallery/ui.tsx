@@ -466,7 +466,7 @@ export default function GalleryClient({
                   }}
                 />
 
-                <Button type="button" variant="outline" onClick={() => cameraInputRef.current?.click()} disabled={busy}>
+                <Button type="button" variant="ghost" onClick={() => cameraInputRef.current?.click()} disabled={busy}>
                   צלם תמונה
                 </Button>
 
