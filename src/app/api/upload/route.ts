@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import sharp from "sharp"
+// NOTE: this project exposes Supabase helpers from src/lib/supabase.ts
 import { supabaseServiceRole } from "@/lib/supabase"
 export const dynamic = "force-dynamic"
 
@@ -8,11 +9,27 @@ export async function POST(req: NextRequest) {
     const form = await req.formData()
 
     const file = form.get("file") as File
-    const event = form.get("event") as string
-    const kind = form.get("kind") as string
-    const galleryId = form.get("gallery_id") as string | null
+
+    // Backwards/forwards compatible field names
+    const event =
+      (form.get("event") as string) ||
+      (form.get("event_id") as string) ||
+      (form.get("eventId") as string)
+
+    const kindRaw = (form.get("kind") as string) || ""
+    const kind = kindRaw.trim().toLowerCase()
+
+    const galleryId =
+      (form.get("gallery_id") as string) ||
+      (form.get("galleryId") as string) ||
+      null
 
     if (!file || !event || !kind) {
+      return NextResponse.json({ error: "missing fields" }, { status: 400 })
+    }
+
+    // Gallery uploads must include galleryId
+    if (kind === "gallery" && !galleryId) {
       return NextResponse.json({ error: "missing fields" }, { status: 400 })
     }
 
@@ -40,7 +57,8 @@ export async function POST(req: NextRequest) {
       path = `${event}/hero/${filename}`
     }
 
-    if (kind === "blessing") {
+    // Keep DB kind as 'blessing', but store files under /blessings/
+    if (kind === "blessing" || kind === "blessings") {
       path = `${event}/blessings/${filename}`
     }
 
@@ -71,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     await supabase.from("media_items").insert({
       event_id: event,
-      kind,
+      kind: kind === "blessings" ? "blessing" : kind,
       gallery_id: galleryId,
       storage_path: path,
       url: publicUrl,
