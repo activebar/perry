@@ -1,7 +1,13 @@
 import React from 'react'
 
 export function Container({ className = '', ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={`mx-auto w-full max-w-3xl px-4 py-6 ${className}`} {...props} />
+  // Mobile-first: full width with small side padding. Desktop/tablet: constrain to max width.
+  return (
+    <div
+      className={`mx-auto w-full max-w-none md:max-w-3xl px-3 sm:px-4 py-6 ${className}`}
+      {...props}
+    />
+  )
 }
 
 export function Card({ className = '', ...props }: React.HTMLAttributes<HTMLDivElement>) {
