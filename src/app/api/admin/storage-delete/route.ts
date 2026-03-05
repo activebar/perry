@@ -60,7 +60,8 @@ export async function DELETE(req: NextRequest) {
         .select('id, storage_path')
         .eq('event_id', eventId)
         // sometimes we are asked to delete by thumb_url too
-        .or(`url.eq.${u},thumb_url.eq.${u}`)
+        // IMPORTANT: support both legacy `url` and newer `public_url`
+        .or(`url.eq.${u},public_url.eq.${u},thumb_url.eq.${u}`)
         .maybeSingle()
 
       const storagePath = String((row as any)?.storage_path || '').trim()

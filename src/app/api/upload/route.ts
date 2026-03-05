@@ -193,7 +193,11 @@ export async function POST(req: NextRequest) {
       kind,
       event_id,
       gallery_id,
+      // IMPORTANT:
+      // Keep BOTH url + public_url for backward compatibility.
+      // Some code paths still read `url`, newer ones read `public_url`.
       url: publicUrl,
+      public_url: publicUrl,
       thumb_url: thumbUrl || publicUrl,
       width,
       height,

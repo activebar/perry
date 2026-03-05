@@ -49,7 +49,13 @@ async function deletePostMediaBestEffort(opts: {
   } catch (_) {}
   if (opts.mediaUrl) {
     try {
-      await srv.from('media_items').delete().eq('event_id', eventId).eq('url', String(opts.mediaUrl))
+      const u = String(opts.mediaUrl)
+      await srv
+        .from('media_items')
+        .delete()
+        .eq('event_id', eventId)
+        // support both legacy `url` and newer `public_url`
+        .or(`url.eq.${u},public_url.eq.${u},thumb_url.eq.${u}`)
     } catch (_) {}
   }
 }
