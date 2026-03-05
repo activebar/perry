@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import sharp from "sharp"
-import { supabaseServiceRole } from "@/lib/supabase/server-admin"
+import { supabaseServiceRole } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
