@@ -17,62 +17,29 @@ function shuffleInPlace<T>(arr: T[]) {
   return arr
 }
 
-type BlockGalleryCfg = {
-  gallery_id?: string
-  title?: string
-  button_label?: string
-  limit?: number
-}
-
 export default async function GalleryIndexPageForEvent({ params }: { params: { event: string } }) {
   const eventId = String(params?.event || '').trim()
   const srv = supabaseServiceRole()
 
-  const { data: blocks, error: bErr } = await srv
-    .from('blocks')
-    .select('id,type,order_index,is_visible,config,event_id')
+  // Source of truth for sub-galleries list:
+  // show active galleries even if blocks table is missing / misconfigured.
+  const { data: galleries, error: gErr } = await srv
+    .from('galleries')
+    .select('id,title,order_index,is_active')
     .eq('event_id', eventId)
-    .eq('is_visible', true)
-    .or('type.eq.gallery,type.like.gallery_%')
+    .eq('is_active', true)
     .order('order_index', { ascending: true })
 
-  if (bErr) throw bErr
+  if (gErr) throw gErr
 
-  const blockItems = (blocks || [])
-    .map((b: any) => {
-      const cfg = (b as any).config as BlockGalleryCfg | null
-      const gid = String(cfg?.gallery_id || '').trim()
-      if (!gid) return null
-      return {
-        galleryId: gid,
-        title: String(cfg?.title || 'גלריה'),
-        buttonLabel: String(cfg?.button_label || 'לכל התמונות'),
-        limit: Number(cfg?.limit || 12)
-      }
-    })
-    .filter(Boolean) as Array<{ galleryId: string; title: string; buttonLabel: string; limit: number }>
-
-  const galleryIds = blockItems.map((g) => g.galleryId)
-
-  const { data: galleriesRows } = await srv
-    .from('galleries')
-    .select('id,is_active,event_id')
-    .eq('event_id', eventId)
-    .in('id', galleryIds as any)
-
-  const activeSet = new Set(
-    (galleriesRows || [])
-      .filter((g: any) => g.is_active !== false)
-      .map((g: any) => String(g.id))
-  )
-
-  const enabledBlocks = blockItems.filter((b) => activeSet.has(String(b.galleryId)))
+  const galleryIds = (galleries || []).map((g: any) => String(g.id)).filter(Boolean)
 
   const { data: mediaRows } = await srv
     .from('media_items')
     .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,crop_position')
     .eq('event_id', eventId)
     .eq('is_approved', true)
+    .eq('kind', 'gallery')
     .in('gallery_id', galleryIds as any)
     .order('created_at', { ascending: false })
     .limit(1200)
@@ -93,36 +60,59 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
           <div className="space-y-2 text-right">
             <div className="text-xl font-semibold">גלריות</div>
             <div className="text-sm opacity-80">בחרו גלריה לצפייה בתמונות</div>
+
+            {/* Sub galleries buttons */}
+            {(galleries || []).length > 0 ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {(galleries || []).map((g: any) => (
+                  <Link
+                    key={g.id}
+                    href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(g.id))}`}
+                    prefetch={false}
+                    className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm hover:bg-zinc-50"
+                  >
+                    {String(g.title || 'גלריה')}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 text-sm opacity-70">אין גלריות פעילות כרגע.</div>
+            )}
           </div>
         </Card>
 
+        {/* Preview cards (optional) */}
         <div className="mt-4 grid gap-3">
-          {enabledBlocks.map((g) => {
-            const list = (mediaByGallery.get(String(g.galleryId)) || []).slice(0, 60)
-            const shuffled = shuffleInPlace([...list]).slice(0, Math.max(0, Math.min(12, g.limit || 12)))
+          {(galleries || []).map((g: any) => {
+            const gid = String(g.id)
+            const list = (mediaByGallery.get(gid) || []).slice(0, 60)
+            const shuffled = shuffleInPlace([...list]).slice(0, 12)
 
             return (
-              <Card key={g.galleryId}>
+              <Card key={gid}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-right">
-                    <div className="font-semibold">{g.title}</div>
+                    <div className="font-semibold">{String(g.title || 'גלריה')}</div>
                   </div>
+
                   <Link
-                    href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(g.galleryId))}`}
+                    href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(gid)}`}
                     prefetch={false}
                     className="text-sm underline"
                   >
-                    {g.buttonLabel}
+                    לכל התמונות
                   </Link>
                 </div>
 
                 {shuffled.length > 0 && (
-                  <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {shuffled.map((m: any) => {
                       const url = m.thumb_url || m.url || m.public_url
                       return (
-                        <div
+                        <Link
                           key={m.id}
+                          href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(gid)}`}
+                          prefetch={false}
                           className="relative w-full overflow-hidden rounded-xl bg-zinc-100"
                           style={{ aspectRatio: '1 / 1' }}
                         >
@@ -131,10 +121,9 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
                             src={url}
                             alt=""
                             className="absolute inset-0 h-full w-full object-cover"
-                            style={{ objectPosition: m.crop_position === 'top' ? 'top' : 'center' }}
-                            loading="lazy"
+                            style={{ objectPosition: m.crop_position === 'top' ? 'center top' : 'center' }}
                           />
-                        </div>
+                        </Link>
                       )
                     })}
                   </div>
