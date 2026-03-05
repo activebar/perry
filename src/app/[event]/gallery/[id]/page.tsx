@@ -78,6 +78,8 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
     .from('media_items')
     .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,editable_until,is_approved,crop_position')
     .eq('event_id', eventId)
+    // Keep server query consistent with the client self-heal API
+    .eq('kind', 'gallery')
     .eq('gallery_id', galleryId)
     .eq('is_approved', true)
     .order('created_at', { ascending: false })

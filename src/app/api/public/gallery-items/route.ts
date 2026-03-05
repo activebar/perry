@@ -35,7 +35,15 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ items })
+    return NextResponse.json(
+      { items },
+      {
+        // Prevent any edge/proxy caching – this endpoint is used as a "self-heal" source of truth.
+        headers: {
+          'Cache-Control': 'no-store, max-age=0'
+        }
+      }
+    )
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
   }

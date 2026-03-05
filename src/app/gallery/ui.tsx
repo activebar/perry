@@ -167,7 +167,6 @@ export default function GalleryClient({
     const key = `${eventId}__${galleryId}`
     if (!eventId || !galleryId) return
     if (healedRef.current === key) return
-    if ((initialItems || []).length > 0) return
     if ((items || []).length > 0) return
 
     healedRef.current = key
