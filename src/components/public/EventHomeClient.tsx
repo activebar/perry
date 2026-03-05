@@ -616,7 +616,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
 
               if (type === 'gift') {
                 return (
-                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push('/gift')}>
+                  <Card key={b.id} dir="rtl" className="cursor-pointer" onClick={() => router.push(hrefOf('/gift'))}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{giftLabel}</p>

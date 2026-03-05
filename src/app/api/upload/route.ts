@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'missing gallery_id' }, { status: 400 })
     }
 
-    const deviceId = cookies().get('device_id')?.value || null
+    const deviceId = pickFirst(form.get('device_id'), cookies().get('device_id')?.value) || null
 
     const ab = await file.arrayBuffer()
     const input = new Uint8Array(ab)
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     // Storage path (ALWAYS plural blessings)
     let path = ''
     if (kind === 'hero') path = `${event}/hero/${filename}`
-    else if (kind === 'blessing') path = `${event}/blessings/${filename}`
+    else if (kind === 'blessing') path = `${event}/blessing/${filename}`
     else if (kind === 'gallery') path = `${event}/gallery/${galleryId}/${filename}`
     else path = `${event}/${kind}/${filename}`
 
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
 
     // Gallery items are editable for 1 hour by uploader's device
     const editable_until =
-      kind === 'gallery' ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : null
+      (kind === 'gallery' || kind === 'blessing') ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : null
 
     const ins = await sb
       .from('media_items')
@@ -189,7 +189,7 @@ export async function DELETE(req: NextRequest) {
     if (rerr) return NextResponse.json({ error: rerr.message }, { status: 500 })
     if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-    if ((row as any).kind !== 'gallery') return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    if (!['gallery','blessing'].includes((row as any).kind)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     if ((row as any).uploader_device_id !== deviceId) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     const until = (row as any).editable_until ? new Date((row as any).editable_until).getTime() : 0
     if (!until || Date.now() > until) {
