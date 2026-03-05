@@ -421,7 +421,9 @@ export default function GalleryClient({
 
           <div className="flex flex-row-reverse items-center gap-2">
             <Button
-              variant={selectMode ? 'default' : 'outline'}
+              // Our UI Button supports only: 'primary' | 'ghost'
+              // 'primary' = black filled, 'ghost' = subtle/transparent
+              variant={selectMode ? 'primary' : 'ghost'}
               onClick={() => {
                 setSelectMode(v => !v)
                 setSelected({})
