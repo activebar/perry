@@ -231,6 +231,39 @@ export default function BlessingsClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
+  // Local preview for the selected media (image/video)
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!file) {
+      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl)
+      setFilePreviewUrl(null)
+      return
+    }
+    const u = URL.createObjectURL(file)
+    setFilePreviewUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev)
+      return u
+    })
+    return () => {
+      URL.revokeObjectURL(u)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file])
+
+  function getUploaderDeviceId() {
+    try {
+      const key = 'ab_uploader_device_id'
+      let v = localStorage.getItem(key)
+      if (!v) {
+        v = (crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(16).slice(2)}`)
+        localStorage.setItem(key, v)
+      }
+      return v
+    } catch {
+      return null
+    }
+  }
+
   // refresh list occasionally (helps when require_approval is on)
   useEffect(() => {
     let cancelled = false
@@ -275,6 +308,8 @@ export default function BlessingsClient({
 
         fd.set('kind', 'blessing')
           if (effectiveEventId) fd.append('event_id', effectiveEventId)
+        const dev = getUploaderDeviceId()
+        if (dev) fd.append('uploader_device_id', dev)
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json().catch(() => ({}))
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
@@ -555,6 +590,25 @@ async function saveEdit() {
                 </div>
 
                 {file && <p className="text-xs text-zinc-600">נבחר: {file.name}</p>}
+
+                {/* Preview */}
+                {file && filePreviewUrl && (
+                  <div className="mt-2">
+                    {isVideoFile(file) ? (
+                      <video
+                        src={filePreviewUrl}
+                        controls
+                        className="max-w-[260px] rounded-lg border border-zinc-200"
+                      />
+                    ) : (
+                      <img
+                        src={filePreviewUrl}
+                        alt="תצוגה מקדימה"
+                        className="max-w-[260px] rounded-lg border border-zinc-200"
+                      />
+                    )}
+                  </div>
+                )}
               </div>
               <Button disabled={busy || (!text && !file && !linkUrl)} onClick={submitBlessing}>
                 {busy ? 'שולח...' : 'שלח ברכה'}

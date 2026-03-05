@@ -1,16 +1,18 @@
 'use client'
 
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
 type Item = {
   id: string
   url: string
+  thumb_url?: string | null
   created_at?: string
   editable_until?: string | null
   is_approved?: boolean
   crop_position?: string | null
+  uploader_device_id?: string | null
 }
 
 async function downloadUrl(url: string) {
@@ -133,10 +135,12 @@ export default function GalleryClient({
     (initialItems || []).map((x: any) => ({
       id: x.id,
       url: x.url || x.media_url || x.public_url || '',
+      thumb_url: x.thumb_url ?? null,
       created_at: x.created_at,
       editable_until: x.editable_until ?? null,
       is_approved: x.is_approved ?? true,
-      crop_position: x.crop_position ?? null
+      crop_position: x.crop_position ?? null,
+      uploader_device_id: x.uploader_device_id ?? null
     }))
   )
   const [files, setFiles] = useState<File[]>([])
@@ -144,6 +148,46 @@ export default function GalleryClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
+
+  const pickRef = useRef<HTMLInputElement | null>(null)
+  const cameraRef = useRef<HTMLInputElement | null>(null)
+
+  function getUploaderDeviceId() {
+    try {
+      const key = 'ab_uploader_device_id'
+      let v = localStorage.getItem(key)
+      if (!v) {
+        v = (crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(16).slice(2)}`)
+        localStorage.setItem(key, v)
+      }
+      return v
+    } catch {
+      return null
+    }
+  }
+
+  function canEditOrDelete(it: Item) {
+    const dev = getUploaderDeviceId()
+    if (!dev) return false
+    if (!it.uploader_device_id) return false
+    if (it.uploader_device_id !== dev) return false
+    if (!it.editable_until) return false
+    const ms = new Date(it.editable_until).getTime() - Date.now()
+    return Number.isFinite(ms) && ms > 0
+  }
+
+  function secondsLeft(it: Item) {
+    if (!it.editable_until) return 0
+    const ms = new Date(it.editable_until).getTime() - nowTick
+    if (!Number.isFinite(ms)) return 0
+    return Math.max(0, Math.floor(ms / 1000))
+  }
+
+  const [nowTick, setNowTick] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   // Select + ZIP (client-side)
     const DIRECT_MAX = 8
@@ -193,6 +237,26 @@ export default function GalleryClient({
       return
     }
     setLightbox(it.url)
+  }
+
+  const deleteMine = async (it: Item) => {
+    try {
+      setErr(null)
+      setMsg(null)
+      if (!confirm('למחוק את התמונה?')) return
+      const dev = getUploaderDeviceId()
+      const res = await fetch('/api/public/media-delete', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: it.id, uploader_device_id: dev })
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || 'שגיאה במחיקה')
+      setItems(prev => prev.filter(x => x.id !== it.id))
+      setMsg('✅ נמחק')
+    } catch (e: any) {
+      setErr(String(e?.message || 'שגיאה'))
+    }
   }
 
     const downloadSelectedDirect = async () => {
@@ -313,13 +377,23 @@ export default function GalleryClient({
         fd.append('file', out)
         fd.append('kind', 'gallery')
         fd.append('gallery_id', galleryId)
+        const dev = getUploaderDeviceId()
+        if (dev) fd.append('uploader_device_id', dev)
 
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
         const j = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(j?.error || 'upload failed')
 
         if (j?.publicUrl) {
-          const created: Item = { id: j.path || crypto.randomUUID(), url: j.publicUrl, created_at: new Date().toISOString(), is_approved: !!j.is_approved }
+          const created: Item = {
+            id: j.id || j.mediaItemId || j.path || crypto.randomUUID(),
+            url: j.publicUrl,
+            thumb_url: j.thumbUrl || j.thumb || null,
+            created_at: new Date().toISOString(),
+            is_approved: !!j.is_approved,
+            editable_until: j.editable_until ?? null,
+            uploader_device_id: dev || null
+          }
           if (j.is_approved) {
             setItems(prev => [created, ...prev])
           } else {
@@ -348,15 +422,30 @@ export default function GalleryClient({
             <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
             </Button>
-            <input
-              ref={pickerRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={e => addFiles(e.target.files)}
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
-              disabled={!uploadEnabled}
-            />
+
+            {/* picker + camera */}
+            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+              <input
+                ref={pickerRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={e => addFiles(e.target.files)}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+                disabled={!uploadEnabled}
+              />
+              <input
+                ref={cameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={e => addFiles(e.target.files)}
+              />
+              <Button variant="ghost" type="button" onClick={() => cameraRef.current?.click()} disabled={!uploadEnabled}>
+                צלם תמונה
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -454,7 +543,12 @@ export default function GalleryClient({
               onClick={() => onThumbClick(it)}
               type="button"
             >
-              <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
+              <img
+                src={(it.thumb_url || it.url) as string}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{ objectPosition: (it.crop_position || 'center') }}
+              />
 
               {selectMode ? (
                 <div className="absolute left-2 top-2">
@@ -477,6 +571,15 @@ export default function GalleryClient({
                   <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
                     הורד
                   </Button>
+
+                  {canEditOrDelete(it) ? (
+                    <div className="mr-auto flex items-center gap-2">
+                      <span className="text-[11px] text-zinc-500">זמין לעריכה: {secondsLeft(it)}ש׳</span>
+                      <Button variant="ghost" onClick={() => deleteMine(it)} type="button">
+                        מחק
+                      </Button>
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>

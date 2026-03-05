@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const sb = supabaseServiceRole()
     const { data, error } = await sb
       .from('media_items')
-      .select('id,event_id,kind,gallery_id,storage_path,public_url,thumb_url,created_at,editable_until,is_approved,crop_position')
+      .select('id,event_id,kind,gallery_id,storage_path,public_url,thumb_url,created_at,editable_until,is_approved,crop_position,uploader_device_id')
       .eq('event_id', event)
       .eq('kind', 'gallery')
       .eq('gallery_id', gallery_id)
