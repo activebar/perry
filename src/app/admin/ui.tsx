@@ -790,10 +790,13 @@ export default function AdminApp({
         const fd = new FormData()
         fd.set('file', f)
         fd.set('kind', 'hero')
+        // Critical: ensure HERO goes to the correct event folder (avoid "admin/hero")
+        fd.set('event_id', activeEventId)
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json()
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
-        uploaded.push(upJson.publicUrl)
+        // Use thumb.webp for fast HERO rendering (full JPG still exists in storage/media_items)
+        uploaded.push(String(upJson.thumbUrl || upJson.publicUrl))
       }
 
       const prev = Array.isArray(settings.hero_images) ? settings.hero_images : []

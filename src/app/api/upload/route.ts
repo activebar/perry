@@ -8,6 +8,11 @@ import { getAdminFromRequest } from '@/lib/adminSession'
 
 export const dynamic = 'force-dynamic'
 
+// We intentionally generate TWO files for image uploads:
+// 1) original.jpg (full quality for lightbox/full view)
+// 2) original.jpg.thumb.webp (small, fast grid/preview)
+// Required for HERO / Gallery / Blessings.
+
 function jsonError(msg: string, status = 400) {
   return NextResponse.json({ error: msg }, { status })
 }
@@ -34,26 +39,31 @@ export async function POST(req: NextRequest) {
     const srv = getServerEnv()
 
     // Resolve event_id robustly:
-    // 1) formData event_id (admin can send it)
+    // 1) formData event_id (admin should send it)
     // 2) query param ?event=
-    // 3) Referer path prefix /{event}/...
-    // 4) server ENV fallback
+    // 3) Referer query ?event= (admin pages use /admin?event=demo)
+    // 4) Referer path prefix /{event}/... (only if not 'admin')
+    // 5) server ENV fallback
     const url = new URL(req.url)
     const eventFromQuery = (url.searchParams.get('event') || '').trim().toLowerCase()
     const providedEventId = String(fd.get('event_id') || '').trim().toLowerCase()
 
     const referer = req.headers.get('referer') || ''
     let eventFromReferer = ''
+    let eventFromRefererQuery = ''
     try {
       const u = new URL(referer)
+      // prefer ?event= on admin pages
+      eventFromRefererQuery = (u.searchParams.get('event') || '').trim().toLowerCase()
+
       const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
-      // only accept simple slugs (avoid weird paths)
-      if (/^[a-z0-9_-]{2,32}$/.test(seg)) eventFromReferer = seg
+      // only accept simple slugs (avoid weird paths) and NEVER accept 'admin' as an event
+      if (seg && seg !== 'admin' && /^[a-z0-9_-]{2,32}$/.test(seg)) eventFromReferer = seg
     } catch {
       // ignore
     }
 
-    let event_id = (providedEventId || eventFromQuery || eventFromReferer || (srv.EVENT_SLUG || 'ido'))
+    let event_id = (providedEventId || eventFromQuery || eventFromRefererQuery || eventFromReferer || (srv.EVENT_SLUG || 'ido'))
       .trim()
       .toLowerCase()
 
@@ -100,7 +110,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const buf = Buffer.from(await file.arrayBuffer())
+    const inputBuf = Buffer.from(await file.arrayBuffer())
 
     // Extract basic image metadata (for smart cropping defaults)
     const isImage = (file.type || '').startsWith('image/')
@@ -110,7 +120,7 @@ export async function POST(req: NextRequest) {
 
     if (isImage) {
       try {
-        const meta = await sharp(buf).metadata()
+        const meta = await sharp(inputBuf).metadata()
         width = typeof meta.width === 'number' ? meta.width : null
         height = typeof meta.height === 'number' ? meta.height : null
         if (width && height && width < height) crop_position = 'top'
@@ -119,23 +129,72 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const ext = (file.name.includes('.') ? file.name.split('.').pop() : '') || 'jpg'
-    const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+    // Always normalize images to JPG for the "full" asset.
+    // Thumb is WEBP.
+    const isSupportedImage = isImage
+    const fullExt = isSupportedImage ? 'jpg' : ((file.name.includes('.') ? file.name.split('.').pop() : '') || 'bin')
+    const safeExt = String(fullExt).toLowerCase().replace(/[^a-z0-9]/g, '') || (isSupportedImage ? 'jpg' : 'bin')
+
+    // Folder mapping to keep storage consistent across the whole platform
+    const normKind = kind.toLowerCase()
+    const kindFolder =
+      normKind === 'gallery' || normKind === 'galleries'
+        ? 'gallery'
+        : normKind === 'blessing' || normKind === 'blessings'
+          ? 'blessings'
+          : normKind === 'hero'
+            ? 'hero'
+            : normKind
 
     const folder =
-      kind === 'gallery'
+      normKind === 'gallery' || normKind === 'galleries'
         ? `${event_id}/gallery/${gallery_id}`
-        : `${event_id}/${kind}`
+        : `${event_id}/${kindFolder}`
 
-    const path = `${folder}/${Date.now()}_${randomUUID()}.${safeExt}`
+    const baseName = `${Date.now()}_${randomUUID()}`
+    const path = `${folder}/${baseName}.${safeExt}`
+    const thumbPath = `${path}.thumb.webp`
 
-    const { error } = await sb.storage.from('uploads').upload(path, buf, {
-      contentType: file.type || 'application/octet-stream',
+    // Build buffers
+    let fullBuf = inputBuf
+    let fullContentType = file.type || 'application/octet-stream'
+    let thumbBuf: Buffer | null = null
+    if (isSupportedImage) {
+      // Full JPG
+      fullBuf = await sharp(inputBuf)
+        .rotate()
+        .jpeg({ quality: 88, mozjpeg: true })
+        .toBuffer()
+      fullContentType = 'image/jpeg'
+
+      // Thumb WEBP (fast preview)
+      // HERO needs a larger preview than gallery cards.
+      const thumbMax = normKind === 'hero' ? 1600 : 720
+      thumbBuf = await sharp(fullBuf)
+        .rotate()
+        .resize({ width: thumbMax, height: thumbMax, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 78 })
+        .toBuffer()
+    }
+
+    // Upload full
+    const { error: fullErr } = await sb.storage.from('uploads').upload(path, fullBuf, {
+      contentType: fullContentType,
       upsert: false
     })
-    if (error) return jsonError(error.message, 500)
+    if (fullErr) return jsonError(fullErr.message, 500)
+
+    // Upload thumb (best-effort)
+    if (thumbBuf) {
+      const { error: tErr } = await sb.storage.from('uploads').upload(thumbPath, thumbBuf, {
+        contentType: 'image/webp',
+        upsert: false
+      })
+      if (tErr) thumbBuf = null
+    }
 
     const publicUrl = getPublicUploadUrl(path)
+    const thumbUrl = thumbBuf ? getPublicUploadUrl(thumbPath) : publicUrl
 
     const device_id = cookies().get('device_id')?.value || null
     const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
@@ -145,7 +204,7 @@ export async function POST(req: NextRequest) {
       event_id,
       gallery_id,
       url: publicUrl,
-      thumb_url: publicUrl,
+      thumb_url: thumbUrl,
       width,
       height,
       crop_position: isImage ? crop_position : 'center',
@@ -161,7 +220,7 @@ export async function POST(req: NextRequest) {
 
     if (ierr) return jsonError(ierr.message, 500)
 
-    return NextResponse.json({ ok: true, path, publicUrl, is_approved, autoApproveUntil })
+    return NextResponse.json({ ok: true, path, publicUrl, thumbUrl, is_approved, autoApproveUntil })
   } catch (e: any) {
     return jsonError(e?.message || 'error', 500)
   }
