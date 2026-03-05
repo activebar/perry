@@ -413,13 +413,13 @@ export default function GalleryClient({
   return (
     <div dir="rtl" className="grid gap-4">
       <Card>
-        <div className="flex flex-col gap-3 sm:flex-row-reverse sm:items-center sm:justify-between">
+        <div dir="rtl" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-right">
             <h3 className="text-lg font-semibold">תמונות בגלריה</h3>
             <p className="text-sm text-zinc-600">בחרו/צלמו והעלו תמונה לגלריה</p>
           </div>
 
-          <div className="flex flex-row-reverse items-center gap-2">
+          <div className="flex items-center gap-2 justify-start">
             <Button
               // Our UI Button supports only: 'primary' | 'ghost'
               // 'primary' = black filled, 'ghost' = subtle/transparent
@@ -443,8 +443,8 @@ export default function GalleryClient({
 
         {uploadEnabled ? (
           <div className="mt-4 grid gap-3">
-            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
-              <div className="flex flex-row-reverse items-center gap-2">
+            <div dir="rtl" className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2 justify-start">
                 <input
                   className="hidden"
                   ref={replaceInputRef}
@@ -547,8 +547,8 @@ export default function GalleryClient({
               <div className="p-3 grid gap-2">
                 {!selectMode ? (
                   <>
-                    <div className="flex flex-row-reverse items-center justify-between gap-2">
-                      <div className="flex flex-row-reverse gap-2">
+                    <div dir="rtl" className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
                         <Button variant="ghost" onClick={() => shareItem(it)} type="button">
                           שתף
                         </Button>
@@ -558,7 +558,7 @@ export default function GalleryClient({
                       </div>
 
                       {edit ? (
-                        <div className="text-xs text-zinc-600 flex flex-row-reverse items-center gap-1">
+                        <div className="text-xs text-zinc-600 flex items-center gap-1">
                           <span>⏳</span>
                           <span>{formatCountdown(left)}</span>
                         </div>
@@ -566,7 +566,7 @@ export default function GalleryClient({
                     </div>
 
                     {edit ? (
-                      <div className="flex flex-row-reverse items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <Button variant="ghost" onClick={() => pickReplace(it)} type="button" disabled={busy}>
                           עריכה/החלפה
                         </Button>

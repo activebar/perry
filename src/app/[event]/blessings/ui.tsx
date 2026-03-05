@@ -626,8 +626,19 @@ async function saveEdit() {
                   </div>
                 )}
                 {/* reactions */}
-                {/* RTL: use row-reverse + justify-start so actions stay on the right on mobile */}
-                <div className="mt-3 flex flex-row-reverse items-center gap-2 justify-start flex-nowrap overflow-x-auto">
+                {/* RTL: keep actions visually on the right */}
+                <div dir="rtl" className="mt-3 flex items-center gap-2 justify-start flex-nowrap overflow-x-auto">
+                  {shareEnabled ? (
+                    <Button
+                      variant="ghost"
+                      onClick={() => sharePost(p)}
+                      className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
+                      title={String(settings?.share_button_label || 'שתף')}
+                    >
+                      🔗
+                    </Button>
+                  ) : null}
+
                   {EMOJIS.map(emo => {
                     const active = (p.my_reactions || []).includes(emo)
                     const c = (p.reaction_counts || {})[emo] || 0
@@ -642,30 +653,20 @@ async function saveEdit() {
                       </Button>
                     )
                   })}
-                  {shareEnabled ? (
-                    <Button
-                      variant="ghost"
-                      onClick={() => sharePost(p)}
-                      className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
-                      title={String(settings?.share_button_label || 'שתף')}
-                    >
-                      🔗
-                    </Button>
-                  ) : null}
                 </div>
 
                 {/* edit/delete (mine, within 1h) */}
                 {canEditMine(p) && (
-                  <div className="mt-3 flex flex-row-reverse items-center gap-2 justify-start flex-nowrap overflow-x-auto">
-                    <Button variant="ghost" onClick={() => editMine(p.id)}>
+                  <div dir="rtl" className="mt-3 flex items-center gap-2 justify-start flex-nowrap overflow-x-auto">
+                    <Button variant="ghost" className="shrink-0" onClick={() => editMine(p.id)}>
                       ערוך (שעה)
                     </Button>
                     {canDeleteMine(p) && (
-                      <Button variant="ghost" onClick={() => deleteMine(p.id)}>
+                      <Button variant="ghost" className="shrink-0" onClick={() => deleteMine(p.id)}>
                         מחק (שעה)
                       </Button>
                     )}
-                    <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeft(p))}</span>
+                    <span className="shrink-0 text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeft(p))}</span>
                   </div>
                 )}
               </div>
