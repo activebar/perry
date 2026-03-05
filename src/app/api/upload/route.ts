@@ -110,7 +110,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const inputBuf = Buffer.from(await file.arrayBuffer())
+    const ab = await file.arrayBuffer()
+    const inputBuf = Buffer.from(new Uint8Array(ab))
 
     // Extract basic image metadata (for smart cropping defaults)
     const isImage = (file.type || '').startsWith('image/')
