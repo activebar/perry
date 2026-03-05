@@ -6,6 +6,8 @@ import { supabaseServiceRole } from '@/lib/supabase'
 import GalleryClient from '@/app/gallery/ui'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
 type PageProps = {
   params: { event: string; id: string }
@@ -64,7 +66,8 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
           <Card>
             <div className="space-y-2 text-right">
               <div className="text-xl font-semibold">גלריה לא זמינה</div>
-              <Link className="underline" href={`/${encodeURIComponent(eventId)}/gallery`}>
+              <Link prefetch={false}
+                className="underline" href={`/${encodeURIComponent(eventId)}/gallery`}>
                 חזרה לגלריות
               </Link>
             </div>
@@ -97,7 +100,8 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
               <div className="text-xl font-semibold">תמונות</div>
               <div className="text-sm opacity-80">בחרו גלריה</div>
             </div>
-            <Link className="underline" href={`/${encodeURIComponent(eventId)}/gallery`}>
+            <Link prefetch={false}
+                className="underline" href={`/${encodeURIComponent(eventId)}/gallery`}>
               חזרה
             </Link>
           </div>
@@ -107,6 +111,7 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
               <Link
                 key={n.galleryId}
                 href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(n.galleryId))}`}
+                prefetch={false}
                 className={`px-3 py-1 rounded-full border text-sm ${
                   String(n.galleryId) === String(galleryId) ? 'bg-zinc-900 text-white' : 'bg-white'
                 }`}

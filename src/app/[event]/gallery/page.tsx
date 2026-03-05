@@ -5,6 +5,7 @@ import { supabaseServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
 function shuffleInPlace<T>(arr: T[]) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -108,6 +109,7 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
                   </div>
                   <Link
                     href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(g.galleryId))}`}
+                    prefetch={false}
                     className="text-sm underline"
                   >
                     {g.buttonLabel}
