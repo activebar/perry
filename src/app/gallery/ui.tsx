@@ -566,7 +566,7 @@ export default function GalleryClient({
                     </div>
 
                     {edit ? (
-                      <div className="text-right">
+                      <div className="flex items-right gap-2">
                         <Button variant="ghost" onClick={() => pickReplace(it)} type="button" disabled={busy}>
                           עריכה
                         </Button>
