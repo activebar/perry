@@ -644,32 +644,34 @@ async function saveEdit() {
                     })}
                   </div>
 
-                  <div className="flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          const el = document.getElementById('blessing-form') as HTMLElement | null
-                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                          const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
-                          ta?.focus()
-                        } catch {}
-                      }}
-                      className="text-sm font-medium text-zinc-700 underline underline-offset-4"
-                    >
-                      כתוב ברכה
-                    </button>
-
+                  <div className="flex items-center justify-between gap-3" dir="rtl">
                     {shareEnabled ? (
                       <Button
                         variant="ghost"
                         onClick={() => sharePost(p)}
                         className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 shrink-0"
                         title={String(settings?.share_button_label || 'שתף')}
+                        type="button"
                       >
                         🔗
                       </Button>
                     ) : <span />}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          window.scrollTo({ top: 0, behavior: 'smooth' })
+                          const el = document.getElementById('blessing-form') as HTMLElement | null
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                          const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
+                          setTimeout(() => ta?.focus(), 250)
+                        } catch {}
+                      }}
+                      className="text-sm font-medium text-zinc-700 underline underline-offset-4"
+                    >
+                      כתוב ברכה
+                    </button>
                   </div>
                 </div>
 

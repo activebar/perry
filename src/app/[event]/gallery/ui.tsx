@@ -1,8 +1,39 @@
 'use client'
 
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
+
+
+function getLocalDeviceId(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage.getItem('device_id')
+  } catch {
+    return null
+  }
+}
+
+function ensureDeviceId(): string | null {
+  const fromCookie = getCookie('device_id')
+  const fromLocal = getLocalDeviceId()
+  const existing = fromCookie || fromLocal
+  if (existing) {
+    try {
+      if (!fromLocal) window.localStorage.setItem('device_id', existing)
+      if (!fromCookie) document.cookie = `device_id=${encodeURIComponent(existing)}; path=/; max-age=31536000; samesite=lax`
+    } catch {}
+    return existing
+  }
+  try {
+    const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`)
+    window.localStorage.setItem('device_id', id)
+    document.cookie = `device_id=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`
+    return id
+  } catch {
+    return null
+  }
+}
 
 type Item = {
   id: string
@@ -156,14 +187,32 @@ export default function GalleryClient({
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<Item | null>(null)
 
-  const deviceId = useMemo(() => getCookie('device_id'), [])
+  const [deviceId, setDeviceId] = useState<string | null>(null)
+  const [nowTs, setNowTs] = useState<number>(Date.now())
+
+  useEffect(() => {
+    setDeviceId(ensureDeviceId())
+    const t = window.setInterval(() => setNowTs(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
 
   function canEditMine(it: Item) {
     const until = it?.editable_until ? new Date(it.editable_until).getTime() : 0
     if (!until) return false
-    if (Date.now() > until) return false
+    if (nowTs > until) return false
     if (!deviceId) return false
     return !!(it.uploader_device_id && it.uploader_device_id === deviceId)
+  }
+
+  function secondsLeft(it: Item) {
+    const until = it?.editable_until ? new Date(it.editable_until).getTime() : 0
+    return Math.max(0, Math.floor((until - nowTs) / 1000))
+  }
+
+  function fmtMMSS(total: number) {
+    const m = Math.floor(total / 60)
+    const sec = total % 60
+    return `${m}:${String(sec).padStart(2, '0')}`
   }
 
   // Select + ZIP (client-side)
@@ -225,10 +274,10 @@ export default function GalleryClient({
     }
     if (!confirm('למחוק את התמונה?')) return
     try {
-      const res = await fetch('/api/upload', {
+      const res = await fetch('/api/public/media-delete', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: it.id })
+        body: JSON.stringify({ id: it.id, device_id: deviceId })
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error || 'שגיאה במחיקה')
@@ -255,6 +304,7 @@ export default function GalleryClient({
       fd.append('file', out)
       fd.append('kind', 'gallery')
       fd.append('gallery_id', galleryId)
+      if (deviceId) fd.append('device_id', deviceId)
 
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       const j = await res.json().catch(() => ({}))
@@ -271,10 +321,10 @@ export default function GalleryClient({
       }
 
       // delete old (best-effort)
-      await fetch('/api/upload', {
+      await fetch('/api/public/media-delete', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: it.id })
+        body: JSON.stringify({ id: it.id, device_id: deviceId })
       }).catch(() => null)
 
       setItems(prev => prev.map(x => (x.id === it.id ? created : x)))
@@ -409,6 +459,7 @@ export default function GalleryClient({
         fd.append('file', out)
         fd.append('kind', 'gallery')
         fd.append('gallery_id', galleryId)
+      if (deviceId) fd.append('device_id', deviceId)
 
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
         const j = await res.json().catch(() => ({}))
@@ -532,45 +583,7 @@ export default function GalleryClient({
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
           <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
-            <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => downloadUrl(lightbox.url)}
-                className="bg-white/90 text-black shadow hover:bg-white"
-                type="button"
-              >
-                הורד
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  return shareItem(lightbox)
-                }}
-                className="bg-white/90 text-black shadow hover:bg-white"
-                type="button"
-              >
-                שתף
-              </Button>
-              {canEditMine(lightbox) && (
-                <>
-                  <Button
-                    variant="ghost"
-                    onClick={() => deleteMine(lightbox)}
-                    className="bg-white/90 text-black shadow hover:bg-white"
-                    type="button"
-                  >
-                    מחק
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => pickerRef.current?.click()}
-                    className="bg-white/90 text-black shadow hover:bg-white"
-                    type="button"
-                  >
-                    החלף
-                  </Button>
-                </>
-              )}
+            <div className="absolute top-2 left-2 z-10">
               <Button
                 variant="ghost"
                 onClick={() => setLightbox(null)}
@@ -582,6 +595,20 @@ export default function GalleryClient({
             </div>
 
             <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
+
+            <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow" dir="rtl">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">שתף</Button>
+                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">הורד</Button>
+                {canEditMine(lightbox) ? (
+                  <>
+                    <span className="text-xs text-zinc-600">⏳ {fmtMMSS(secondsLeft(lightbox))}</span>
+                    <Button variant="ghost" onClick={() => pickerRef.current?.click()} type="button">עריכה</Button>
+                    <Button variant="ghost" onClick={() => deleteMine(lightbox)} type="button">מחק</Button>
+                  </>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -608,19 +635,8 @@ export default function GalleryClient({
               ) : null}
             </button>
 
-            <div className="p-3 flex gap-2">
-              {!selectMode ? (
-                <>
-                  <Button variant="ghost" onClick={() => shareItem(it)} type="button">
-                    שתף
-                  </Button>
-                  <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
-                    הורד
-                  </Button>
-                </>
-              ) : (
-                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
-              )}
+            <div className="p-3">
+              {selectMode ? <span className="text-xs text-zinc-500">מצב בחירה פעיל</span> : null}
             </div>
           </div>
         ))}
