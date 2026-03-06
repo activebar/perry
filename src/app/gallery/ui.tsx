@@ -568,7 +568,7 @@ export default function GalleryClient({
                     {edit ? (
                       <div className="flex items-center gap-2">
                         <Button variant="ghost" onClick={() => pickReplace(it)} type="button" disabled={busy}>
-                          עריכה/החלפה
+                          עריכה
                         </Button>
                         <Button variant="ghost" onClick={() => onDelete(it)} type="button" disabled={busy}>
                           מחיקה
