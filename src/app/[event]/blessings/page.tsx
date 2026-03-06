@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 
 import BlessingsClient from './ui'
 import BlessingsShareHeader from './BlessingsShareHeader'
-import { Container } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { toAbsoluteUrl } from '@/lib/site-url'
 
@@ -46,11 +45,11 @@ export default async function BlessingsPageForEvent({ params }: { params: { even
     .limit(60)
 
   return (
-    <main className="py-10">
-      <Container>
+    <main className="py-6 sm:py-10">
+      <div className="w-full">
         <BlessingsShareHeader settings={settings || {}} />
         <BlessingsClient settings={settings || {}} blocks={blocks || []} initialFeed={(posts || []) as any} />
-      </Container>
+      </div>
     </main>
   )
 }

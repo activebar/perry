@@ -626,47 +626,65 @@ async function saveEdit() {
                   </div>
                 )}
                 {/* reactions */}
-                {/* RTL: keep actions visually on the right */}
-                <div dir="rtl" className="mt-3 flex items-center gap-2 justify-start flex-nowrap overflow-x-auto">
-                  {shareEnabled ? (
-                    <Button
-                      variant="ghost"
-                      onClick={() => sharePost(p)}
-                      className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700"
-                      title={String(settings?.share_button_label || 'שתף')}
-                    >
-                      🔗
-                    </Button>
-                  ) : null}
+                <div className="mt-3 space-y-3" dir="rtl">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {EMOJIS.map(emo => {
+                      const active = (p.my_reactions || []).includes(emo)
+                      const c = (p.reaction_counts || {})[emo] || 0
+                      return (
+                        <Button
+                          key={emo}
+                          variant={active ? 'primary' : 'ghost'}
+                          className="min-w-[64px] shrink-0 rounded-full"
+                          onClick={() => toggleReaction(p.id, emo)}
+                        >
+                          {c ? `${c} ` : ''}{emo}
+                        </Button>
+                      )
+                    })}
+                  </div>
 
-                  {EMOJIS.map(emo => {
-                    const active = (p.my_reactions || []).includes(emo)
-                    const c = (p.reaction_counts || {})[emo] || 0
-                    return (
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const el = document.getElementById('blessing-form') as HTMLElement | null
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                          const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
+                          ta?.focus()
+                        } catch {}
+                      }}
+                      className="text-sm font-medium text-zinc-700 underline underline-offset-4"
+                    >
+                      כתוב ברכה
+                    </button>
+
+                    {shareEnabled ? (
                       <Button
-                        key={emo}
-                        variant={active ? 'primary' : 'ghost'}
-                        className="shrink-0"
-                        onClick={() => toggleReaction(p.id, emo)}
+                        variant="ghost"
+                        onClick={() => sharePost(p)}
+                        className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 shrink-0"
+                        title={String(settings?.share_button_label || 'שתף')}
                       >
-                        {emo} {c ? c : ''}
+                        🔗
                       </Button>
-                    )
-                  })}
+                    ) : <span />}
+                  </div>
                 </div>
 
                 {/* edit/delete (mine, within 1h) */}
                 {canEditMine(p) && (
-                  <div dir="rtl" className="mt-3 flex items-center gap-2 justify-start flex-nowrap overflow-x-auto">
-                    <Button variant="ghost" className="shrink-0" onClick={() => editMine(p.id)}>
-                      ערוך (שעה)
-                    </Button>
+                  <div className="mt-3 flex flex-wrap items-center justify-end gap-2" dir="rtl">
+                    <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeft(p))}</span>
                     {canDeleteMine(p) && (
-                      <Button variant="ghost" className="shrink-0" onClick={() => deleteMine(p.id)}>
+                      <Button variant="ghost" onClick={() => deleteMine(p.id)}>
                         מחק (שעה)
                       </Button>
                     )}
-                    <span className="shrink-0 text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeft(p))}</span>
+                    <Button variant="ghost" onClick={() => editMine(p.id)}>
+                      ערוך (שעה)
+                    </Button>
                   </div>
                 )}
               </div>
