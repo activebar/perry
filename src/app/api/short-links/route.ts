@@ -44,16 +44,16 @@ export async function POST(req: Request) {
 
   if (postId && mediaItemId) return jsonError('Provide either post_id or media_item_id, not both')
 
+  const scopedBase = eventId ? `/${encodeURIComponent(eventId)}` : ''
+
   const fallbackTarget =
     kind === 'gl'
       ? mediaItemId
         ? `/media/${mediaItemId}`
-        : postId
-          ? `/gallery/p/${postId}`
-          : '/gallery'
+        : `${scopedBase}/gallery`
       : postId
-        ? `/blessings/p/${postId}`
-        : '/blessings'
+        ? `${scopedBase}/blessings#post-${postId}`
+        : `${scopedBase}/blessings`
 
   const code = cleanCode(body.code || (postId ? postId.slice(0, 8) : mediaItemId ? mediaItemId.slice(0, 8) : ''))
   if (!/^[0-9a-f]{6,16}$/.test(code)) return jsonError('Invalid code format')

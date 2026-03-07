@@ -444,12 +444,13 @@ async function saveEdit() {
   function buildLinkForPost(postId?: string) {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const base = origin ? `${origin}` : ''
-    const blessings = `${base}/blessings`
+    const eventBase = effectiveEventId ? `/${encodeURIComponent(effectiveEventId)}` : ''
+    const blessings = `${base}${eventBase}/blessings`
     if (postId && shareUsePermalink) {
       const code = String(postId).split('-')[0]
       return `${base}/bl/${code}`
     }
-    return blessings
+    return postId ? `${blessings}#post-${postId}` : blessings
   }
 
   async function sharePost(p: Post) {
@@ -462,8 +463,9 @@ async function saveEdit() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           postId: p.id,
+          eventId: effectiveEventId,
           code,
-          targetPath: `/blessings/p/${p.id}`,
+          targetPath: `${effectiveEventId ? `/${encodeURIComponent(effectiveEventId)}` : ''}/blessings#post-${p.id}`,
         }),
       })
     } catch {
@@ -627,7 +629,7 @@ async function saveEdit() {
                 )}
                 {/* reactions */}
                 <div className="mt-3 space-y-3" dir="rtl">
-                  <div className="flex flex-nowrap items-center justify-center gap-2 overflow-x-auto pb-1">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
                     {EMOJIS.map(emo => {
                       const active = (p.my_reactions || []).includes(emo)
                       const c = (p.reaction_counts || {})[emo] || 0
@@ -635,7 +637,7 @@ async function saveEdit() {
                         <Button
                           key={emo}
                           variant={active ? 'primary' : 'ghost'}
-                          className="h-10 px-3 min-w-0 shrink-0 rounded-full whitespace-nowrap"
+                          className="min-w-[52px] px-2 shrink-0 rounded-full"
                           onClick={() => toggleReaction(p.id, emo)}
                         >
                           {c ? `${c} ` : ''}{emo}
@@ -668,7 +670,7 @@ async function saveEdit() {
                           setTimeout(() => ta?.focus(), 250)
                         } catch {}
                       }}
-                      className="text-sm font-medium text-zinc-700 underline underline-offset-4 text-left"
+                      className="text-sm font-medium text-zinc-700 underline underline-offset-4"
                     >
                       כתוב ברכה
                     </button>
