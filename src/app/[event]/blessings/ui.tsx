@@ -504,7 +504,7 @@ async function saveEdit() {
   return (
     <main dir="rtl" className="text-right">
       <Container>
-<Card>
+<Card id="blessing-form">
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
@@ -627,7 +627,7 @@ async function saveEdit() {
                 )}
                 {/* reactions */}
                 <div className="mt-3 space-y-3" dir="rtl">
-                  <div className="flex flex-wrap items-center justify-center gap-2">
+                  <div className="flex flex-nowrap items-center justify-center gap-2 overflow-x-auto pb-1">
                     {EMOJIS.map(emo => {
                       const active = (p.my_reactions || []).includes(emo)
                       const c = (p.reaction_counts || {})[emo] || 0
@@ -635,7 +635,7 @@ async function saveEdit() {
                         <Button
                           key={emo}
                           variant={active ? 'primary' : 'ghost'}
-                          className="min-w-[64px] shrink-0 rounded-full"
+                          className="h-10 px-3 min-w-0 shrink-0 rounded-full whitespace-nowrap"
                           onClick={() => toggleReaction(p.id, emo)}
                         >
                           {c ? `${c} ` : ''}{emo}
@@ -668,7 +668,7 @@ async function saveEdit() {
                           setTimeout(() => ta?.focus(), 250)
                         } catch {}
                       }}
-                      className="text-sm font-medium text-zinc-700 underline underline-offset-4"
+                      className="text-sm font-medium text-zinc-700 underline underline-offset-4 text-left"
                     >
                       כתוב ברכה
                     </button>

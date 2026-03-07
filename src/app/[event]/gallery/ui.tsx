@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
+const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
+
 
 function getLocalDeviceId(): string | null {
   if (typeof window === 'undefined') return null
@@ -44,6 +46,8 @@ type Item = {
   uploader_device_id?: string | null
   is_approved?: boolean
   crop_position?: string | null
+  reaction_counts?: Record<string, number>
+  my_reactions?: string[]
 }
 
 function getCookie(name: string): string | null {
@@ -178,7 +182,9 @@ export default function GalleryClient({
       editable_until: x.editable_until ?? null,
       uploader_device_id: x.uploader_device_id ?? null,
       is_approved: x.is_approved ?? true,
-      crop_position: x.crop_position ?? null
+      crop_position: x.crop_position ?? null,
+      reaction_counts: x.reaction_counts || {},
+      my_reactions: x.my_reactions || []
     }))
   )
   const [files, setFiles] = useState<File[]>([])
@@ -441,6 +447,19 @@ export default function GalleryClient({
     setFiles(prev => [...prev, ...arr].slice(0, 50))
   }
 
+  async function toggleReaction(mediaItemId: string, emoji: string) {
+    try {
+      const res = await fetch('/api/reactions/toggle', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ media_item_id: mediaItemId, emoji })
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || 'reaction failed')
+      setItems(prev => prev.map(it => it.id === mediaItemId ? { ...it, reaction_counts: j.counts || it.reaction_counts || {}, my_reactions: j.my || it.my_reactions || [] } : it))
+    } catch {}
+  }
+
   async function upload() {
     if (!uploadEnabled) {
       setErr('העלאה סגורה כרגע ע״י מנהל')
@@ -499,9 +518,18 @@ export default function GalleryClient({
             <p className="text-sm text-zinc-600">העלאה פתוחה רק אם מנהל פתח אותה.</p>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+          <div className="flex flex-wrap gap-2 sm:flex-row-reverse sm:items-center sm:justify-end">
             <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => pickerRef.current?.click()}
+              disabled={!uploadEnabled}
+              className="sm:w-44"
+            >
+              בחר תמונות
             </Button>
             <Button
               type="button"
@@ -518,7 +546,7 @@ export default function GalleryClient({
               accept="image/*"
               multiple
               onChange={e => addFiles(e.target.files)}
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+              className="hidden"
               disabled={!uploadEnabled}
             />
             <input
@@ -636,7 +664,27 @@ export default function GalleryClient({
             </button>
 
             <div className="p-3">
-              {selectMode ? <span className="text-xs text-zinc-500">מצב בחירה פעיל</span> : null}
+              {selectMode ? (
+                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+              ) : (
+                <div className="flex flex-nowrap items-center justify-center gap-2 overflow-x-auto pb-1">
+                  {EMOJIS.map(emo => {
+                    const active = (it.my_reactions || []).includes(emo)
+                    const c = (it.reaction_counts || {})[emo] || 0
+                    return (
+                      <Button
+                        key={emo}
+                        variant={active ? 'primary' : 'ghost'}
+                        className="h-10 px-3 min-w-0 shrink-0 rounded-full whitespace-nowrap"
+                        onClick={() => toggleReaction(it.id, emo)}
+                        type="button"
+                      >
+                        {c ? `${c} ` : ''}{emo}
+                      </Button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         ))}
