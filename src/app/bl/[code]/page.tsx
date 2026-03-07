@@ -13,52 +13,80 @@ function cleanCode(input: string) {
     .replace(/[^0-9a-z]/g, '')
 }
 
-async function resolve(code: string) {
+type ResolvedLink = {
+  targetPath: string | null
+  eventId: string | null
+  postId: string | null
+}
+
+async function resolve(code: string): Promise<ResolvedLink> {
   const srv = supabaseServiceRole()
 
-  const { data } = await srv
+  const first = await srv
+    .from('short_links')
+    .select('target_path, kind, event_id, post_id')
+    .eq('code', code)
+    .maybeSingle()
+
+  if (first.data?.target_path) {
+    const row: any = first.data
+    const k = String(row.kind || '').trim()
+    if (!k || k === 'bl') {
+      return {
+        targetPath: String(row.target_path || ''),
+        eventId: row.event_id ? String(row.event_id) : null,
+        postId: row.post_id ? String(row.post_id) : null,
+      }
+    }
+  }
+
+  const second = await srv
     .from('short_links')
     .select('target_path, event_id, post_id')
     .eq('code', code)
     .maybeSingle()
 
-  return data
+  const row: any = second.data || null
+  return {
+    targetPath: row?.target_path ? String(row.target_path) : null,
+    eventId: row?.event_id ? String(row.event_id) : null,
+    postId: row?.post_id ? String(row.post_id) : null,
+  }
 }
 
 async function loadPost(eventId: string | null, postId: string | null) {
   if (!eventId || !postId) return null
-
   const srv = supabaseServiceRole()
-
-  const { data } = await srv
+  const res = await srv
     .from('posts')
-    .select('id,event_id,author_name,text,media_url')
+    .select('id,event_id,author_name,text,media_url,video_url,created_at')
     .eq('event_id', eventId)
     .eq('id', postId)
     .maybeSingle()
+  return (res.data as any) || null
+}
 
-  return data
+function buildBlessingTarget(eventId: string | null, postId: string | null, fallback: string | null) {
+  if (eventId && postId) return `/${encodeURIComponent(eventId)}/blessings#post-${postId}`
+  return fallback || '/blessings'
 }
 
 export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
-
   const code = cleanCode(params.code)
   if (!code) return {}
 
   const resolved = await resolve(code)
-  if (!resolved) return {}
-
-  const post = await loadPost(resolved.event_id, resolved.post_id)
+  const post = await loadPost(resolved.eventId, resolved.postId)
+  const target = buildBlessingTarget(resolved.eventId, resolved.postId, resolved.targetPath)
 
   const title = post?.author_name
     ? `ברכה מ-${post.author_name}`
-    : 'ברכה'
+    : resolved.eventId
+      ? `ברכות - ${resolved.eventId}`
+      : 'ברכה'
 
-  const description = String(post?.text || 'לחצו לצפייה בברכה').slice(0,180)
-
-  const image = toAbsoluteUrl(
-    post?.media_url || '/og-fallback.png'
-  )
+  const description = String(post?.text || 'לחצו לצפייה בברכה').slice(0, 180)
+  const image = toAbsoluteUrl(post?.media_url || '/og-fallback.png')
 
   return {
     title,
@@ -66,40 +94,38 @@ export async function generateMetadata({ params }: { params: { code: string } })
     openGraph: {
       title,
       description,
-      images: [{ url: image }]
+      url: toAbsoluteUrl(`/bl/${code}`),
+      images: image ? [{ url: image }] : undefined,
     },
     twitter: {
-      card: 'summary_large_image',
+      card: image ? 'summary_large_image' : 'summary',
       title,
       description,
-      images: [image]
-    }
+      images: image ? [image] : undefined,
+    },
+    alternates: {
+      canonical: toAbsoluteUrl(target),
+    },
   }
 }
 
-export default async function Page({ params }: { params: { code: string } }) {
-
+export default async function ShortBLLinkPage({ params }: { params: { code: string } }) {
   const code = cleanCode(params.code)
   if (!code) notFound()
 
   const resolved = await resolve(code)
-  if (!resolved) notFound()
-
-  const target =
-    resolved.event_id && resolved.post_id
-      ? `/${resolved.event_id}/blessings#post-${resolved.post_id}`
-      : resolved.target_path || '/blessings'
+  const target = buildBlessingTarget(resolved.eventId, resolved.postId, resolved.targetPath)
+  if (!target) notFound()
 
   return (
     <main dir="rtl" className="mx-auto max-w-xl p-6 text-right">
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `window.location.replace(${JSON.stringify(target)})`
-        }}
-      />
-
-      <div className="rounded-2xl border p-5">
-        מעביר לברכה...
+      <script dangerouslySetInnerHTML={{ __html: `window.location.replace(${JSON.stringify(target)})` }} />
+      <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="text-lg font-semibold">מעביר לברכה…</div>
+        <p className="mt-2 text-sm text-zinc-600">אם המעבר לא קורה אוטומטית, לחצו על הקישור.</p>
+        <a href={target} className="mt-3 inline-block text-sm font-medium underline underline-offset-4">
+          פתח את הברכה
+        </a>
       </div>
     </main>
   )
