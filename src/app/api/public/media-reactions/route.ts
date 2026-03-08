@@ -8,8 +8,14 @@ export const revalidate = 0
 
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 const EMOJI_SET = new Set<string>(EMOJIS)
+type Emoji = (typeof EMOJIS)[number]
+type EmojiCounts = Record<Emoji, number>
 
-function emptyCounts() {
+function isEmoji(value: string): value is Emoji {
+  return EMOJI_SET.has(value)
+}
+
+function emptyCounts(): EmojiCounts {
   return { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }
 }
 
@@ -30,16 +36,16 @@ export async function GET(req: NextRequest) {
     const { data: rows, error } = await srv.from('reactions').select('post_id, emoji, device_id').in('post_id', ids as any)
     if (error) throw error
 
-    const byId: Record<string, { counts: Record<string, number>; my: string[] }> = {}
+    const byId: Record<string, { counts: EmojiCounts; my: Emoji[] }> = {}
     for (const id of ids) byId[id] = { counts: emptyCounts(), my: [] }
 
     for (const row of rows || []) {
       const id = String((row as any).post_id || '')
-      const emoji = String((row as any).emoji || '')
-      if (!byId[id] || !EMOJI_SET.has(emoji)) continue
-      byId[id].counts[emoji] = Number(byId[id].counts[emoji] || 0) + 1
+      const emojiRaw = String((row as any).emoji || '')
+      if (!byId[id] || !isEmoji(emojiRaw)) continue
+      byId[id].counts[emojiRaw] = Number(byId[id].counts[emojiRaw] || 0) + 1
       if (deviceId && String((row as any).device_id || '') === deviceId) {
-        byId[id].my = [emoji]
+        byId[id].my = [emojiRaw]
       }
     }
 
@@ -53,8 +59,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
     const mediaItemId = String(body?.media_item_id || '').trim()
-    const emoji = String(body?.emoji || '').trim()
-    if (!/^[0-9a-f-]{36}$/i.test(mediaItemId) || !EMOJI_SET.has(emoji)) {
+    const emojiRaw = String(body?.emoji || '').trim()
+    if (!/^[0-9a-f-]{36}$/i.test(mediaItemId) || !isEmoji(emojiRaw)) {
       return NextResponse.json({ error: 'בקשה לא תקינה' }, { status: 400 })
     }
 
@@ -68,24 +74,24 @@ export async function POST(req: NextRequest) {
       .select('id')
       .eq('post_id', mediaItemId)
       .eq('device_id', deviceId)
-      .eq('emoji', emoji)
+      .eq('emoji', emojiRaw)
       .limit(1)
 
     if (existingSame && existingSame.length) {
       await srv.from('reactions').delete().eq('id', (existingSame[0] as any).id)
     } else {
       await srv.from('reactions').delete().eq('post_id', mediaItemId).eq('device_id', deviceId)
-      await srv.from('reactions').insert({ post_id: mediaItemId, device_id: deviceId, emoji })
+      await srv.from('reactions').insert({ post_id: mediaItemId, device_id: deviceId, emoji: emojiRaw })
     }
 
     const { data: rows, error } = await srv.from('reactions').select('emoji, device_id').eq('post_id', mediaItemId)
     if (error) throw error
 
     const counts = emptyCounts()
-    let my: string[] = []
+    let my: Emoji[] = []
     for (const row of rows || []) {
       const currentEmoji = String((row as any).emoji || '')
-      if (!EMOJI_SET.has(currentEmoji)) continue
+      if (!isEmoji(currentEmoji)) continue
       counts[currentEmoji] = Number(counts[currentEmoji] || 0) + 1
       if (String((row as any).device_id || '') === deviceId) my = [currentEmoji]
     }
