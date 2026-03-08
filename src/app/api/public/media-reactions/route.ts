@@ -8,15 +8,6 @@ export const revalidate = 0
 type Emoji = '👍' | '😍' | '🔥' | '🙏'
 type ReactionCounts = Record<Emoji, number>
 
-type MediaAnchorRow = {
-  id: string
-  post_id: string | null
-  event_id: string | null
-  gallery_id: string | null
-  public_url: string | null
-  thumb_url: string | null
-}
-
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 const EMOJI_SET = new Set<string>(EMOJIS)
 const EMPTY_COUNTS: ReactionCounts = { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }
@@ -33,56 +24,39 @@ function getDeviceId(req?: NextRequest, bodyDeviceId?: string | null) {
   return cookies().get('device_id')?.value || ''
 }
 
-async function loadMediaAnchors(ids: string[]) {
-  const cleanIds = ids.map(x => String(x || '').trim()).filter(Boolean)
-  if (cleanIds.length === 0) return new Map<string, MediaAnchorRow>()
-
+async function ensureAnchorPostForMedia(mediaItemId: string, deviceId: string) {
   const srv = supabaseServiceRole()
-  const { data, error } = await srv
+  const { data: media, error } = await srv
     .from('media_items')
-    .select('id, post_id, event_id, gallery_id, public_url, thumb_url')
-    .in('id', cleanIds)
+    .select('id, post_id, event_id, gallery_id, public_url, url, storage_path, uploader_device_id')
+    .eq('id', mediaItemId)
+    .maybeSingle()
 
   if (error) throw error
-
-  const out = new Map<string, MediaAnchorRow>()
-  for (const row of (data || []) as any[]) {
-    out.set(String(row.id), {
-      id: String(row.id),
-      post_id: row.post_id ? String(row.post_id) : null,
-      event_id: row.event_id ? String(row.event_id) : null,
-      gallery_id: row.gallery_id ? String(row.gallery_id) : null,
-      public_url: row.public_url ? String(row.public_url) : null,
-      thumb_url: row.thumb_url ? String(row.thumb_url) : null,
-    })
-  }
-  return out
-}
-
-async function ensureAnchorPost(mediaId: string) {
-  const mediaMap = await loadMediaAnchors([mediaId])
-  const media = mediaMap.get(mediaId)
   if (!media) throw new Error('media not found')
-  if (media.post_id) return media.post_id
 
-  const srv = supabaseServiceRole()
+  const existingPostId = String((media as any).post_id || '').trim()
+  if (existingPostId) return { srv, media, postId: existingPostId }
+
   const insert = {
-    event_id: media.event_id,
-    gallery_id: media.gallery_id,
+    event_id: String((media as any).event_id || '').trim(),
     kind: 'gallery',
+    author_name: null,
+    text: null,
+    media_path: String((media as any).storage_path || '').trim() || null,
+    media_url: String((media as any).public_url || (media as any).url || '').trim() || null,
+    video_url: null,
+    link_url: null,
     status: 'approved',
-    media_url: media.public_url || media.thumb_url || null,
-    device_id: null,
+    device_id: String((media as any).uploader_device_id || deviceId || '').trim() || null,
+    gallery_id: (media as any).gallery_id || null,
   }
 
-  const { data: created, error: createError } = await srv.from('posts').insert(insert).select('id').single()
-  if (createError) throw createError
+  const { data: post, error: perr } = await srv.from('posts').insert(insert as any).select('id').single()
+  if (perr) throw perr
 
-  const postId = String((created as any)?.id || '')
-  if (!postId) throw new Error('anchor post not created')
-
-  await srv.from('media_items').update({ post_id: postId }).eq('id', mediaId)
-  return postId
+  await srv.from('media_items').update({ post_id: (post as any).id, kind: 'gallery' }).eq('id', mediaItemId)
+  return { srv, media, postId: String((post as any).id) }
 }
 
 export async function GET(req: NextRequest) {
@@ -96,8 +70,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ countsById: {}, myById: {} })
     }
 
-    const mediaMap = await loadMediaAnchors(ids)
-    const postIds = Array.from(new Set(ids.map(id => mediaMap.get(id)?.post_id || '').filter(Boolean)))
+    const srv = supabaseServiceRole()
+    const { data: mediaRows, error: merr } = await srv
+      .from('media_items')
+      .select('id, post_id')
+      .in('id', ids)
+    if (merr) throw merr
+
+    const mediaToPost = new Map<string, string>()
+    const postIds = [] as string[]
+    for (const row of mediaRows || []) {
+      const mediaId = String((row as any).id || '').trim()
+      const postId = String((row as any).post_id || '').trim()
+      if (mediaId && postId) {
+        mediaToPost.set(mediaId, postId)
+        postIds.push(postId)
+      }
+    }
 
     const countsById: Record<string, ReactionCounts> = {}
     const myById: Record<string, Emoji | null> = {}
@@ -110,36 +99,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ countsById, myById })
     }
 
-    const srv = supabaseServiceRole()
     const { data, error } = await srv
       .from('reactions')
       .select('post_id, emoji, device_id')
       .in('post_id', postIds)
-
     if (error) throw error
 
     const deviceId = getDeviceId(req)
-    const countsByPostId: Record<string, ReactionCounts> = {}
-    const myByPostId: Record<string, Emoji | null> = {}
-    for (const pid of postIds) {
-      countsByPostId[pid] = { ...EMPTY_COUNTS }
-      myByPostId[pid] = null
-    }
+    const postToMedia = new Map<string, string>()
+    for (const [mediaId, postId] of mediaToPost.entries()) postToMedia.set(postId, mediaId)
 
     for (const row of data || []) {
       const postId = String((row as any).post_id || '')
+      const mediaId = postToMedia.get(postId) || ''
       const emoji = String((row as any).emoji || '')
-      if (!postId || !isEmoji(emoji)) continue
-      if (!countsByPostId[postId]) countsByPostId[postId] = { ...EMPTY_COUNTS }
-      countsByPostId[postId][emoji] = Number(countsByPostId[postId][emoji] || 0) + 1
-      if (deviceId && String((row as any).device_id || '') === deviceId) myByPostId[postId] = emoji
-    }
-
-    for (const id of ids) {
-      const postId = mediaMap.get(id)?.post_id || ''
-      if (!postId) continue
-      countsById[id] = { ...(countsByPostId[postId] || EMPTY_COUNTS) }
-      myById[id] = myByPostId[postId] || null
+      if (!mediaId || !isEmoji(emoji)) continue
+      countsById[mediaId][emoji] = Number(countsById[mediaId][emoji] || 0) + 1
+      if (deviceId && String((row as any).device_id || '') === deviceId) myById[mediaId] = emoji
     }
 
     return NextResponse.json({ countsById, myById })
@@ -162,8 +138,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'missing device_id' }, { status: 400 })
     }
 
-    const postId = await ensureAnchorPost(mediaItemId)
-    const srv = supabaseServiceRole()
+    const { srv, postId } = await ensureAnchorPostForMedia(mediaItemId, deviceId)
 
     const { data: existing } = await srv
       .from('reactions')
@@ -193,7 +168,7 @@ export async function POST(req: NextRequest) {
       if (String((row as any).device_id || '') === deviceId) my = [currentEmoji]
     }
 
-    return NextResponse.json({ ok: true, counts, my, post_id: postId })
+    return NextResponse.json({ ok: true, counts, my })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
