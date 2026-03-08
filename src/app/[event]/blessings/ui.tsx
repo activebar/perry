@@ -635,7 +635,7 @@ async function saveEdit() {
                         <Button
                           key={emo}
                           variant={active ? 'primary' : 'ghost'}
-                          className="min-w-0 shrink-0 rounded-full px-2 py-2 text-sm leading-none sm:px-2.5"
+                          className="min-w-0 shrink-0 rounded-full px-2 py-2 text-sm sm:px-3"
                           onClick={() => toggleReaction(p.id, emo)}
                         >
                           {emo}{c ? ` ${c}` : ''}
@@ -644,8 +644,8 @@ async function saveEdit() {
                     })}
                   </div>
 
-                  <div className="grid grid-cols-[1fr_auto] items-center gap-2" dir="rtl">
-                    <div className="flex min-w-0 justify-end">
+                  <div className="flex items-center justify-between gap-2" dir="rtl">
+                    <div className="flex justify-start">
                       <button
                         type="button"
                         onClick={() => {
@@ -657,13 +657,13 @@ async function saveEdit() {
                             setTimeout(() => ta?.focus(), 250)
                           } catch {}
                         }}
-                        className="max-w-full truncate whitespace-nowrap rounded-full border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 underline underline-offset-4"
+                        className="truncate whitespace-nowrap text-sm font-medium text-zinc-700 underline underline-offset-4"
                       >
                         כתוב ברכה
                       </button>
                     </div>
 
-                    <div className="flex justify-start">
+                    <div className="flex justify-end">
                       {shareEnabled ? (
                         <Button
                           variant="ghost"
