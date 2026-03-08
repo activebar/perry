@@ -1,11 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 
-import { Container, Card, Button } from '@/components/ui'
-import { supabaseServiceRole } from '@/lib/supabase'
+import { Button, Card, Container } from '@/components/ui'
 import { fetchSettings } from '@/lib/db'
+import { supabaseServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -13,19 +12,9 @@ export const revalidate = 0
 function baseUrl() {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL
   if (explicit) return explicit.replace(/\/$/, '')
-
   const vercel = process.env.VERCEL_URL
   if (vercel) return `https://${vercel}`.replace(/\/$/, '')
-
-  const h = headers()
-  const host = h.get('x-forwarded-host') ?? h.get('host')
-  const proto = h.get('x-forwarded-proto') ?? 'https'
-  return host ? `${proto}://${host}`.replace(/\/$/, '') : ''
-}
-
-function toPublicUrl(storagePath: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  return supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/uploads/${storagePath}` : ''
+  return ''
 }
 
 async function getMedia(id: string) {
@@ -45,12 +34,12 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const mi = await getMedia(id)
   if (!mi) return {}
 
-  const settings = await fetchSettings(String(mi.event_id || '') || undefined).catch(() => null)
-  const eventName = String((settings as any)?.event_name || mi.event_id || 'אירוע')
+  const settings = await fetchSettings(String((mi as any)?.event_id || '') || undefined).catch(() => null)
+  const eventName = String((settings as any)?.event_name || 'אירוע')
   const title = `${eventName} · תמונה`
   const description = String((settings as any)?.share_gallery_description || 'לחצו לצפייה בתמונה')
-  const directImage = String(mi.thumb_url || mi.public_url || mi.url || (mi.storage_path ? toPublicUrl(String(mi.storage_path)) : '') || '').trim()
-  const ogImage = directImage || `${baseUrl()}/api/og/image?media=${encodeURIComponent(String(mi.id))}`
+  const b = baseUrl()
+  const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}`
 
   return {
     title,
@@ -77,18 +66,11 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
   const mi = await getMedia(id)
   if (!mi) notFound()
 
-  const url = String(mi.public_url || mi.url || mi.thumb_url || (mi.storage_path ? toPublicUrl(String(mi.storage_path)) : '') || '').trim()
+  const url = String(mi.public_url || mi.url || mi.thumb_url || '').trim()
   if (!url) notFound()
 
-  const eventId = String(mi.event_id || '').trim()
   const galleryId = mi.gallery_id ? String(mi.gallery_id) : null
-  const backHref = galleryId
-    ? eventId
-      ? `/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(galleryId)}`
-      : `/gallery/${encodeURIComponent(galleryId)}`
-    : eventId
-      ? `/${encodeURIComponent(eventId)}/gallery`
-      : '/gallery'
+  const eventId = mi.event_id ? String(mi.event_id) : ''
 
   return (
     <main className="py-10" dir="rtl">
@@ -113,9 +95,15 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
                   <Button variant="ghost">הורדה</Button>
                 </a>
               </div>
-              <Link href={backHref}>
-                <Button variant="ghost">{galleryId ? 'חזרה לגלריה' : 'לכל הגלריות'}</Button>
-              </Link>
+              {galleryId ? (
+                <Link href={`${eventId ? `/${encodeURIComponent(eventId)}` : ''}/gallery/${encodeURIComponent(galleryId)}`}>
+                  <Button variant="ghost">חזרה לגלריה</Button>
+                </Link>
+              ) : (
+                <Link href={eventId ? `/${encodeURIComponent(eventId)}/gallery` : '/'}>
+                  <Button variant="ghost">לכל הגלריות</Button>
+                </Link>
+              )}
             </div>
           </div>
         </Card>

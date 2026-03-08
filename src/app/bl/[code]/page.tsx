@@ -1,4 +1,8 @@
-import { redirect, notFound } from 'next/navigation'
+import type { Metadata } from 'next'
+import { headers } from 'next/headers'
+import { notFound } from 'next/navigation'
+
+import { fetchSettings } from '@/lib/db'
 import { supabaseServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -11,80 +15,152 @@ function cleanCode(input: string) {
     .replace(/[^0-9a-z]/g, '')
 }
 
-function normalizeBlessingTarget(targetPath: string | null, eventId?: string | null, postId?: string | null) {
-  const event = String(eventId || '').trim()
-  const post = String(postId || '').trim()
-  const raw = String(targetPath || '').trim()
+function baseUrlFromHeaders() {
+  const h = headers()
+  const host = h.get('x-forwarded-host') ?? h.get('host')
+  const proto = h.get('x-forwarded-proto') ?? 'https'
+  return host ? `${proto}://${host}`.replace(/\/$/, '') : ''
+}
 
-  if (post && event) {
-    if (!raw || /^\/blessings(?:\/p\/[0-9a-f-]{36})?(?:[#?].*)?$/i.test(raw)) {
-      return `/${encodeURIComponent(event)}/blessings#post-${post}`
-    }
-  }
+function baseUrl() {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL
+  if (explicit) return explicit.replace(/\/$/, '')
 
-  if (raw) {
-    if (event && /^\/blessings(?:[#/?].*)?$/i.test(raw)) return `/${encodeURIComponent(event)}${raw}`
-    return raw
-  }
+  const vercel = process.env.VERCEL_URL
+  if (vercel) return `https://${vercel}`.replace(/\/$/, '')
 
-  if (post && event) return `/${encodeURIComponent(event)}/blessings#post-${post}`
-  if (post) return `/blessings#post-${post}`
-  if (event) return `/${encodeURIComponent(event)}/blessings`
+  return baseUrlFromHeaders()
+}
+
+function isVideoUrl(input?: string | null) {
+  return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(input || ''))
+}
+
+function extractPostId(targetPath?: string | null) {
+  const s = String(targetPath || '')
+  const byLegacyPath = s.match(/\/blessings\/p\/([0-9a-f-]{36})/i)
+  if (byLegacyPath?.[1]) return byLegacyPath[1]
+  const byHash = s.match(/#post-([0-9a-f-]{36})/i)
+  if (byHash?.[1]) return byHash[1]
   return null
 }
 
-async function resolve(code: string) {
+type ResolvedBlessing = {
+  postId: string | null
+  eventId: string | null
+  target: string | null
+  post: any | null
+}
+
+async function resolve(code: string): Promise<ResolvedBlessing | null> {
   const srv = supabaseServiceRole()
 
-  const first = await srv
+  const { data: row } = await srv
     .from('short_links')
-    .select('target_path, kind, post_id, event_id')
+    .select('code, kind, event_id, post_id, target_path')
     .eq('code', code)
     .maybeSingle()
 
-  if (first.data) {
-    const k = String((first.data as any).kind || '').trim()
-    if (!k || k === 'bl') {
-      let eventId = String((first.data as any).event_id || '').trim() || null
-      const postId = String((first.data as any).post_id || '').trim() || null
+  if (!row) return null
 
-      if (!eventId && postId) {
-        const postRes = await srv.from('posts').select('event_id').eq('id', postId).maybeSingle()
-        eventId = String((postRes.data as any)?.event_id || '').trim() || null
-      }
+  const kind = String((row as any).kind || '').trim()
+  if (kind && kind !== 'bl') return null
 
-      const normalized = normalizeBlessingTarget(String((first.data as any).target_path || ''), eventId, postId)
-      if (normalized) return normalized
+  let postId = ((row as any).post_id ? String((row as any).post_id) : '') || extractPostId((row as any).target_path)
+  let eventId = ((row as any).event_id ? String((row as any).event_id) : '') || ''
+  let post: any = null
+
+  if (postId) {
+    const { data } = await srv
+      .from('posts')
+      .select('id, event_id, author_name, text, media_url, video_url, link_url, created_at, status, kind')
+      .eq('id', postId)
+      .maybeSingle()
+
+    if (data && String((data as any).kind || '') === 'blessing') {
+      post = data
+      if (!eventId) eventId = String((data as any).event_id || '')
+      postId = String((data as any).id || postId)
     }
   }
 
-  const second = await srv
-    .from('short_links')
-    .select('target_path, post_id, event_id')
-    .eq('code', code)
-    .maybeSingle()
+  const normalizedTarget = postId
+    ? `${eventId ? `/${encodeURIComponent(eventId)}` : ''}/blessings#post-${encodeURIComponent(postId)}`
+    : String((row as any).target_path || '').trim() || null
 
-  if (second.data) {
-    let eventId = String((second.data as any).event_id || '').trim() || null
-    const postId = String((second.data as any).post_id || '').trim() || null
-
-    if (!eventId && postId) {
-      const postRes = await srv.from('posts').select('event_id').eq('id', postId).maybeSingle()
-      eventId = String((postRes.data as any)?.event_id || '').trim() || null
-    }
-
-    return normalizeBlessingTarget(String((second.data as any).target_path || ''), eventId, postId)
+  return {
+    postId: postId || null,
+    eventId: eventId || null,
+    target: normalizedTarget,
+    post,
   }
+}
 
-  return null
+export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
+  const code = cleanCode(params.code)
+  if (!code) return {}
+
+  const resolved = await resolve(code)
+  if (!resolved) return {}
+
+  const settings = resolved.eventId ? await fetchSettings(resolved.eventId).catch(() => null) : null
+  const eventName = String((settings as any)?.event_name || resolved.eventId || 'אירוע')
+  const author = String((resolved.post as any)?.author_name || '').trim()
+  const text = String((resolved.post as any)?.text || '').trim()
+  const title = author ? `${eventName} · ברכה מ${author}` : `${eventName} · ברכה`
+  const description = text || 'לחצו לצפייה בברכה'
+
+  const directImage = (() => {
+    const mediaUrl = String((resolved.post as any)?.media_url || '').trim()
+    if (!mediaUrl || isVideoUrl(mediaUrl)) return ''
+    return mediaUrl
+  })()
+
+  const fallbackOg = String((settings as any)?.og_default_image_url || '').trim() || `${baseUrl()}/api/og/image?default=1`
+  const ogImage = directImage || fallbackOg
+  const pageUrl = `${baseUrl()}/bl/${encodeURIComponent(code)}`
+
+  return {
+    title,
+    description,
+    alternates: { canonical: pageUrl },
+    openGraph: {
+      title,
+      description,
+      url: pageUrl,
+      type: 'website',
+      images: ogImage ? [{ url: ogImage, width: 630, height: 630 }] : undefined,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: ogImage ? [ogImage] : undefined,
+    },
+  }
 }
 
 export default async function ShortBLLinkPage({ params }: { params: { code: string } }) {
   const code = cleanCode(params.code)
   if (!code) notFound()
 
-  const target = await resolve(code)
-  if (!target) notFound()
+  const resolved = await resolve(code)
+  if (!resolved?.target) notFound()
 
-  redirect(target)
+  const href = resolved.target
+
+  return (
+    <main dir="rtl" className="mx-auto max-w-md p-6 text-center">
+      <p className="text-sm text-zinc-600">מעבירים אותך לברכה…</p>
+      <a className="mt-3 inline-block rounded-full border px-4 py-2 text-sm no-underline" href={href}>
+        אם לא עברת אוטומטית — לחץ כאן
+      </a>
+
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `setTimeout(function(){ window.location.href = ${JSON.stringify(href)}; }, 60);`,
+        }}
+      />
+    </main>
+  )
 }

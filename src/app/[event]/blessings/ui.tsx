@@ -450,7 +450,7 @@ async function saveEdit() {
       const code = String(postId).split('-')[0]
       return `${base}/bl/${code}`
     }
-    return postId ? `${blessings}#post-${postId}` : blessings
+    return blessings
   }
 
   async function sharePost(p: Post) {
@@ -463,7 +463,7 @@ async function saveEdit() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           postId: p.id,
-          eventId: effectiveEventId,
+          eventId: effectiveEventId || undefined,
           code,
           targetPath: `${effectiveEventId ? `/${encodeURIComponent(effectiveEventId)}` : ''}/blessings#post-${p.id}`,
         }),
@@ -506,7 +506,7 @@ async function saveEdit() {
   return (
     <main dir="rtl" className="text-right">
       <Container>
-<Card id="blessing-form">
+<Card>
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
@@ -637,7 +637,7 @@ async function saveEdit() {
                         <Button
                           key={emo}
                           variant={active ? 'primary' : 'ghost'}
-                          className="min-w-[52px] px-2 shrink-0 rounded-full"
+                          className="min-w-[64px] shrink-0 rounded-full"
                           onClick={() => toggleReaction(p.id, emo)}
                         >
                           {c ? `${c} ` : ''}{emo}
