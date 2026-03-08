@@ -635,7 +635,7 @@ async function saveEdit() {
                         <Button
                           key={emo}
                           variant={active ? 'primary' : 'ghost'}
-                          className="min-w-0 shrink-0 rounded-full px-2 py-2 text-sm sm:px-3"
+                          className="min-w-0 shrink-0 rounded-full px-2 py-2 text-sm leading-none sm:px-2.5"
                           onClick={() => toggleReaction(p.id, emo)}
                         >
                           {emo}{c ? ` ${c}` : ''}
@@ -644,22 +644,8 @@ async function saveEdit() {
                     })}
                   </div>
 
-                  <div className="grid grid-cols-2 items-center gap-2" dir="rtl">
-                    <div className="flex justify-start">
-                      {shareEnabled ? (
-                        <Button
-                          variant="ghost"
-                          onClick={() => sharePost(p)}
-                          className="min-w-0 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700"
-                          title={String(settings?.share_button_label || 'שתף')}
-                          type="button"
-                        >
-                          🔗
-                        </Button>
-                      ) : <span />}
-                    </div>
-
-                    <div className="flex justify-end">
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-2" dir="rtl">
+                    <div className="flex min-w-0 justify-end">
                       <button
                         type="button"
                         onClick={() => {
@@ -671,10 +657,24 @@ async function saveEdit() {
                             setTimeout(() => ta?.focus(), 250)
                           } catch {}
                         }}
-                        className="truncate whitespace-nowrap text-sm font-medium text-zinc-700 underline underline-offset-4"
+                        className="max-w-full truncate whitespace-nowrap rounded-full border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 underline underline-offset-4"
                       >
                         כתוב ברכה
                       </button>
+                    </div>
+
+                    <div className="flex justify-start">
+                      {shareEnabled ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => sharePost(p)}
+                          className="min-w-0 shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700"
+                          title={String(settings?.share_button_label || 'שתף')}
+                          type="button"
+                        >
+                          🔗
+                        </Button>
+                      ) : <span />}
                     </div>
                   </div>
                 </div>

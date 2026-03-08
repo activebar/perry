@@ -129,7 +129,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
       description,
       url: pageUrl,
       type: 'website',
-      images: ogImage ? [{ url: ogImage, width: 630, height: 630 }] : undefined,
+      images: ogImage ? [{ url: ogImage, width: 600, height: 600 }] : undefined,
     },
     twitter: {
       card: 'summary_large_image',

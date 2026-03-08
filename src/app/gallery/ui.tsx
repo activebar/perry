@@ -6,6 +6,7 @@ import { Button, Card } from '@/components/ui'
 
 type Item = {
   id: string
+  post_id?: string | null
   url: string
   thumb_url?: string | null
   created_at?: string
@@ -20,7 +21,7 @@ type ReactionCounts = Record<Emoji, number>
 
 const EMOJIS: Emoji[] = ['🙏', '🔥', '😍', '👍']
 const EMPTY_COUNTS: ReactionCounts = { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }
-const DOWNLOAD_ICON = '📥'
+const DOWNLOAD_ICON = '💾'
 
 async function downloadUrl(url: string) {
   try {
@@ -194,6 +195,7 @@ export default function GalleryClient({
     setItems(
       (initialItems || []).map((x: any) => ({
         id: x.id,
+        post_id: x.post_id || null,
         url: x.url || x.media_url || x.public_url || '',
         thumb_url: x.thumb_url || x.url || x.media_url || x.public_url || '',
         created_at: x.created_at,
@@ -251,6 +253,7 @@ export default function GalleryClient({
         setItems(
           next.map((x: any) => ({
             id: x.id,
+            post_id: x.post_id || null,
             url: x.url || x.media_url || x.public_url || '',
             thumb_url: x.thumb_url || x.url || x.media_url || x.public_url || '',
             created_at: x.created_at,
@@ -424,6 +427,11 @@ export default function GalleryClient({
     return winner && max > 0 ? { emoji: winner, count: max } : null
   }
 
+  function reactionButtonLabel(itemId: string) {
+    const top = topEmojiFor(itemId)
+    return top ? `${top.emoji}${top.count}` : '🙂'
+  }
+
   async function loadReactions(itemIds: string[]) {
     const ids = itemIds.map(x => String(x || '').trim()).filter(Boolean)
     if (ids.length === 0) return
@@ -496,7 +504,7 @@ export default function GalleryClient({
         if (!res.ok) throw new Error(j?.error || 'upload failed')
 
         if (j?.publicUrl) {
-          const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
+          const created: Item = { id: j.id || j.path || crypto.randomUUID(), post_id: j.post_id || null, url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
           if (j.is_approved) {
             setItems(prev => [created, ...prev])
           } else {
@@ -549,7 +557,7 @@ export default function GalleryClient({
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error || 'upload failed')
-      const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
+      const created: Item = { id: j.id || j.path || crypto.randomUUID(), post_id: j.post_id || null, url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
       await fetch('/api/public/media-delete', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: it.id, device_id: deviceId }) })
       setItems(prev => [created, ...prev.filter(x => x.id !== it.id)])
       setLightbox(created)
@@ -658,8 +666,8 @@ export default function GalleryClient({
                       key={emo}
                       variant={active ? 'primary' : 'ghost'}
                       type="button"
-                      onClick={() => toggleReaction(lightbox.id, emo)}
-                      className="min-w-[54px] rounded-full px-3 py-2"
+                      onClick={(e) => { e.stopPropagation(); toggleReaction(lightbox.id, emo) }}
+                      className="min-w-[60px] rounded-full px-3 py-2 text-[22px] leading-none"
                     >
                       {emo}{c ? ` ${c}` : ''}
                     </Button>
@@ -669,7 +677,7 @@ export default function GalleryClient({
 
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">🔗 שתף</Button>
-                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">{DOWNLOAD_ICON} הורד</Button>
+                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">{DOWNLOAD_ICON} שמור</Button>
                 {canManageItem(lightbox) ? <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeftFor(lightbox, nowTick))}</span> : null}
                 {canManageItem(lightbox) ? (
                   <>
@@ -686,68 +694,65 @@ export default function GalleryClient({
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {feed.map(it => (
-          <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
-            <button
-              className="relative block aspect-square w-full bg-zinc-50"
-              onClick={() => onThumbClick(it)}
-              type="button"
-            >
-              <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
+          <div key={it.id} className="rounded-2xl border border-zinc-200 bg-white">
+            <div className="overflow-hidden rounded-t-2xl">
+              <button
+                className="relative block aspect-square w-full bg-zinc-50"
+                onClick={() => onThumbClick(it)}
+                type="button"
+              >
+                <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
 
-              {!selectMode && topEmojiFor(it.id) ? (
-                <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-xs shadow">
-                  {topEmojiFor(it.id)?.emoji} {topEmojiFor(it.id)?.count}
-                </div>
-              ) : null}
-
-              {selectMode ? (
-                <div className="absolute left-2 top-2">
-                  <div
-                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
-                    aria-hidden
-                  >
-                    {selected[it.id] ? '✓' : ''}
+                {!selectMode && topEmojiFor(it.id) ? (
+                  <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-sm shadow">
+                    {topEmojiFor(it.id)?.emoji} {topEmojiFor(it.id)?.count}
                   </div>
-                </div>
-              ) : null}
-            </button>
+                ) : null}
 
-            <div className="p-3 space-y-2">
-              {!selectMode ? (
-                <>
-                  <div className="flex items-center justify-between gap-1 whitespace-nowrap" dir="rtl">
-                    <Button variant="ghost" onClick={() => shareItem(it)} type="button" className="min-w-0 rounded-full px-2.5 py-2 text-sm">🔗</Button>
-                    <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button" className="min-w-0 rounded-full px-2.5 py-2 text-sm">{DOWNLOAD_ICON}</Button>
-                    <div className="relative">
-                      <Button
-                        variant="ghost"
-                        onClick={() => setEmojiPickerForId(prev => (prev === it.id ? null : it.id))}
-                        type="button"
-                        className="min-w-0 rounded-full px-2.5 py-2 text-sm"
-                      >
-                        {(() => {
-                          const top = topEmojiFor(it.id)
-                          return top ? `${top.emoji}${top.count}` : '🙂'
-                        })()}
-                      </Button>
-                      {emojiPickerForId === it.id ? (
-                        <div className="absolute left-0 bottom-full mb-2 flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1 shadow-lg">
-                          {EMOJIS.map(emo => (
-                            <button
-                              key={emo}
-                              type="button"
-                              onClick={() => toggleReaction(it.id, emo)}
-                              className={`rounded-full px-2 py-1 text-lg ${myReactionById[it.id] === emo ? 'bg-black text-white' : 'bg-white'}`}
-                              aria-label={`הגב ${emo}`}
-                            >
-                              {emo}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
+                {selectMode ? (
+                  <div className="absolute left-2 top-2">
+                    <div
+                      className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${selected[it.id] ? 'font-bold' : ''}`}
+                      aria-hidden
+                    >
+                      {selected[it.id] ? '✓' : ''}
                     </div>
                   </div>
-                </>
+                ) : null}
+              </button>
+            </div>
+
+            <div className="p-3">
+              {!selectMode ? (
+                <div className="flex items-center justify-between gap-1 whitespace-nowrap" dir="ltr">
+                  <Button variant="ghost" onClick={() => shareItem(it)} type="button" className="min-w-0 shrink-0 rounded-full px-2.5 py-2 text-lg leading-none">🔗</Button>
+                  <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button" className="min-w-0 shrink-0 rounded-full px-2.5 py-2 text-lg leading-none">{DOWNLOAD_ICON}</Button>
+                  <div className="relative z-20">
+                    <Button
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); setEmojiPickerForId(prev => (prev === it.id ? null : it.id)) }}
+                      type="button"
+                      className="min-w-0 shrink-0 rounded-full px-2.5 py-2 text-lg leading-none"
+                    >
+                      {reactionButtonLabel(it.id)}
+                    </Button>
+                    {emojiPickerForId === it.id ? (
+                      <div className="absolute left-1/2 bottom-full mb-2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1 shadow-lg" style={{ zIndex: 40 }}>
+                        {EMOJIS.map(emo => (
+                          <button
+                            key={emo}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleReaction(it.id, emo) }}
+                            className={`rounded-full px-2 py-1 text-[22px] leading-none ${myReactionById[it.id] === emo ? 'bg-black text-white' : 'bg-white'}`}
+                            aria-label={`הגב ${emo}`}
+                          >
+                            {emo}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               ) : (
                 <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
               )}
