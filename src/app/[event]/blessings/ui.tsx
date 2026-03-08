@@ -444,8 +444,7 @@ async function saveEdit() {
   function buildLinkForPost(postId?: string) {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const base = origin ? `${origin}` : ''
-    const eventBase = effectiveEventId ? `/${encodeURIComponent(effectiveEventId)}` : ''
-    const blessings = `${base}${eventBase}/blessings`
+    const blessings = `${base}/blessings`
     if (postId && shareUsePermalink) {
       const code = String(postId).split('-')[0]
       return `${base}/bl/${code}`
@@ -463,9 +462,8 @@ async function saveEdit() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           postId: p.id,
-          eventId: effectiveEventId || undefined,
           code,
-          targetPath: `${effectiveEventId ? `/${encodeURIComponent(effectiveEventId)}` : ''}/blessings#post-${p.id}`,
+          targetPath: `/blessings/p/${p.id}`,
         }),
       })
     } catch {
@@ -506,7 +504,7 @@ async function saveEdit() {
   return (
     <main dir="rtl" className="text-right">
       <Container>
-<Card>
+<Card id="blessing-form">
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
@@ -628,8 +626,8 @@ async function saveEdit() {
                   </div>
                 )}
                 {/* reactions */}
-                <div className="mt-3 space-y-3" dir="rtl">
-                  <div className="flex flex-wrap items-center justify-center gap-2">
+                <div className="mt-3 space-y-2" dir="rtl">
+                  <div className="flex items-center justify-center gap-1 whitespace-nowrap" dir="ltr">
                     {EMOJIS.map(emo => {
                       const active = (p.my_reactions || []).includes(emo)
                       const c = (p.reaction_counts || {})[emo] || 0
@@ -637,43 +635,47 @@ async function saveEdit() {
                         <Button
                           key={emo}
                           variant={active ? 'primary' : 'ghost'}
-                          className="min-w-[64px] shrink-0 rounded-full"
+                          className="min-w-0 shrink-0 rounded-full px-2 py-2 text-sm sm:px-3"
                           onClick={() => toggleReaction(p.id, emo)}
                         >
-                          {c ? `${c} ` : ''}{emo}
+                          {emo}{c ? ` ${c}` : ''}
                         </Button>
                       )
                     })}
                   </div>
 
-                  <div className="flex items-center justify-between gap-3" dir="rtl">
-                    {shareEnabled ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => sharePost(p)}
-                        className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 shrink-0"
-                        title={String(settings?.share_button_label || 'שתף')}
-                        type="button"
-                      >
-                        🔗
-                      </Button>
-                    ) : <span />}
+                  <div className="grid grid-cols-2 items-center gap-2" dir="rtl">
+                    <div className="flex justify-start">
+                      {shareEnabled ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => sharePost(p)}
+                          className="min-w-0 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700"
+                          title={String(settings?.share_button_label || 'שתף')}
+                          type="button"
+                        >
+                          🔗
+                        </Button>
+                      ) : <span />}
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          window.scrollTo({ top: 0, behavior: 'smooth' })
-                          const el = document.getElementById('blessing-form') as HTMLElement | null
-                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                          const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
-                          setTimeout(() => ta?.focus(), 250)
-                        } catch {}
-                      }}
-                      className="text-sm font-medium text-zinc-700 underline underline-offset-4"
-                    >
-                      כתוב ברכה
-                    </button>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                            const el = document.getElementById('blessing-form') as HTMLElement | null
+                            el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                            const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
+                            setTimeout(() => ta?.focus(), 250)
+                          } catch {}
+                        }}
+                        className="truncate whitespace-nowrap text-sm font-medium text-zinc-700 underline underline-offset-4"
+                      >
+                        כתוב ברכה
+                      </button>
+                    </div>
                   </div>
                 </div>
 
