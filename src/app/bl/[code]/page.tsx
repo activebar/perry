@@ -110,9 +110,10 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const title = author ? `${eventName} · ברכה מ${author}` : `${eventName} · ברכה`
   const description = text || 'לחצו לצפייה בברכה'
 
-  const squarePostOg = resolved.postId ? `${baseUrl()}/api/og/image?post=${encodeURIComponent(String(resolved.postId))}` : ''
   const fallbackOg = String((settings as any)?.og_default_image_url || '').trim() || `${baseUrl()}/api/og/image?default=1`
-  const ogImage = squarePostOg || fallbackOg
+  const ogImage = resolved.postId
+    ? `${baseUrl()}/api/og/image?post=${encodeURIComponent(resolved.postId)}`
+    : fallbackOg
   const pageUrl = `${baseUrl()}/bl/${encodeURIComponent(code)}`
 
   return {

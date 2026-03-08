@@ -192,6 +192,7 @@ export default function GalleryClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<Item | null>(null)
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
 
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const [nowTs, setNowTs] = useState<number>(Date.now())
@@ -457,6 +458,7 @@ export default function GalleryClient({
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error || 'reaction failed')
       setItems(prev => prev.map(it => it.id === mediaItemId ? { ...it, reaction_counts: j.counts || it.reaction_counts || {}, my_reactions: j.my || it.my_reactions || [] } : it))
+      setReactionPickerFor(null)
     } catch {}
   }
 
@@ -518,8 +520,8 @@ export default function GalleryClient({
             <p className="text-sm text-zinc-600">העלאה פתוחה רק אם מנהל פתח אותה.</p>
           </div>
 
-          <div className="flex flex-wrap gap-2 sm:flex-row-reverse sm:items-center sm:justify-end">
-            <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row-reverse sm:items-center sm:justify-end">
+            <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="col-span-2 sm:w-44">
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
             </Button>
             <Button
@@ -608,6 +610,29 @@ export default function GalleryClient({
         {!uploadEnabled && <p className="mt-2 text-xs text-zinc-500">העלאה סגורה כעת.</p>}
       </Card>
 
+      {reactionPickerFor && (
+        <div className="fixed inset-0 z-40" onClick={() => setReactionPickerFor(null)}>
+          <div className="absolute inset-x-0 bottom-24 flex justify-center px-4">
+            <div
+              className="flex items-center gap-4 rounded-full border border-zinc-200 bg-white px-5 py-3 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+              dir="ltr"
+            >
+              {EMOJIS.map(emo => (
+                <button
+                  key={emo}
+                  type="button"
+                  className="text-3xl leading-none transition hover:scale-110"
+                  onClick={() => { if (reactionPickerFor) toggleReaction(reactionPickerFor, emo) }}
+                >
+                  {emo}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
           <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
@@ -651,6 +676,24 @@ export default function GalleryClient({
             >
               <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
 
+              {!selectMode ? (() => {
+                const counts = it.reaction_counts || {}
+                let top = ''
+                let topCount = 0
+                for (const emo of EMOJIS) {
+                  const c = Number((counts as any)[emo] || 0)
+                  if (c > topCount) {
+                    top = emo
+                    topCount = c
+                  }
+                }
+                return top && topCount > 0 ? (
+                  <div className="absolute left-2 top-2 rounded-full bg-white/95 px-3 py-1 text-lg shadow">
+                    {topCount} {top}
+                  </div>
+                ) : null
+              })() : null}
+
               {selectMode ? (
                 <div className="absolute left-2 top-2">
                   <div
@@ -667,22 +710,51 @@ export default function GalleryClient({
               {selectMode ? (
                 <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
               ) : (
-                <div className="flex flex-nowrap items-center justify-center gap-2 overflow-x-auto pb-1">
-                  {EMOJIS.map(emo => {
-                    const active = (it.my_reactions || []).includes(emo)
-                    const c = (it.reaction_counts || {})[emo] || 0
-                    return (
-                      <Button
-                        key={emo}
-                        variant={active ? 'primary' : 'ghost'}
-                        className="h-10 px-3 min-w-0 shrink-0 rounded-full whitespace-nowrap"
-                        onClick={() => toggleReaction(it.id, emo)}
-                        type="button"
-                      >
-                        {c ? `${c} ` : ''}{emo}
-                      </Button>
-                    )
-                  })}
+                <div className="flex items-center justify-between gap-2" dir="rtl">
+                  <Button
+                    variant="ghost"
+                    onClick={async () => {
+                      const short = await ensureShortLinkForMedia(it.id)
+                      if (short) await shareUrl(short)
+                    }}
+                    className="h-12 w-12 shrink-0 rounded-full border border-zinc-200 bg-white p-0 text-lg text-zinc-700"
+                    title="שתף"
+                    type="button"
+                  >
+                    🔗
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    onClick={() => downloadUrl(it.url)}
+                    className="h-12 w-12 shrink-0 rounded-full border border-zinc-200 bg-white p-0 text-xl text-zinc-700"
+                    title="שמור"
+                    type="button"
+                  >
+                    ⬇️
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    onClick={() => setReactionPickerFor(prev => prev === it.id ? null : it.id)}
+                    className="h-12 min-w-[74px] shrink-0 rounded-full border border-zinc-200 bg-white px-3 text-lg text-zinc-700"
+                    title="אימוג׳י"
+                    type="button"
+                  >
+                    {(() => {
+                      const counts = it.reaction_counts || {}
+                      let top = '🙂'
+                      let topCount = 0
+                      for (const emo of EMOJIS) {
+                        const c = Number((counts as any)[emo] || 0)
+                        if (c > topCount) {
+                          top = emo
+                          topCount = c
+                        }
+                      }
+                      return topCount > 0 ? `${top} ${topCount}` : '🙂'
+                    })()}
+                  </Button>
                 </div>
               )}
             </div>
