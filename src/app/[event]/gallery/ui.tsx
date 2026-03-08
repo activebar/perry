@@ -46,7 +46,6 @@ type Item = {
   uploader_device_id?: string | null
   is_approved?: boolean
   crop_position?: string | null
-  post_id?: string | null
   reaction_counts?: Record<string, number>
   my_reactions?: string[]
 }
@@ -168,13 +167,11 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
 export default function GalleryClient({
   initialItems,
   galleryId,
-  uploadEnabled,
-  eventId
+  uploadEnabled
 }: {
   initialItems: any[]
   galleryId: string
   uploadEnabled: boolean
-  eventId?: string
 }) {
   const [items, setItems] = useState<Item[]>(
     (initialItems || []).map((x: any) => ({
@@ -186,7 +183,6 @@ export default function GalleryClient({
       uploader_device_id: x.uploader_device_id ?? null,
       is_approved: x.is_approved ?? true,
       crop_position: x.crop_position ?? null,
-      post_id: x.post_id ?? null,
       reaction_counts: x.reaction_counts || {},
       my_reactions: x.my_reactions || []
     }))
@@ -196,6 +192,7 @@ export default function GalleryClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<Item | null>(null)
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
 
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const [nowTs, setNowTs] = useState<number>(Date.now())
@@ -205,27 +202,6 @@ export default function GalleryClient({
     const t = window.setInterval(() => setNowTs(Date.now()), 1000)
     return () => window.clearInterval(t)
   }, [])
-
-  useEffect(() => {
-    const ids = Array.from(new Set((items || []).map(x => String(x.id || '').trim()).filter(Boolean)))
-    if (ids.length === 0) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const qs = new URLSearchParams({ ids: ids.join(',') })
-        if (deviceId) qs.set('device_id', deviceId)
-        const res = await fetch(`/api/public/media-reactions?${qs.toString()}`, { cache: 'no-store' })
-        const j = await res.json().catch(() => ({}))
-        if (!res.ok || cancelled) return
-        setItems(prev => prev.map(it => {
-          const counts = j?.countsById?.[it.id] || it.reaction_counts || {}
-          const mine = j?.myById?.[it.id]
-          return { ...it, reaction_counts: counts, my_reactions: mine ? [mine] : [] }
-        }))
-      } catch {}
-    })()
-    return () => { cancelled = true }
-  }, [deviceId, items.length])
 
   function canEditMine(it: Item) {
     const until = it?.editable_until ? new Date(it.editable_until).getTime() : 0
@@ -474,15 +450,15 @@ export default function GalleryClient({
 
   async function toggleReaction(mediaItemId: string, emoji: string) {
     try {
-      const res = await fetch('/api/public/media-reactions', {
+      const res = await fetch('/api/reactions/toggle', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ media_item_id: mediaItemId, emoji, device_id: deviceId })
+        body: JSON.stringify({ media_item_id: mediaItemId, emoji })
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error || 'reaction failed')
       setItems(prev => prev.map(it => it.id === mediaItemId ? { ...it, reaction_counts: j.counts || it.reaction_counts || {}, my_reactions: j.my || it.my_reactions || [] } : it))
-      setLightbox(prev => prev && prev.id === mediaItemId ? { ...prev, reaction_counts: j.counts || prev.reaction_counts || {}, my_reactions: j.my || prev.my_reactions || [] } : prev)
+      setReactionPickerFor(null)
     } catch {}
   }
 
@@ -544,30 +520,28 @@ export default function GalleryClient({
             <p className="text-sm text-zinc-600">העלאה פתוחה רק אם מנהל פתח אותה.</p>
           </div>
 
-          <div className="grid w-full gap-2 sm:w-auto sm:min-w-[340px]">
-            <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="w-full sm:w-auto">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row-reverse sm:items-center sm:justify-end">
+            <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="col-span-2 sm:w-44">
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
             </Button>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => pickerRef.current?.click()}
-                disabled={!uploadEnabled}
-                className="w-full"
-              >
-                בחר תמונות
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => cameraRef.current?.click()}
-                disabled={!uploadEnabled}
-                className="w-full"
-              >
-                צלם תמונה
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => pickerRef.current?.click()}
+              disabled={!uploadEnabled}
+              className="sm:w-44"
+            >
+              בחר תמונות
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => cameraRef.current?.click()}
+              disabled={!uploadEnabled}
+              className="sm:w-44"
+            >
+              צלם תמונה
+            </Button>
             <input
               ref={pickerRef}
               type="file"
@@ -636,6 +610,29 @@ export default function GalleryClient({
         {!uploadEnabled && <p className="mt-2 text-xs text-zinc-500">העלאה סגורה כעת.</p>}
       </Card>
 
+      {reactionPickerFor && (
+        <div className="fixed inset-0 z-40" onClick={() => setReactionPickerFor(null)}>
+          <div className="absolute inset-x-0 bottom-24 flex justify-center px-4">
+            <div
+              className="flex items-center gap-4 rounded-full border border-zinc-200 bg-white px-5 py-3 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+              dir="ltr"
+            >
+              {EMOJIS.map(emo => (
+                <button
+                  key={emo}
+                  type="button"
+                  className="text-3xl leading-none transition hover:scale-110"
+                  onClick={() => { if (reactionPickerFor) toggleReaction(reactionPickerFor, emo) }}
+                >
+                  {emo}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
           <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
@@ -653,23 +650,6 @@ export default function GalleryClient({
             <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
 
             <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow" dir="rtl">
-              <div className="mb-3 flex items-center justify-center gap-2 overflow-x-auto pb-1" dir="ltr">
-                {EMOJIS.map(emo => {
-                  const active = (lightbox.my_reactions || []).includes(emo)
-                  const c = (lightbox.reaction_counts || {})[emo] || 0
-                  return (
-                    <Button
-                      key={emo}
-                      variant={active ? 'primary' : 'ghost'}
-                      className="h-11 min-w-[56px] shrink-0 rounded-full px-3 text-base"
-                      onClick={() => toggleReaction(lightbox.id, emo)}
-                      type="button"
-                    >
-                      {emo}{c ? ` ${c}` : ''}
-                    </Button>
-                  )
-                })}
-              </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">שתף</Button>
                 <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">הורד</Button>
@@ -696,19 +676,26 @@ export default function GalleryClient({
             >
               <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
 
-              {(() => {
-                const entries = Object.entries(it.reaction_counts || {}).filter(([, count]) => Number(count) > 0)
-                const top = entries.sort((a, b) => Number(b[1]) - Number(a[1]))[0]
-                if (!top) return null
-                return (
-                  <div className="absolute left-2 top-2 rounded-full bg-white/95 px-3 py-1 text-sm shadow">
-                    {Number(top[1])} {top[0]}
+              {!selectMode ? (() => {
+                const counts = it.reaction_counts || {}
+                let top = ''
+                let topCount = 0
+                for (const emo of EMOJIS) {
+                  const c = Number((counts as any)[emo] || 0)
+                  if (c > topCount) {
+                    top = emo
+                    topCount = c
+                  }
+                }
+                return top && topCount > 0 ? (
+                  <div className="absolute left-2 top-2 rounded-full bg-white/95 px-3 py-1 text-lg shadow">
+                    {topCount} {top}
                   </div>
-                )
-              })()}
+                ) : null
+              })() : null}
 
               {selectMode ? (
-                <div className="absolute right-2 top-2">
+                <div className="absolute left-2 top-2">
                   <div
                     className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
                     aria-hidden
@@ -726,33 +713,46 @@ export default function GalleryClient({
                 <div className="flex items-center justify-between gap-2" dir="rtl">
                   <Button
                     variant="ghost"
-                    className="h-11 min-w-[52px] shrink-0 rounded-full px-3 text-xl"
-                    onClick={() => shareItem(it)}
-                    type="button"
+                    onClick={async () => {
+                      const short = await ensureShortLinkForMedia(it.id)
+                      if (short) await shareUrl(short)
+                    }}
+                    className="h-12 w-12 shrink-0 rounded-full border border-zinc-200 bg-white p-0 text-lg text-zinc-700"
                     title="שתף"
+                    type="button"
                   >
                     🔗
                   </Button>
+
                   <Button
                     variant="ghost"
-                    className="h-11 min-w-[52px] shrink-0 rounded-full px-3 text-xl"
                     onClick={() => downloadUrl(it.url)}
-                    type="button"
+                    className="h-12 w-12 shrink-0 rounded-full border border-zinc-200 bg-white p-0 text-xl text-zinc-700"
                     title="שמור"
+                    type="button"
                   >
-                    💾
+                    ⬇️
                   </Button>
+
                   <Button
                     variant="ghost"
-                    className="h-11 min-w-[64px] shrink-0 rounded-full px-3 text-xl"
-                    onClick={() => setLightbox(it)}
+                    onClick={() => setReactionPickerFor(prev => prev === it.id ? null : it.id)}
+                    className="h-12 min-w-[74px] shrink-0 rounded-full border border-zinc-200 bg-white px-3 text-lg text-zinc-700"
+                    title="אימוג׳י"
                     type="button"
-                    title="תגובות"
                   >
                     {(() => {
-                      const entries = Object.entries(it.reaction_counts || {}).filter(([, count]) => Number(count) > 0)
-                      const top = entries.sort((a, b) => Number(b[1]) - Number(a[1]))[0]
-                      return top ? `${top[0]} ${top[1]}` : '🙂'
+                      const counts = it.reaction_counts || {}
+                      let top = '🙂'
+                      let topCount = 0
+                      for (const emo of EMOJIS) {
+                        const c = Number((counts as any)[emo] || 0)
+                        if (c > topCount) {
+                          top = emo
+                          topCount = c
+                        }
+                      }
+                      return topCount > 0 ? `${top} ${topCount}` : '🙂'
                     })()}
                   </Button>
                 </div>

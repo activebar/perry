@@ -645,33 +645,37 @@ async function saveEdit() {
                   </div>
 
                   <div className="flex items-center justify-between gap-3" dir="rtl">
-                    {shareEnabled ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => sharePost(p)}
-                        className="min-w-[52px] shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700"
-                        title={String(settings?.share_button_label || 'שתף')}
-                        type="button"
-                      >
-                        🔗
-                      </Button>
-                    ) : <span className="min-w-[52px]" />}
+                    <div className="flex justify-start">
+                      {shareEnabled ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => sharePost(p)}
+                          className="h-12 min-w-[76px] rounded-full border border-zinc-200 bg-white px-3 py-2 text-lg text-zinc-700"
+                          title={String(settings?.share_button_label || 'שתף')}
+                          type="button"
+                        >
+                          🔗
+                        </Button>
+                      ) : <span />}
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          window.scrollTo({ top: 0, behavior: 'smooth' })
-                          const el = document.getElementById('blessing-form') as HTMLElement | null
-                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                          const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
-                          setTimeout(() => ta?.focus(), 250)
-                        } catch {}
-                      }}
-                      className="truncate whitespace-nowrap text-sm font-medium text-zinc-700 underline underline-offset-4"
-                    >
-                      כתוב ברכה
-                    </button>
+                    <div className="flex min-w-0 flex-1 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                            const el = document.getElementById('blessing-form') as HTMLElement | null
+                            el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                            const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
+                            setTimeout(() => ta?.focus(), 250)
+                          } catch {}
+                        }}
+                        className="truncate whitespace-nowrap text-sm font-medium text-zinc-700 underline underline-offset-4"
+                      >
+                        כתוב ברכה
+                      </button>
+                    </div>
                   </div>
                 </div>
 
