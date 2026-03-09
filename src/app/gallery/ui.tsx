@@ -7,12 +7,10 @@ import { Button, Card } from '@/components/ui'
 type Item = {
   id: string
   url: string
-  thumb_url?: string | null
   created_at?: string
   editable_until?: string | null
   is_approved?: boolean
   crop_position?: string | null
-  uploader_device_id?: string | null
 }
 
 async function downloadUrl(url: string) {
@@ -48,31 +46,6 @@ async function shareUrl(url: string) {
   } catch {
     window.open(clean, '_blank', 'noopener,noreferrer')
   }
-}
-
-
-function readCookie(name: string) {
-  if (typeof document === 'undefined') return null
-  const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[$()*+.?[\\]^{|}]/g, '\\$&') + '=([^;]*)'))
-  return m ? decodeURIComponent(m[1]) : null
-}
-
-function getClientDeviceId() {
-  if (typeof window === 'undefined') return null
-  return window.localStorage.getItem('device_id') || readCookie('device_id')
-}
-
-function secondsLeftFor(item?: Item | null) {
-  if (!item?.editable_until) return 0
-  const ms = new Date(item.editable_until).getTime() - Date.now()
-  return Math.max(0, Math.floor(ms / 1000))
-}
-
-function fmtMMSS(sec: number) {
-  const s = Math.max(0, sec | 0)
-  const mm = String(Math.floor(s / 60)).padStart(2, '0')
-  const ss = String(s % 60).padStart(2, '0')
-  return `${mm}:${ss}`
 }
 
 async function ensureShortLinkForMedia(mediaItemId: string) {
@@ -162,21 +135,17 @@ export default function GalleryClient({
     (initialItems || []).map((x: any) => ({
       id: x.id,
       url: x.url || x.media_url || x.public_url || '',
-      thumb_url: x.thumb_url || x.url || x.media_url || x.public_url || '',
       created_at: x.created_at,
       editable_until: x.editable_until ?? null,
       is_approved: x.is_approved ?? true,
-      crop_position: x.crop_position ?? null,
-      uploader_device_id: x.uploader_device_id ?? null
+      crop_position: x.crop_position ?? null
     }))
   )
   const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<Item | null>(null)
-  const [deviceId, setDeviceId] = useState<string | null>(null)
-  const replaceInputRef = useRef<HTMLInputElement | null>(null)
+  const [lightbox, setLightbox] = useState<string | null>(null)
 
   // Keep state in sync when navigating between galleries.
   useEffect(() => {
@@ -192,28 +161,13 @@ export default function GalleryClient({
     )
   }, [galleryId, initialItems])
 
-
-  useEffect(() => {
-    let id = getClientDeviceId()
-    if (!id && typeof window !== 'undefined' && typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      id = crypto.randomUUID()
-      try { window.localStorage.setItem('device_id', id) } catch {}
-      try { document.cookie = `device_id=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax` } catch {}
-    }
-    setDeviceId(id)
-  }, [])
-
-  const canManageItem = (it?: Item | null) => {
-    if (!it || !it.editable_until || !it.uploader_device_id || !deviceId) return false
-    return deviceId === it.uploader_device_id && secondsLeftFor(it) > 0
-  }
-
   // Self-heal (once): client navigation can occasionally hydrate with stale/empty server props.
   const healedRef = useRef<string | null>(null)
   useEffect(() => {
     const key = `${eventId}__${galleryId}`
     if (!eventId || !galleryId) return
     if (healedRef.current === key) return
+    if ((initialItems || []).length > 0) return
     if ((items || []).length > 0) return
 
     healedRef.current = key
@@ -293,7 +247,7 @@ export default function GalleryClient({
       toggleSelected(it.id)
       return
     }
-    setLightbox(it)
+    setLightbox(it.url)
   }
 
     const downloadSelectedDirect = async () => {
@@ -414,14 +368,13 @@ export default function GalleryClient({
         fd.append('file', out)
         fd.append('kind', 'gallery')
         fd.append('gallery_id', galleryId)
-        if (deviceId) fd.append('device_id', deviceId)
 
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
         const j = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(j?.error || 'upload failed')
 
         if (j?.publicUrl) {
-          const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
+          const created: Item = { id: j.path || crypto.randomUUID(), url: j.publicUrl, created_at: new Date().toISOString(), is_approved: !!j.is_approved }
           if (j.is_approved) {
             setItems(prev => [created, ...prev])
           } else {
@@ -434,56 +387,6 @@ export default function GalleryClient({
       setErr(e?.message || 'שגיאה בהעלאה')
     } finally {
       setBusy(false)
-    }
-  }
-
-
-  async function deleteItem(it: Item) {
-    if (!canManageItem(it)) return
-    if (!confirm('למחוק את התמונה?')) return
-    setErr(null)
-    setMsg(null)
-    const res = await fetch('/api/public/media-delete', {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: it.id, device_id: deviceId })
-    })
-    const j = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      setErr(j?.error || 'שגיאה במחיקה')
-      return
-    }
-    setItems(prev => prev.filter(x => x.id !== it.id))
-    setLightbox(null)
-    setMsg('✅ נמחק')
-  }
-
-  async function replaceItem(it: Item, file: File | null) {
-    if (!it || !file || !canManageItem(it)) return
-    setBusy(true)
-    setErr(null)
-    setMsg(null)
-    try {
-      const blob = await compressToJpeg2MP(file)
-      const out = new File([blob], (file.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
-      const fd = new FormData()
-      fd.append('file', out)
-      fd.append('kind', 'gallery')
-      fd.append('gallery_id', galleryId)
-      if (deviceId) fd.append('device_id', deviceId)
-      const res = await fetch('/api/upload', { method: 'POST', body: fd })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(j?.error || 'upload failed')
-      const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
-      await fetch('/api/public/media-delete', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: it.id, device_id: deviceId }) })
-      setItems(prev => [created, ...prev.filter(x => x.id !== it.id)])
-      setLightbox(created)
-      setMsg('✅ עודכן')
-    } catch (e:any) {
-      setErr(e?.message || 'שגיאה בעריכה')
-    } finally {
-      setBusy(false)
-      if (replaceInputRef.current) replaceInputRef.current.value = ''
     }
   }
 
@@ -562,31 +465,38 @@ export default function GalleryClient({
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
           <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              onClick={() => setLightbox(null)}
-              className="absolute left-2 top-2 z-10 bg-white/90 text-black shadow hover:bg-white"
-              type="button"
-            >
-              סגור
-            </Button>
-
-            <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
-
-            <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow-lg" dir="rtl">
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {canManageItem(lightbox) ? <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeftFor(lightbox))}</span> : null}
-                {canManageItem(lightbox) ? (
-                  <>
-                    <Button variant="ghost" type="button" onClick={() => replaceInputRef.current?.click()}>עריכה</Button>
-                    <Button variant="ghost" type="button" onClick={() => deleteItem(lightbox)}>מחק</Button>
-                  </>
-                ) : null}
-                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">הורד</Button>
-                <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">שתף</Button>
-              </div>
-              <input ref={replaceInputRef} type="file" accept="image/*" className="hidden" onChange={e => replaceItem(lightbox, e.target.files?.[0] || null)} />
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => downloadUrl(lightbox)}
+                className="bg-white/90 text-black shadow hover:bg-white"
+                type="button"
+              >
+                הורד
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  const current = feed.find(x => x.url === lightbox)
+                  if (current) return shareItem(current)
+                  return shareUrl(lightbox)
+                }}
+                className="bg-white/90 text-black shadow hover:bg-white"
+                type="button"
+              >
+                שתף
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setLightbox(null)}
+                className="bg-white/90 text-black shadow hover:bg-white"
+                type="button"
+              >
+                סגור
+              </Button>
             </div>
+
+            <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
           </div>
         </div>
       )}
@@ -599,7 +509,7 @@ export default function GalleryClient({
               onClick={() => onThumbClick(it)}
               type="button"
             >
-              <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
+              <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
 
               {selectMode ? (
                 <div className="absolute left-2 top-2">
@@ -613,20 +523,15 @@ export default function GalleryClient({
               ) : null}
             </button>
 
-            <div className="p-3 space-y-2">
+            <div className="p-3 flex gap-2">
               {!selectMode ? (
                 <>
-                  <div className="flex items-center justify-between gap-2" dir="rtl">
-                    <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">הורד</Button>
-                    <Button variant="ghost" onClick={() => shareItem(it)} type="button">שתף</Button>
-                  </div>
-                  {canManageItem(it) ? (
-                    <div className="flex flex-wrap items-center justify-end gap-2" dir="rtl">
-                      <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeftFor(it))}</span>
-                      <Button variant="ghost" onClick={() => { setLightbox(it); setTimeout(() => replaceInputRef.current?.click(), 0) }} type="button">עריכה</Button>
-                      <Button variant="ghost" onClick={() => deleteItem(it)} type="button">מחק</Button>
-                    </div>
-                  ) : null}
+                  <Button variant="ghost" onClick={() => shareItem(it)} type="button">
+                    שתף
+                  </Button>
+                  <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
+                    הורד
+                  </Button>
                 </>
               ) : (
                 <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
