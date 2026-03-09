@@ -310,28 +310,13 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   const blessings = `${baseUrl}/blessings`
   if (postId && shareUsePermalink) {
     const code = String(postId).split('-')[0]
-    return `${origin ? origin : ''}/bl/${code}`
+    return `${baseUrl}/bl/${code}`
   }
   return blessings
 }
 
   async function shareBlessing(p: any) {
     if (!shareEnabled) return
-    const code = String(p?.id || '').slice(0, 8)
-    try {
-      await fetch(`/api/short-links?event=${encodeURIComponent(eventId)}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          kind: 'bl',
-          postId: p?.id,
-          eventId,
-          code,
-          targetPath: `${base}/blessings#post-${p?.id}`,
-        }),
-      })
-    } catch {}
-
     const link = buildLinkForPost(p?.id)
     const eventName = String(settings?.event_name || 'Event')
     const template = settings?.share_message_template || null
