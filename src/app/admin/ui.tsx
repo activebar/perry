@@ -362,6 +362,10 @@ export default function AdminApp({
   const [ogFocus, setOgFocus] = useState({ x: 0.5, y: 0.5 })
   const [ogUploading, setOgUploading] = useState(false)
   const [ogMsg, setOgMsg] = useState<string | null>(null)
+  const [shareLogoFile, setShareLogoFile] = useState<File | null>(null)
+  const [shareLogoPreview, setShareLogoPreview] = useState<string>('')
+  const [shareLogoUploading, setShareLogoUploading] = useState(false)
+  const [shareLogoMsg, setShareLogoMsg] = useState<string | null>(null)
   // Cache-buster for admin preview. Supabase public URLs may be cached in the browser.
   const [ogPreviewKey, setOgPreviewKey] = useState<number>(() => Date.now())
 
@@ -382,6 +386,16 @@ export default function AdminApp({
     setOgPreview(u)
     return () => URL.revokeObjectURL(u)
   }, [ogFile])
+
+  useEffect(() => {
+    if (!shareLogoFile) {
+      setShareLogoPreview('')
+      return
+    }
+    const u = URL.createObjectURL(shareLogoFile)
+    setShareLogoPreview(u)
+    return () => URL.revokeObjectURL(u)
+  }, [shareLogoFile])
 
   // HERO upload
   const [heroFiles, setHeroFiles] = useState<File[]>([])
@@ -832,6 +846,30 @@ export default function AdminApp({
       })
     } catch {
       // ignore
+    }
+  }
+
+  async function uploadShareLogo() {
+    setShareLogoMsg(null)
+    if (!shareLogoFile) {
+      setShareLogoMsg('בחר לוגו')
+      return
+    }
+    try {
+      setShareLogoUploading(true)
+      const fd = new FormData()
+      fd.append('file', shareLogoFile)
+      const res = await fetch(addEventParam('/api/admin/share-logo'), { method: 'POST', body: fd })
+      const j = await res.json()
+      if (!res.ok || !j?.ok) throw new Error(j?.error || 'upload failed')
+      const publicUrl = String(j.publicUrl || '')
+      setSettings((prev: any) => (prev ? { ...prev, share_logo_url: publicUrl, share_logo_enabled: true } : prev))
+      setShareLogoMsg('✅ נשמר הלוגו לשיתוף')
+      setShareLogoFile(null)
+    } catch (e: any) {
+      setShareLogoMsg(friendlyError(e?.message || 'שגיאה'))
+    } finally {
+      setShareLogoUploading(false)
     }
   }
 
@@ -1720,6 +1758,71 @@ async function loadBlocks() {
                   <p className="text-xs text-zinc-500 text-right">
                     לקישור ישיר לברכה עם תמונה — השיתוף ישתמש בנתיב /blessings/p/&lt;id&gt;.
                   </p>
+
+                  <div className="mt-3 rounded-xl border border-zinc-200 p-3 grid gap-3" dir="rtl">
+                    <p className="text-sm font-medium text-right">עיצוב תמונת שיתוף לברכות/גלריה</p>
+                    <label className="text-sm text-right">סגנון תמונת שיתוף</label>
+                    <select
+                      className="rounded-xl border border-zinc-200 px-3 py-2 text-right bg-white"
+                      dir="rtl"
+                      value={String((settings as any).share_image_style ?? 'plain_square')}
+                      onChange={e => setSettings({ ...settings, share_image_style: e.target.value })}
+                    >
+                      <option value="plain_square">ריבוע רגיל 1:1</option>
+                      <option value="designed_card">כרטיס מעוצב</option>
+                    </select>
+
+                    <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                      <input
+                        type="checkbox"
+                        checked={(settings as any).share_title_enabled !== false}
+                        onChange={e => setSettings({ ...settings, share_title_enabled: e.target.checked })}
+                      />
+                      להציג כותרת אירוע על התמונה
+                    </label>
+
+                    <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                      <input
+                        type="checkbox"
+                        checked={(settings as any).share_logo_enabled !== false}
+                        onChange={e => setSettings({ ...settings, share_logo_enabled: e.target.checked })}
+                      />
+                      להציג לוגו על התמונה
+                    </label>
+
+                    {String((settings as any).share_logo_url || '').length > 0 && (
+                      <div className="rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50 p-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={String((settings as any).share_logo_url)} alt="share logo" className="max-h-20 ml-auto" />
+                      </div>
+                    )}
+
+                    <label className="text-sm text-zinc-700 text-right">העלאת לוגו:</label>
+                    <input type="file" accept="image/*" onChange={e => setShareLogoFile((e.target.files || [])[0] || null)} />
+                    {shareLogoPreview && (
+                      <div className="grid gap-2">
+                        <div className="rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50 p-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={shareLogoPreview} alt="share-logo-preview" className="max-h-20 ml-auto" />
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button onClick={uploadShareLogo} disabled={shareLogoUploading}>{shareLogoUploading ? 'מעלה…' : 'שמור לוגו'}</Button>
+                          <Button variant="ghost" onClick={() => setShareLogoFile(null)} disabled={shareLogoUploading}>ביטול</Button>
+                        </div>
+                        {shareLogoMsg && <p className="text-sm text-right">{shareLogoMsg}</p>}
+                      </div>
+                    )}
+
+                    <label className="text-sm text-zinc-700 text-right">או להזין URL לוגו ידני:</label>
+                    <Input
+                      className="text-right"
+                      dir="rtl"
+                      value={String((settings as any).share_logo_url ?? '')}
+                      onChange={e => setSettings({ ...settings, share_logo_url: e.target.value })}
+                      placeholder="URL ללוגו שיופיע על תמונת השיתוף"
+                    />
+                    <p className="text-xs text-zinc-500 text-right">לאחר שינוי ההגדרות, לחץ על "שמור" למעלה.</p>
+                  </div>
                 </div>
               </div>
 

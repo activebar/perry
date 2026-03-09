@@ -1,55 +1,17 @@
 import { NextResponse } from 'next/server'
 import sharp from 'sharp'
-import { supabaseServiceRole } from '@/lib/supabase'
+import { supabaseServiceRole, getPublicUploadUrl } from '@/lib/supabase'
 import { fetchSettings } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 const OG_SIZE = 630
-
-// In this codebase `supabaseServiceRole` is a factory function that returns a Supabase client.
-// Create a client instance for use inside this route module.
 const sb = supabaseServiceRole()
 
 function extractUploadsPathFromPublicUrl(u: string) {
-  // https://<project>.supabase.co/storage/v1/object/public/uploads/<path>
   const m = u.match(/\/storage\/v1\/object\/public\/uploads\/(.+)$/)
   return m?.[1] || null
-}
-
-function safeShortText(s: string, max = 180) {
-  const t = (s || '').replace(/\s+/g, ' ').trim()
-  return t.length > max ? t.slice(0, max - 1) + '…' : t
-}
-
-async function getFirstApprovedPostByPrefix(prefix: string) {
-  // The DB uses `status` (not `is_approved`).
-  // We purposely keep the select minimal.
-  const { data, error } = await sb
-    .from('posts')
-    .select('id, author_name, text, media_url, status, kind')
-    .eq('kind', 'blessing')
-    .ilike('id', `${prefix}%`)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw error
-  return data || null
-}
-
-async function getMediaItemByPrefix(prefix: string) {
-  const { data, error } = await sb
-    .from('media_items')
-    .select('id, public_url, mime_type, kind')
-    .ilike('id', `${prefix}%`)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) throw error
-  return data || null
 }
 
 async function fetchImageBuffer(url: string) {
@@ -59,134 +21,135 @@ async function fetchImageBuffer(url: string) {
   return Buffer.from(ab)
 }
 
+async function getPostByIdOrPrefix(post: string) {
+  const byUuid = /^[0-9a-f-]{36}$/i.test(post)
+  let q = sb.from('posts').select('id, event_id, author_name, text, media_url, status, kind').eq('kind', 'blessing').limit(1)
+  if (byUuid) q = q.eq('id', post)
+  else q = q.ilike('id', `${post}%`).order('created_at', { ascending: false })
+  const { data, error } = await q.maybeSingle()
+  if (error) throw error
+  return data || null
+}
+
+async function getMediaItemByIdOrPrefix(media: string) {
+  const byUuid = /^[0-9a-f-]{36}$/i.test(media)
+  let q = sb.from('media_items').select('id, event_id, public_url, storage_path, mime_type, kind, post_id').limit(1)
+  if (byUuid) q = q.or(`id.eq.${media},post_id.eq.${media}`)
+  else q = q.ilike('id', `${media}%`).order('created_at', { ascending: false })
+  const { data, error } = await q.maybeSingle()
+  if (error) throw error
+  return data || null
+}
+
+async function loadBufferFromAnyUrl(url: string) {
+  const uploadsPath = extractUploadsPathFromPublicUrl(url)
+  if (uploadsPath) {
+    const { data, error } = await sb.storage.from('uploads').download(uploadsPath)
+    if (error) throw error
+    return Buffer.from(await data.arrayBuffer())
+  }
+  return fetchImageBuffer(url)
+}
+
 async function toSquareJpeg(input: Buffer) {
   return await sharp(input)
-    .rotate() // respect EXIF orientation
+    .rotate()
     .resize(OG_SIZE, OG_SIZE, { fit: 'cover', position: 'centre' })
-    .jpeg({ quality: 80, mozjpeg: true })
+    .jpeg({ quality: 84, mozjpeg: true })
     .toBuffer()
+}
+
+async function buildDesignedCard(baseImage: Buffer, settings: any, eventName: string) {
+  const base = await sharp(baseImage)
+    .rotate()
+    .resize(OG_SIZE, OG_SIZE, { fit: 'cover', position: 'centre' })
+    .jpeg({ quality: 84, mozjpeg: true })
+    .toBuffer()
+
+  const titleEnabled = settings?.share_title_enabled !== false
+  const logoEnabled = settings?.share_logo_enabled !== false
+  const logoUrl = String(settings?.share_logo_url || '').trim()
+  const title = String(eventName || settings?.event_name || '').trim() || 'האירוע שלנו'
+
+  const composites: sharp.OverlayOptions[] = []
+
+  if (titleEnabled) {
+    const svg = `
+      <svg width="${OG_SIZE}" height="96" xmlns="http://www.w3.org/2000/svg">
+        <rect x="12" y="12" rx="24" ry="24" width="${OG_SIZE - 24}" height="72" fill="rgba(255,255,255,0.88)"/>
+        <text x="${OG_SIZE/2}" y="58" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#111">🎉 ${title.replace(/&/g,'&amp;').replace(/</g,'&lt;')} 🎉</text>
+      </svg>`
+    composites.push({ input: Buffer.from(svg), top: 0, left: 0 })
+  }
+
+  if (logoEnabled && logoUrl) {
+    try {
+      const logoBuf = await loadBufferFromAnyUrl(logoUrl)
+      const logoPng = await sharp(logoBuf).rotate().resize({ width: 160, height: 72, fit: 'inside' }).png().toBuffer()
+      const badgeSvg = `<svg width="190" height="88" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" rx="22" ry="22" width="190" height="88" fill="rgba(255,255,255,0.82)"/></svg>`
+      composites.push({ input: Buffer.from(badgeSvg), left: 220, top: OG_SIZE - 108 })
+      composites.push({ input: logoPng, left: 235, top: OG_SIZE - 100 })
+    } catch {
+      // ignore logo failures
+    }
+  }
+
+  return await sharp(base).composite(composites).jpeg({ quality: 84, mozjpeg: true }).toBuffer()
 }
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
-
   const defaultParam = url.searchParams.get('default')
   const post = url.searchParams.get('post')
   const media = url.searchParams.get('media')
   const fallback = url.searchParams.get('fallback')
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-  const bucket = 'uploads'
-  const eventSlug = process.env.EVENT_SLUG || process.env.NEXT_PUBLIC_EVENT_SLUG || 'ido'
-  const toPublic = (storagePath: string) =>
-    supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${storagePath}` : ''
-
-  // Optional: cache-busting query params like ?v=123 are ignored by logic.
+  const eventSlugFromUrl = (url.searchParams.get('event') || '').trim()
+  let eventSlug = eventSlugFromUrl || process.env.EVENT_SLUG || process.env.NEXT_PUBLIC_EVENT_SLUG || 'ido'
 
   try {
-    const settings = await fetchSettings()
-
-    // 1) Resolve the desired base image URL
     let imageUrl: string | null = null
+    let eventName = eventSlug
 
-// default (site-wide OG image)
-if (defaultParam) {
-  imageUrl =
-    (settings as any)?.og_default_image_url ||
-    toPublic(`${eventSlug}/og/default.jpg`) ||
-    null
-}
-
-    // blessing post
-    if (!imageUrl && post) {
-      const byUuid = /^[0-9a-f-]{36}$/i.test(post)
-      if (byUuid) {
-        const { data } = await sb
-          .from('posts')
-          .select('media_url, status, kind')
-          .eq('id', post)
-          .maybeSingle()
-
-        if (data?.kind === 'blessing' && data?.status === 'approved') {
-          imageUrl = data.media_url || null
-        }
-      } else {
-        const p = await getFirstApprovedPostByPrefix(post)
-        imageUrl = p?.media_url || null
+    if (post) {
+      const p = await getPostByIdOrPrefix(post)
+      if (p?.kind === 'blessing' && p?.status === 'approved') {
+        imageUrl = p.media_url || null
+        if (p.event_id) eventSlug = String(p.event_id)
       }
     }
 
-    // gallery media item
     if (!imageUrl && media) {
-      const byUuid = /^[0-9a-f-]{36}$/i.test(media)
-
-      if (byUuid) {
-        // Support both media_items.id (preferred) and legacy links that pass media_items.post_id
-        const { data } = await sb
-          .from('media_items')
-          .select('public_url, storage_path, mime_type, id, post_id')
-          .or(`id.eq.${media},post_id.eq.${media}`)
-          .limit(1)
-          .maybeSingle()
-
-        if (data) {
-          const pu = (data as any).public_url as string | null | undefined
-          const sp = (data as any).storage_path as string | null | undefined
-          imageUrl = (pu && pu.trim()) ? pu : (sp ? toPublic(sp) : null)
-        }
-      } else {
-        const m = await getMediaItemByPrefix(media)
-        const pu = (m as any)?.public_url as string | null | undefined
-        const sp = (m as any)?.storage_path as string | null | undefined
-        imageUrl = (pu && pu.trim()) ? pu : (sp ? toPublic(sp) : null)
+      const m = await getMediaItemByIdOrPrefix(media)
+      if (m) {
+        imageUrl = String((m as any).public_url || '').trim() || ((m as any).storage_path ? getPublicUploadUrl((m as any).storage_path) : null)
+        if ((m as any).event_id) eventSlug = String((m as any).event_id)
       }
     }
 
-    // fallback parameter (usually hero image)
-    if (!imageUrl && fallback) {
-      imageUrl = fallback
-    }
+    const settings = await fetchSettings(eventSlug)
+    eventName = String((settings as any)?.event_name || eventSlug)
 
-// final fallback to default og image (settings value, or storage default.jpg)
-if (!imageUrl) {
-  imageUrl =
-    (settings as any)?.og_default_image_url ||
-    toPublic(`${eventSlug}/og/default.jpg`) ||
-    null
-}
+    const defaultUrl = String((settings as any)?.og_default_image_url || '').trim() || getPublicUploadUrl(`${eventSlug}/og/default.jpg`)
+    if (!imageUrl && defaultParam) imageUrl = defaultUrl || null
+    if (!imageUrl && fallback) imageUrl = fallback
+    if (!imageUrl) imageUrl = defaultUrl || null
+    if (!imageUrl) return new NextResponse('Missing OG image source', { status: 404 })
 
-    if (!imageUrl) {
-      return new NextResponse('Missing OG image source', { status: 404 })
-    }
+    const buf = await loadBufferFromAnyUrl(imageUrl)
+    const style = String((settings as any)?.share_image_style || 'plain_square')
+    const out = style === 'designed_card'
+      ? await buildDesignedCard(buf, settings, eventName)
+      : await toSquareJpeg(buf)
 
-    // 2) If the URL points to Supabase public uploads, try to stream via service-role to avoid edge cases.
-    //    (Either path works, but this makes it consistent.)
-    const uploadsPath = extractUploadsPathFromPublicUrl(imageUrl)
-
-    let buf: Buffer
-    if (uploadsPath) {
-      const { data, error } = await sb.storage.from('uploads').download(uploadsPath)
-      if (error) throw error
-      buf = Buffer.from(await data.arrayBuffer())
-    } else {
-      buf = await fetchImageBuffer(imageUrl)
-    }
-
-    // 3) Normalize to WhatsApp-friendly square
-    const out = await toSquareJpeg(buf)
-
-    const body = new Uint8Array(out)
-
-    return new NextResponse(body, {
+    return new NextResponse(new Uint8Array(out), {
       status: 200,
       headers: {
         'content-type': 'image/jpeg',
-        // allow caching, but not too aggressive (WhatsApp is sticky anyway)
         'cache-control': 'public, max-age=3600, stale-while-revalidate=86400',
       },
     })
   } catch (err) {
-    // last resort: respond with a tiny error
     const msg = err instanceof Error ? err.message : 'unknown'
     return new NextResponse(`OG error: ${msg}`, { status: 500 })
   }

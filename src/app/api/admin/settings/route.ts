@@ -100,7 +100,7 @@ export async function PUT(req: NextRequest) {
         'enable_web_share',
         'enable_permalink_share'
       ]
-      const OG_KEYS = ['og_title', 'og_description', 'og_image', 'og_site_name']
+      const OG_KEYS = ['og_title', 'og_description', 'og_image', 'og_site_name', 'share_image_style', 'share_logo_url', 'share_logo_enabled', 'share_title_enabled']
 
       const needBless = hasAny(BLESS_KEYS)
       const needShare = hasAny(SHARE_KEYS)

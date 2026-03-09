@@ -57,7 +57,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const post = await resolvePost(postId, target)
   const title = post?.author_name ? `ברכה מאת ${post.author_name}` : 'ברכה מהאירוע'
   const description = String(post?.text || 'לחצו לראות את הברכה').trim() || 'לחצו לראות את הברכה'
-  const image = String(post?.media_url || '').trim() || toAbsoluteUrl('/og/default.jpg')
+  const image = post?.id ? toAbsoluteUrl(`/api/og/image?post=${post.id}`) : toAbsoluteUrl('/api/og/image?default=1')
   const url = toAbsoluteUrl(`/bl/${code}`)
 
   return {
@@ -67,7 +67,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
       title,
       description,
       url,
-      images: image ? [{ url: image, width: 1200, height: 630 }] : undefined,
+      images: image ? [{ url: image, width: 630, height: 630 }] : undefined,
     },
     twitter: {
       card: 'summary_large_image',

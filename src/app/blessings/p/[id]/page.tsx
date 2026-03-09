@@ -29,11 +29,6 @@ async function getPost(postId: string): Promise<PostRow | null> {
   return (data as any) || null
 }
 
-function extractImage(post: PostRow | null) {
-  const image = String(post?.media_url || '').trim()
-  if (image && !/\.(mp4|mov|webm|m4v)(\?|$)/i.test(image)) return image
-  return toAbsoluteUrl('/og/default.jpg')
-}
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const post = await getPost(String(params?.id || '').trim())
@@ -42,7 +37,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
       title: 'ברכה',
       openGraph: {
         title: 'ברכה',
-        images: [toAbsoluteUrl('/og/default.jpg')!],
+        images: [{ url: toAbsoluteUrl('/api/og/image?default=1')!, width: 630, height: 630 }],
       },
     }
   }
@@ -50,7 +45,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const title = post.author_name ? `ברכה מאת ${post.author_name}` : 'ברכה מהאירוע'
   const description = String(post.text || 'לחצו לראות את הברכה').trim() || 'לחצו לראות את הברכה'
   const url = toAbsoluteUrl(`/blessings/p/${post.id}`)
-  const image = extractImage(post)
+  const image = toAbsoluteUrl(`/api/og/image?post=${post.id}`)
 
   return {
     title,
@@ -60,7 +55,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
       description,
       url,
       type: 'article',
-      images: image ? [{ url: image, width: 1200, height: 630 }] : undefined,
+      images: image ? [{ url: image, width: 630, height: 630 }] : undefined,
     },
     twitter: {
       card: 'summary_large_image',
