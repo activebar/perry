@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
-import { Button, Card, Container } from '@/components/ui'
-import { fetchSettings } from '@/lib/db'
+import { Container, Card, Button } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { fetchSettings } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -31,12 +31,12 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const id = decodeURIComponent(params.id)
   if (!/^[0-9a-f-]{36}$/i.test(id)) return {}
 
+  const settings = await fetchSettings().catch(() => null)
   const mi = await getMedia(id)
   if (!mi) return {}
 
-  const settings = await fetchSettings(String((mi as any)?.event_id || '') || undefined).catch(() => null)
   const eventName = String((settings as any)?.event_name || 'אירוע')
-  const title = `${eventName} · תמונה`
+  const title = `${eventName} · תמונה` 
   const description = String((settings as any)?.share_gallery_description || 'לחצו לצפייה בתמונה')
   const b = baseUrl()
   const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}`
@@ -70,7 +70,6 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
   if (!url) notFound()
 
   const galleryId = mi.gallery_id ? String(mi.gallery_id) : null
-  const eventId = mi.event_id ? String(mi.event_id) : ''
 
   return (
     <main className="py-10" dir="rtl">
@@ -83,6 +82,7 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
         <Card dir="rtl">
           <div className="space-y-4">
             <div className="overflow-hidden rounded-2xl bg-zinc-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt="" className="w-full max-h-[75vh] object-contain" />
             </div>
 
@@ -96,11 +96,11 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
                 </a>
               </div>
               {galleryId ? (
-                <Link href={`${eventId ? `/${encodeURIComponent(eventId)}` : ''}/gallery/${encodeURIComponent(galleryId)}`}>
+                <Link href={`/gallery/${encodeURIComponent(galleryId)}`}>
                   <Button variant="ghost">חזרה לגלריה</Button>
                 </Link>
               ) : (
-                <Link href={eventId ? `/${encodeURIComponent(eventId)}/gallery` : '/'}>
+                <Link href="/">
                   <Button variant="ghost">לכל הגלריות</Button>
                 </Link>
               )}

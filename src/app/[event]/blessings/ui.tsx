@@ -444,8 +444,7 @@ async function saveEdit() {
   function buildLinkForPost(postId?: string) {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const base = origin ? `${origin}` : ''
-    const eventBase = effectiveEventId ? `/${encodeURIComponent(effectiveEventId)}` : ''
-    const blessings = `${base}${eventBase}/blessings`
+    const blessings = `${base}/blessings`
     if (postId && shareUsePermalink) {
       const code = String(postId).split('-')[0]
       return `${base}/bl/${code}`
@@ -463,9 +462,8 @@ async function saveEdit() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           postId: p.id,
-          eventId: effectiveEventId || undefined,
           code,
-          targetPath: `${effectiveEventId ? `/${encodeURIComponent(effectiveEventId)}` : ''}/blessings#post-${p.id}`,
+          targetPath: `/blessings/p/${p.id}`,
         }),
       })
     } catch {

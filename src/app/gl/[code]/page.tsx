@@ -14,66 +14,32 @@ function cleanCode(input: string) {
     .replace(/[^0-9a-z]/g, '')
 }
 
-function extractMediaIdFromTarget(targetPath: string | null) {
-  if (!targetPath) return null
-  const m = String(targetPath).match(/\/media\/([0-9a-f-]{36})/i)
-  return m?.[1] || null
-}
-
-function normalizeGalleryTarget(targetPath: string | null, eventId?: string | null) {
-  const raw = String(targetPath || '').trim()
-  const event = String(eventId || '').trim()
-  if (!raw) return ''
-  if (event && /^\/gallery(?:[#/?].*)?$/i.test(raw)) return `/${encodeURIComponent(event)}${raw}`
-  return raw
-}
-
 async function resolveTarget(code: string) {
   const srv = supabaseServiceRole()
 
+  // Prefer schemas that include kind, but fallback to legacy schema without kind.
   const first = await srv
     .from('short_links')
-    .select('target_path, kind, media_item_id, event_id')
+    .select('target_path, kind, media_item_id')
     .eq('code', code)
     .maybeSingle()
 
   if (first.data) {
-    const eventId = String((first.data as any).event_id || '').trim() || null
-    const explicitMediaId = (first.data as any).media_item_id ? String((first.data as any).media_item_id) : null
-    const targetPath = String((first.data as any).target_path || '')
-    const targetMediaId = extractMediaIdFromTarget(targetPath)
-    const mediaItemId = explicitMediaId || targetMediaId
-    const target = normalizeGalleryTarget(targetPath, eventId)
+    const k = String((first.data as any).kind || '').trim()
+    const mi = (first.data as any).media_item_id ? String((first.data as any).media_item_id) : null
 
-    if (mediaItemId) {
-      return { target: target || `/media/${encodeURIComponent(mediaItemId)}`, mediaItemId, eventId }
+    // If media_item_id exists, treat as media link (new behavior)
+    if (mi) return { target: String((first.data as any).target_path || ''), mediaItemId: mi }
+
+    if ((first.data as any)?.target_path) {
+      // Legacy gallery link: target_path points to /gallery/<uuid>
+      return { target: String((first.data as any).target_path), mediaItemId: null }
     }
-
-    if (target) return { target, mediaItemId: null, eventId }
   }
 
-  const second = await srv
-    .from('short_links')
-    .select('target_path, media_item_id, event_id')
-    .eq('code', code)
-    .maybeSingle()
-
-  if (second.data) {
-    const eventId = String((second.data as any).event_id || '').trim() || null
-    const explicitMediaId = (second.data as any).media_item_id ? String((second.data as any).media_item_id) : null
-    const targetPath = String((second.data as any).target_path || '')
-    const targetMediaId = extractMediaIdFromTarget(targetPath)
-    const mediaItemId = explicitMediaId || targetMediaId
-    const target = normalizeGalleryTarget(targetPath, eventId)
-
-    if (mediaItemId) {
-      return { target: target || `/media/${encodeURIComponent(mediaItemId)}`, mediaItemId, eventId }
-    }
-
-    if (target) return { target, mediaItemId: null, eventId }
-  }
-
-  return null
+  // Legacy fallback: some schemas may not have `kind` column at all.
+  const second = await srv.from('short_links').select('target_path').eq('code', code).maybeSingle()
+  return (second.data as any)?.target_path ? { target: String((second.data as any).target_path), mediaItemId: null } : null
 }
 
 function baseUrlFromHeaders() {
@@ -101,17 +67,15 @@ function extractGalleryIdFromTarget(targetPath: string | null) {
   return m?.[1] || null
 }
 
-async function getOgForMedia(mediaItemId: string, eventHint?: string | null) {
+async function getOgForMedia(mediaItemId: string) {
   const srv = supabaseServiceRole()
+  const settings = await fetchSettings()
 
   const { data: mi } = await srv
     .from('media_items')
-    .select('id, gallery_id, public_url, storage_path, url, thumb_url, event_id')
+    .select('id, gallery_id, public_url, storage_path, url, thumb_url')
     .eq('id', mediaItemId)
     .maybeSingle()
-
-  const resolvedEventId = String((mi as any)?.event_id || eventHint || '').trim() || undefined
-  const settings = await fetchSettings(resolvedEventId).catch(() => null)
 
   // Prefer a direct public URL for WhatsApp reliability.
   // (WhatsApp sometimes fails to fetch dynamic OG image routes.)
@@ -132,7 +96,7 @@ async function getOgForMedia(mediaItemId: string, eventHint?: string | null) {
     if ((g as any)?.title) galleryTitle = String((g as any).title)
   }
 
-  const eventName = String((settings as any)?.event_name || resolvedEventId || 'אירוע')
+  const eventName = String((settings as any)?.event_name || 'אירוע')
   const description = String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
 
   const b = baseUrl()
@@ -142,17 +106,15 @@ async function getOgForMedia(mediaItemId: string, eventHint?: string | null) {
   return { eventName, galleryTitle, description, ogImage }
 }
 
-async function getOgForGallery(galleryId: string, eventHint?: string | null) {
+async function getOgForGallery(galleryId: string) {
   const srv = supabaseServiceRole()
+  const settings = await fetchSettings()
 
   const { data: g } = await srv
     .from('galleries')
-    .select('id,title,event_id')
+    .select('id,title')
     .eq('id', galleryId)
     .maybeSingle()
-
-  const resolvedEventId = String((g as any)?.event_id || eventHint || '').trim() || undefined
-  const settings = await fetchSettings(resolvedEventId).catch(() => null)
 
   const { data: mi } = await srv
     .from('media_items')
@@ -164,7 +126,7 @@ async function getOgForGallery(galleryId: string, eventHint?: string | null) {
     .limit(1)
     .maybeSingle()
 
-  const eventName = String((settings as any)?.event_name || resolvedEventId || 'אירוע')
+  const eventName = String((settings as any)?.event_name || 'אירוע')
   const galleryTitle = String((g as any)?.title || 'גלריה')
   const description = String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בגלריה והעלאת תמונות'
 
@@ -193,7 +155,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
 
   // Media link: OG should be based on the specific media item
   if (resolved.mediaItemId) {
-    const { eventName, galleryTitle, description, ogImage } = await getOgForMedia(resolved.mediaItemId, resolved.eventId)
+    const { eventName, galleryTitle, description, ogImage } = await getOgForMedia(resolved.mediaItemId)
     const title = `${eventName} · ${galleryTitle}`
 
     return {
@@ -217,7 +179,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const galleryId = extractGalleryIdFromTarget(resolved.target)
   if (!galleryId) return {}
 
-  const { eventName, galleryTitle, description, ogImage } = await getOgForGallery(galleryId, resolved.eventId)
+  const { eventName, galleryTitle, description, ogImage } = await getOgForGallery(galleryId)
   const title = `${eventName} · ${galleryTitle}`
 
   return {

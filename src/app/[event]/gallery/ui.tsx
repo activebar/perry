@@ -4,8 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
 
-const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
-
 
 function getLocalDeviceId(): string | null {
   if (typeof window === 'undefined') return null
@@ -46,8 +44,6 @@ type Item = {
   uploader_device_id?: string | null
   is_approved?: boolean
   crop_position?: string | null
-  reaction_counts?: Record<string, number>
-  my_reactions?: string[]
 }
 
 function getCookie(name: string): string | null {
@@ -182,9 +178,7 @@ export default function GalleryClient({
       editable_until: x.editable_until ?? null,
       uploader_device_id: x.uploader_device_id ?? null,
       is_approved: x.is_approved ?? true,
-      crop_position: x.crop_position ?? null,
-      reaction_counts: x.reaction_counts || {},
-      my_reactions: x.my_reactions || []
+      crop_position: x.crop_position ?? null
     }))
   )
   const [files, setFiles] = useState<File[]>([])
@@ -219,20 +213,6 @@ export default function GalleryClient({
     const m = Math.floor(total / 60)
     const sec = total % 60
     return `${m}:${String(sec).padStart(2, '0')}`
-  }
-
-  function topReaction(it: Item): { emoji: string; count: number } | null {
-    const counts = it.reaction_counts || {}
-    let bestEmoji = ''
-    let bestCount = 0
-    for (const emo of EMOJIS) {
-      const c = Number((counts as any)[emo] || 0)
-      if (c > bestCount) {
-        bestCount = c
-        bestEmoji = emo
-      }
-    }
-    return bestCount > 0 && bestEmoji ? { emoji: bestEmoji, count: bestCount } : null
   }
 
   // Select + ZIP (client-side)
@@ -461,19 +441,6 @@ export default function GalleryClient({
     setFiles(prev => [...prev, ...arr].slice(0, 50))
   }
 
-  async function toggleReaction(mediaItemId: string, emoji: string) {
-    try {
-      const res = await fetch('/api/public/media-reactions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ media_item_id: mediaItemId, emoji })
-      })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(j?.error || 'reaction failed')
-      setItems(prev => prev.map(it => it.id === mediaItemId ? { ...it, reaction_counts: j.counts || it.reaction_counts || {}, my_reactions: j.my || it.my_reactions || [] } : it))
-    } catch {}
-  }
-
   async function upload() {
     if (!uploadEnabled) {
       setErr('העלאה סגורה כרגע ע״י מנהל')
@@ -532,18 +499,9 @@ export default function GalleryClient({
             <p className="text-sm text-zinc-600">העלאה פתוחה רק אם מנהל פתח אותה.</p>
           </div>
 
-          <div className="flex flex-wrap gap-2 sm:flex-row-reverse sm:items-center sm:justify-end">
+          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
             <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => pickerRef.current?.click()}
-              disabled={!uploadEnabled}
-              className="sm:w-44"
-            >
-              בחר תמונות
             </Button>
             <Button
               type="button"
@@ -552,7 +510,7 @@ export default function GalleryClient({
               disabled={!uploadEnabled}
               className="sm:w-44"
             >
-              📷
+              צלם תמונה
             </Button>
             <input
               ref={pickerRef}
@@ -560,7 +518,7 @@ export default function GalleryClient({
               accept="image/*"
               multiple
               onChange={e => addFiles(e.target.files)}
-              className="hidden"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
               disabled={!uploadEnabled}
             />
             <input
@@ -639,24 +597,7 @@ export default function GalleryClient({
             <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
 
             <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow" dir="rtl">
-              <div className="flex items-center justify-center gap-2 pb-3" dir="ltr">
-                {EMOJIS.map(emo => {
-                  const active = (lightbox.my_reactions || []).includes(emo)
-                  const c = (lightbox.reaction_counts || {})[emo] || 0
-                  return (
-                    <Button
-                      key={emo}
-                      variant={active ? 'primary' : 'ghost'}
-                      className="min-w-0 shrink-0 rounded-full px-3 py-2 text-base sm:px-4"
-                      onClick={() => toggleReaction(lightbox.id, emo)}
-                      type="button"
-                    >
-                      {emo}{c ? ` ${c}` : ''}
-                    </Button>
-                  )
-                })}
-              </div>
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 pt-3">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">שתף</Button>
                 <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">הורד</Button>
                 {canEditMine(lightbox) ? (
@@ -695,43 +636,7 @@ export default function GalleryClient({
             </button>
 
             <div className="p-3">
-              {selectMode ? (
-                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
-              ) : (
-                <>
-                  {(() => {
-                    const best = topReaction(it)
-                    return best ? (
-                      <div className="mb-2 flex justify-start">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-sm shadow">
-                          <span>{best.count}</span>
-                          <span>{best.emoji}</span>
-                        </span>
-                      </div>
-                    ) : null
-                  })()}
-                  <div className="grid grid-cols-3 items-center gap-2" dir="rtl">
-                    <div className="flex justify-end">
-                      <Button variant="ghost" className="h-10 w-10 rounded-full p-0 text-xl" onClick={() => shareItem(it)} type="button" title="שתף">
-                        🔗
-                      </Button>
-                    </div>
-                    <div className="flex justify-center">
-                      <Button variant="ghost" className="h-10 w-10 rounded-full p-0 text-xl" onClick={() => downloadUrl(it.url)} type="button" title="שמור">
-                        💾
-                      </Button>
-                    </div>
-                    <div className="flex justify-start">
-                      <Button variant="ghost" className="h-10 min-w-[52px] rounded-full px-3 text-xl" onClick={() => setLightbox(it)} type="button" title="תגובות">
-                        {(() => {
-                          const best = topReaction(it)
-                          return best ? `${best.emoji}${best.count}` : '🙂'
-                        })()}
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              )}
+              {selectMode ? <span className="text-xs text-zinc-500">מצב בחירה פעיל</span> : null}
             </div>
           </div>
         ))}

@@ -13,11 +13,7 @@ type Item = {
   is_approved?: boolean
   crop_position?: string | null
   uploader_device_id?: string | null
-  reaction_counts?: Record<string, number>
-  my_reactions?: string[]
 }
-
-const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
 async function downloadUrl(url: string) {
   try {
@@ -77,20 +73,6 @@ function fmtMMSS(sec: number) {
   const mm = String(Math.floor(s / 60)).padStart(2, '0')
   const ss = String(s % 60).padStart(2, '0')
   return `${mm}:${ss}`
-}
-
-function getTopReaction(counts?: Record<string, number> | null) {
-  const bag = counts || {}
-  let bestEmoji = ''
-  let bestCount = 0
-  for (const emoji of EMOJIS) {
-    const count = Number(bag[emoji] || 0)
-    if (count > bestCount) {
-      bestEmoji = emoji
-      bestCount = count
-    }
-  }
-  return bestCount > 0 ? { emoji: bestEmoji, count: bestCount } : null
 }
 
 async function ensureShortLinkForMedia(mediaItemId: string) {
@@ -185,9 +167,7 @@ export default function GalleryClient({
       editable_until: x.editable_until ?? null,
       is_approved: x.is_approved ?? true,
       crop_position: x.crop_position ?? null,
-      uploader_device_id: x.uploader_device_id ?? null,
-      reaction_counts: x.reaction_counts || {},
-      my_reactions: x.my_reactions || []
+      uploader_device_id: x.uploader_device_id ?? null
     }))
   )
   const [files, setFiles] = useState<File[]>([])
@@ -197,7 +177,6 @@ export default function GalleryClient({
   const [lightbox, setLightbox] = useState<Item | null>(null)
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
-  const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
 
   // Keep state in sync when navigating between galleries.
   useEffect(() => {
@@ -205,14 +184,10 @@ export default function GalleryClient({
       (initialItems || []).map((x: any) => ({
         id: x.id,
         url: x.url || x.media_url || x.public_url || '',
-        thumb_url: x.thumb_url || x.url || x.media_url || x.public_url || '',
         created_at: x.created_at,
         editable_until: x.editable_until ?? null,
         is_approved: x.is_approved ?? true,
-        crop_position: x.crop_position ?? null,
-        uploader_device_id: x.uploader_device_id ?? null,
-        reaction_counts: x.reaction_counts || {},
-        my_reactions: x.my_reactions || []
+        crop_position: x.crop_position ?? null
       }))
     )
   }, [galleryId, initialItems])
@@ -232,35 +207,6 @@ export default function GalleryClient({
     if (!it || !it.editable_until || !it.uploader_device_id || !deviceId) return false
     return deviceId === it.uploader_device_id && secondsLeftFor(it) > 0
   }
-
-  useEffect(() => {
-    const ids = (items || []).map(it => String(it.id || '')).filter(Boolean)
-    if (ids.length === 0) return
-    let cancelled = false
-
-    ;(async () => {
-      try {
-        const qs = new URLSearchParams({ ids: ids.join(',') })
-        const res = await fetch(`/api/public/media-reactions?${qs.toString()}`, { cache: 'no-store' })
-        const j = await res.json().catch(() => ({}))
-        if (!res.ok || cancelled) return
-        const byId = (j?.by_id || {}) as Record<string, { counts?: Record<string, number>; my?: string[] }>
-        setItems(prev =>
-          (prev || []).map(it => ({
-            ...it,
-            reaction_counts: byId[it.id]?.counts || it.reaction_counts || {},
-            my_reactions: byId[it.id]?.my || it.my_reactions || [],
-          }))
-        )
-      } catch {
-        // ignore
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [items.length, galleryId])
 
   // Self-heal (once): client navigation can occasionally hydrate with stale/empty server props.
   const healedRef = useRef<string | null>(null)
@@ -288,14 +234,10 @@ export default function GalleryClient({
           next.map((x: any) => ({
             id: x.id,
             url: x.url || x.media_url || x.public_url || '',
-            thumb_url: x.thumb_url || x.url || x.media_url || x.public_url || '',
             created_at: x.created_at,
             editable_until: x.editable_until ?? null,
             is_approved: x.is_approved ?? true,
-            crop_position: x.crop_position ?? null,
-            uploader_device_id: x.uploader_device_id ?? null,
-            reaction_counts: x.reaction_counts || {},
-            my_reactions: x.my_reactions || []
+            crop_position: x.crop_position ?? null
           }))
         )
       } catch {
@@ -440,36 +382,12 @@ export default function GalleryClient({
 
 
   const pickerRef = useRef<HTMLInputElement | null>(null)
-  const cameraRef = useRef<HTMLInputElement | null>(null)
 
   const feed = useMemo(() => (items || []).filter(i => i.url), [items])
 
   async function shareItem(it: Item) {
     const short = await ensureShortLinkForMedia(it.id)
     await shareUrl(short || it.url)
-  }
-
-  async function toggleReaction(it: Item, emoji: string) {
-    try {
-      const res = await fetch('/api/public/media-reactions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ media_item_id: it.id, emoji }),
-      })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(j?.error || 'reaction failed')
-      setItems(prev =>
-        (prev || []).map(x =>
-          x.id === it.id
-            ? { ...x, reaction_counts: j.counts || {}, my_reactions: j.my || [] }
-            : x
-        )
-      )
-      setLightbox(prev => (prev && prev.id === it.id ? { ...prev, reaction_counts: j.counts || {}, my_reactions: j.my || [] } : prev))
-      setEmojiPickerFor(null)
-    } catch {
-      // ignore
-    }
   }
 
   function addFiles(list: FileList | null) {
@@ -503,7 +421,7 @@ export default function GalleryClient({
         if (!res.ok) throw new Error(j?.error || 'upload failed')
 
         if (j?.publicUrl) {
-          const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId, reaction_counts: {}, my_reactions: [] }
+          const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
           if (j.is_approved) {
             setItems(prev => [created, ...prev])
           } else {
@@ -556,7 +474,7 @@ export default function GalleryClient({
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error || 'upload failed')
-      const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId, reaction_counts: {}, my_reactions: [] }
+      const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
       await fetch('/api/public/media-delete', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: it.id, device_id: deviceId }) })
       setItems(prev => [created, ...prev.filter(x => x.id !== it.id)])
       setLightbox(created)
@@ -582,9 +500,6 @@ export default function GalleryClient({
             <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()} disabled={!uploadEnabled} className="sm:w-44">
-              צלם תמונה
-            </Button>
             <input
               ref={pickerRef}
               type="file"
@@ -592,15 +507,6 @@ export default function GalleryClient({
               multiple
               onChange={e => addFiles(e.target.files)}
               className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
-              disabled={!uploadEnabled}
-            />
-            <input
-              ref={cameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={e => addFiles(e.target.files)}
-              className="hidden"
               disabled={!uploadEnabled}
             />
           </div>
@@ -669,17 +575,6 @@ export default function GalleryClient({
 
             <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow-lg" dir="rtl">
               <div className="flex flex-wrap items-center justify-end gap-2">
-                {EMOJIS.map(emoji => {
-                  const active = (lightbox.my_reactions || []).includes(emoji)
-                  const count = Number((lightbox.reaction_counts || {})[emoji] || 0)
-                  return (
-                    <Button key={emoji} variant={active ? 'primary' : 'ghost'} onClick={() => toggleReaction(lightbox, emoji)} type="button">
-                      {count ? `${count} ` : ''}{emoji}
-                    </Button>
-                  )
-                })}
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
                 {canManageItem(lightbox) ? <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeftFor(lightbox))}</span> : null}
                 {canManageItem(lightbox) ? (
                   <>
@@ -716,12 +611,6 @@ export default function GalleryClient({
                   </div>
                 </div>
               ) : null}
-
-              {!selectMode && getTopReaction(it.reaction_counts) ? (
-                <div className="absolute right-2 top-2 rounded-full bg-white/90 px-2 py-1 text-xs font-medium shadow">
-                  {getTopReaction(it.reaction_counts)?.emoji} {getTopReaction(it.reaction_counts)?.count}
-                </div>
-              ) : null}
             </button>
 
             <div className="p-3 space-y-2">
@@ -729,26 +618,8 @@ export default function GalleryClient({
                 <>
                   <div className="flex items-center justify-between gap-2" dir="rtl">
                     <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">הורד</Button>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" onClick={() => shareItem(it)} type="button">שתף</Button>
-                      <Button variant={(it.my_reactions || []).length ? 'primary' : 'ghost'} onClick={() => setEmojiPickerFor(prev => prev === it.id ? null : it.id)} type="button">🙂</Button>
-                    </div>
+                    <Button variant="ghost" onClick={() => shareItem(it)} type="button">שתף</Button>
                   </div>
-
-                  {emojiPickerFor === it.id ? (
-                    <div className="flex flex-wrap items-center justify-end gap-2" dir="rtl">
-                      {EMOJIS.map(emoji => {
-                        const active = (it.my_reactions || []).includes(emoji)
-                        const count = Number((it.reaction_counts || {})[emoji] || 0)
-                        return (
-                          <Button key={emoji} variant={active ? 'primary' : 'ghost'} onClick={() => toggleReaction(it, emoji)} type="button">
-                            {count ? `${count} ` : ''}{emoji}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                  ) : null}
-
                   {canManageItem(it) ? (
                     <div className="flex flex-wrap items-center justify-end gap-2" dir="rtl">
                       <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeftFor(it))}</span>

@@ -79,7 +79,7 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
 
   const { data: items } = await sb
     .from('media_items')
-    .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,editable_until,is_approved,crop_position,uploader_device_id,post_id')
+    .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,editable_until,is_approved,crop_position,uploader_device_id')
     .eq('event_id', eventId)
     // Keep server query consistent with the client self-heal API
     .eq('kind', 'gallery')

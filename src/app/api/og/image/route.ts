@@ -103,11 +103,11 @@ if (defaultParam) {
       if (byUuid) {
         const { data } = await sb
           .from('posts')
-          .select('media_url, kind')
+          .select('media_url, status, kind')
           .eq('id', post)
           .maybeSingle()
 
-        if (data?.kind === 'blessing') {
+        if (data?.kind === 'blessing' && data?.status === 'approved') {
           imageUrl = data.media_url || null
         }
       } else {
