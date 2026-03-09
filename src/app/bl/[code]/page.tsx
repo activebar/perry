@@ -110,10 +110,14 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const title = author ? `${eventName} · ברכה מ${author}` : `${eventName} · ברכה`
   const description = text || 'לחצו לצפייה בברכה'
 
+  const directImage = (() => {
+    const mediaUrl = String((resolved.post as any)?.media_url || '').trim()
+    if (!mediaUrl || isVideoUrl(mediaUrl)) return ''
+    return mediaUrl
+  })()
+
   const fallbackOg = String((settings as any)?.og_default_image_url || '').trim() || `${baseUrl()}/api/og/image?default=1`
-  const ogImage = resolved.postId
-    ? `${baseUrl()}/api/og/image?post=${encodeURIComponent(String(resolved.postId))}`
-    : fallbackOg
+  const ogImage = directImage || fallbackOg
   const pageUrl = `${baseUrl()}/bl/${encodeURIComponent(code)}`
 
   return {
@@ -125,7 +129,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
       description,
       url: pageUrl,
       type: 'website',
-      images: ogImage ? [{ url: ogImage, width: 600, height: 600 }] : undefined,
+      images: ogImage ? [{ url: ogImage, width: 630, height: 630 }] : undefined,
     },
     twitter: {
       card: 'summary_large_image',
