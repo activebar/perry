@@ -522,7 +522,7 @@ export default function GalleryClient({
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
             </Button>
             <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()} disabled={!uploadEnabled} className="sm:w-44">
-              צלם תמונה
+              📷 צלם תמונה
             </Button>
             <input
               ref={pickerRef}
@@ -612,7 +612,7 @@ export default function GalleryClient({
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {feed.map(it => (
-          <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
+          <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
             <button className="relative block aspect-square w-full bg-zinc-50" onClick={() => onThumbClick(it)} type="button">
               <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') as any }} />
               {selectMode ? (
@@ -623,8 +623,16 @@ export default function GalleryClient({
                 </div>
               ) : null}
             </button>
-            <div className="p-3">
-              {selectMode ? <span className="text-xs text-zinc-500">מצב בחירה פעיל</span> : null}
+            <div className="p-2">
+              {selectMode ? (
+                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+              ) : (
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <button type="button" className="rounded-full border px-2 py-1" onClick={() => shareItem(it)}>שתף</button>
+                  <button type="button" className="rounded-full border px-2 py-1" onClick={() => downloadUrl(it.url)}>הורד</button>
+                  <button type="button" className="rounded-full border px-2 py-1" onClick={() => setLightbox(it)}>אימוג׳י</button>
+                </div>
+              )}
             </div>
           </div>
         ))}

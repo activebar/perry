@@ -87,7 +87,7 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
       // But if blocks title is missing (shouldn't), fallback to gallery title.
       const row = byId.get(String(b.galleryId))
       const fallbackTitle = String((row as any)?.title || '').trim()
-      const title = String(b.title || '').trim() || fallbackTitle || 'גלריה'
+      const title = fallbackTitle || String(b.title || '').trim() || 'גלריה'
       const buttonLabel = String(b.buttonLabel || '').trim() || title
       return { ...b, title, buttonLabel }
     })

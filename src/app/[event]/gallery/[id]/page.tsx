@@ -47,7 +47,7 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
 
   const { data: gRows } = await sb
     .from('galleries')
-    .select('id,is_active,upload_enabled')
+    .select('id,is_active,upload_enabled,title')
     .eq('event_id', eventId)
     .in('id', galleryIds as any)
 
@@ -57,7 +57,8 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
       .map((g: any) => String(g.id))
   )
 
-  const uploadEnabled = Boolean((gRows || []).find((g: any) => String(g.id) === String(galleryId))?.upload_enabled)
+  const currentGallery = (gRows || []).find((g: any) => String(g.id) === String(galleryId))
+  const uploadEnabled = Boolean((currentGallery as any)?.upload_enabled)
 
   if (!activeSet.has(String(galleryId))) {
     return (
@@ -89,7 +90,13 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
     .limit(400)
 
   // navigation pills
-  const nav = blockItems.filter((x) => activeSet.has(String(x.galleryId)))
+  const nav = blockItems.filter((x) => activeSet.has(String(x.galleryId))).map((x) => {
+    const row = (gRows || []).find((g: any) => String(g.id) === String(x.galleryId))
+    const dbTitle = String((row as any)?.title || '').trim()
+    const displayTitle = dbTitle || String(x.title || '').trim() || 'גלריה'
+    return { ...x, title: displayTitle }
+  })
+  const currentGalleryTitle = String((currentGallery as any)?.title || '').trim() || nav.find((x) => String(x.galleryId) === String(galleryId))?.title || 'תמונות'
 
   return (
     <main dir="rtl" className="text-right">
@@ -97,7 +104,7 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-right">
-              <div className="text-xl font-semibold">תמונות</div>
+              <div className="text-xl font-semibold">{currentGalleryTitle}</div>
               <div className="text-sm opacity-80">בחרו גלריה</div>
             </div>
             <Link prefetch={false}

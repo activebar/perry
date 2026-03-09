@@ -64,8 +64,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
   const title = `${eventName} · תמונה`
   const ogImage =
-    String(mi.thumb_url || '').trim() ||
     String(mi.public_url || '').trim() ||
+    String(mi.thumb_url || '').trim() ||
     String(mi.url || '').trim() ||
     (String(mi.storage_path || '').trim() ? toPublic(String(mi.storage_path)) : `${baseUrl()}/api/og/image?media=${encodeURIComponent(String(mi.id))}`)
 

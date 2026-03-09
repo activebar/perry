@@ -96,8 +96,8 @@ async function getOgForMedia(mediaItemId: string) {
     .maybeSingle()
 
   const directUrl =
-    String((mi as any)?.thumb_url || '').trim() ||
     String((mi as any)?.public_url || '').trim() ||
+    String((mi as any)?.thumb_url || '').trim() ||
     String((mi as any)?.url || '').trim() ||
     (String((mi as any)?.storage_path || '').trim() ? toPublic(String((mi as any).storage_path)) : '')
 
