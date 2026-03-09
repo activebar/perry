@@ -504,7 +504,7 @@ async function saveEdit() {
   return (
     <main dir="rtl" className="text-right">
       <Container>
-<Card>
+<Card id="blessing-form">
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
@@ -626,8 +626,8 @@ async function saveEdit() {
                   </div>
                 )}
                 {/* reactions */}
-                <div className="mt-3 space-y-3" dir="rtl">
-                  <div className="flex flex-wrap items-center justify-center gap-2">
+                <div className="mt-3 space-y-2" dir="rtl">
+                  <div className="flex items-center justify-center gap-1 whitespace-nowrap" dir="ltr">
                     {EMOJIS.map(emo => {
                       const active = (p.my_reactions || []).includes(emo)
                       const c = (p.reaction_counts || {})[emo] || 0
@@ -635,41 +635,43 @@ async function saveEdit() {
                         <Button
                           key={emo}
                           variant={active ? 'primary' : 'ghost'}
-                          className="min-w-[64px] shrink-0 rounded-full"
+                          className="min-w-0 shrink-0 rounded-full px-2 py-2 text-sm sm:px-3"
                           onClick={() => toggleReaction(p.id, emo)}
                         >
-                          {c ? `${c} ` : ''}{emo}
+                          {emo}{c ? ` ${c}` : ''}
                         </Button>
                       )
                     })}
                   </div>
 
-                  <div className="flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          const el = document.getElementById('blessing-form') as HTMLElement | null
-                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                          const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
-                          ta?.focus()
-                        } catch {}
-                      }}
-                      className="text-sm font-medium text-zinc-700 underline underline-offset-4"
-                    >
-                      כתוב ברכה
-                    </button>
-
+                  <div className="flex items-center justify-between gap-3" dir="rtl">
                     {shareEnabled ? (
                       <Button
                         variant="ghost"
                         onClick={() => sharePost(p)}
-                        className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 shrink-0"
+                        className="min-w-[52px] shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700"
                         title={String(settings?.share_button_label || 'שתף')}
+                        type="button"
                       >
                         🔗
                       </Button>
-                    ) : <span />}
+                    ) : <span className="min-w-[52px]" />}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          window.scrollTo({ top: 0, behavior: 'smooth' })
+                          const el = document.getElementById('blessing-form') as HTMLElement | null
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                          const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
+                          setTimeout(() => ta?.focus(), 250)
+                        } catch {}
+                      }}
+                      className="truncate whitespace-nowrap text-sm font-medium text-zinc-700 underline underline-offset-4"
+                    >
+                      כתוב ברכה
+                    </button>
                   </div>
                 </div>
 
