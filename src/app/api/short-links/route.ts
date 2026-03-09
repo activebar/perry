@@ -37,70 +37,48 @@ export async function POST(req: Request) {
   }
 
   const kind = String(body.kind || '').trim() || 'bl'
+
   const postId = String(body.post_id || body.postId || '').trim()
   const mediaItemId = String(body.media_item_id || body.mediaItemId || '').trim()
-  const explicitEventId = String(body.event_id || body.eventId || '').trim() || ''
+  const eventId = String(body.event_id || body.eventId || '').trim() || (process.env.EVENT_SLUG || process.env.NEXT_PUBLIC_EVENT_SLUG || '')
 
   if (postId && mediaItemId) return jsonError('Provide either post_id or media_item_id, not both')
-
-  const code = cleanCode(body.code || (postId ? postId.slice(0, 8) : mediaItemId ? mediaItemId.slice(0, 8) : ''))
-  if (!/^[0-9a-f]{6,16}$/.test(code)) return jsonError('Invalid code format')
-
-  const srv = supabaseServiceRole()
-
-  let resolvedEventId = explicitEventId || ''
-  if (!resolvedEventId && postId) {
-    const { data: p } = await srv.from('posts').select('id,event_id').eq('id', postId).maybeSingle()
-    resolvedEventId = String((p as any)?.event_id || '').trim()
-  }
-  if (!resolvedEventId && mediaItemId) {
-    const { data: m } = await srv.from('media_items').select('id,event_id').eq('id', mediaItemId).maybeSingle()
-    resolvedEventId = String((m as any)?.event_id || '').trim()
-  }
-  if (!resolvedEventId) {
-    resolvedEventId = String(process.env.EVENT_SLUG || process.env.NEXT_PUBLIC_EVENT_SLUG || '').trim()
-  }
 
   const fallbackTarget =
     kind === 'gl'
       ? mediaItemId
         ? `/media/${mediaItemId}`
-        : resolvedEventId
-          ? `/${resolvedEventId}/gallery`
+        : postId
+          ? `/gallery/p/${postId}`
           : '/gallery'
       : postId
-        ? resolvedEventId
-          ? `/${resolvedEventId}/blessings#post-${postId}`
-          : `/blessings#post-${postId}`
-        : resolvedEventId
-          ? `/${resolvedEventId}/blessings`
-          : '/blessings'
+        ? `/blessings/p/${postId}`
+        : '/blessings'
 
-  let targetPath = String(body.target_path || body.targetPath || fallbackTarget).trim()
+  const code = cleanCode(body.code || (postId ? postId.slice(0, 8) : mediaItemId ? mediaItemId.slice(0, 8) : ''))
+  if (!/^[0-9a-f]{6,16}$/.test(code)) return jsonError('Invalid code format')
+
+  const targetPath = String(body.target_path || body.targetPath || fallbackTarget).trim()
   if (!targetPath.startsWith('/')) return jsonError('target_path must start with /')
 
-  if (kind === 'bl' && postId) {
-    targetPath = resolvedEventId ? `/${resolvedEventId}/blessings#post-${postId}` : `/blessings#post-${postId}`
-  }
+  const srv = supabaseServiceRole()
 
-  const payload: Record<string, any> = { code, kind, target_path: targetPath }
-  if (resolvedEventId) payload.event_id = resolvedEventId
-  if (postId) payload.post_id = postId
-  if (mediaItemId) payload.media_item_id = mediaItemId
-
-  const attempts: Record<string, any>[] = [
-    payload,
-    { code, kind, target_path: targetPath, ...(resolvedEventId ? { event_id: resolvedEventId } : {}) },
-    { code, target_path: targetPath, ...(resolvedEventId ? { event_id: resolvedEventId } : {}) },
-    { code, target_path: targetPath }
-  ]
+  // Try schemas in this order:
+  // (1) code + kind + post_id/media_item_id + target_path (+event_id if exists)
+  // (2) code + kind + target_path
+  // (3) code + post_id + target_path (legacy)
+  // (4) code + target_path (legacy)
+  const attempts: any[] = []
+  if (postId) attempts.push({ code, kind, post_id: postId, target_path: targetPath, event_id: eventId || undefined })
+  if (mediaItemId) attempts.push({ code, kind, media_item_id: mediaItemId, target_path: targetPath, event_id: eventId || undefined })
+  attempts.push({ code, kind, target_path: targetPath, event_id: eventId || undefined })
+  if (postId) attempts.push({ code, post_id: postId, target_path: targetPath, event_id: eventId || undefined })
+  attempts.push({ code, target_path: targetPath })
 
   let lastErr: any = null
-  for (const attempt of attempts) {
-    const res = await srv.from('short_links').upsert(attempt, { onConflict: 'code' })
-    if (!res.error) {
-      return NextResponse.json({ ok: true, kind, code, event_id: resolvedEventId || null, target_path: targetPath })
-    }
+  for (const payload of attempts) {
+    const res = await srv.from('short_links').upsert(payload, { onConflict: 'code' })
+    if (!res.error) return NextResponse.json({ ok: true, kind, code, target_path: targetPath })
     lastErr = res.error
   }
 
