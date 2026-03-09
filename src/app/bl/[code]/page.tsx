@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import { supabaseServiceRole } from '@/lib/supabase'
 
@@ -12,13 +13,34 @@ function cleanCode(input: string) {
     .replace(/[^0-9a-z]/g, '')
 }
 
-async function resolve(code: string) {
+function baseUrlFromHeaders() {
+  const h = headers()
+  const host = h.get('x-forwarded-host') ?? h.get('host')
+  const proto = h.get('x-forwarded-proto') ?? 'https'
+  return host ? `${proto}://${host}`.replace(/\/$/, '') : ''
+}
+
+function baseUrl() {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL
+  if (explicit) return explicit.replace(/\/$/, '')
+  const vercel = process.env.VERCEL_URL
+  if (vercel) return `https://${vercel}`.replace(/\/$/, '')
+  return baseUrlFromHeaders()
+}
+
+async function getRow(code: string) {
   const srv = supabaseServiceRole()
-  const { data: row } = await srv
+  const { data } = await srv
     .from('short_links')
     .select('code, target_path, kind, event_id, post_id')
     .eq('code', code)
     .maybeSingle()
+  return data as any
+}
+
+async function resolve(code: string) {
+  const srv = supabaseServiceRole()
+  const row = await getRow(code)
 
   const kind = String((row as any)?.kind || '').trim()
   const eventId = String((row as any)?.event_id || '').trim()
@@ -46,59 +68,61 @@ async function resolve(code: string) {
   return null
 }
 
-async function getMetadataForCode(code: string) {
-  const srv = supabaseServiceRole()
-  const { data: row } = await srv
-    .from('short_links')
-    .select('code, event_id, post_id, target_path')
-    .eq('code', code)
-    .maybeSingle()
+export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
+  const code = cleanCode(params.code)
+  if (!code) return {}
 
+  const srv = supabaseServiceRole()
+  const row = await getRow(code)
   const postId = String((row as any)?.post_id || '').trim()
-  const eventIdFromRow = String((row as any)?.event_id || '').trim()
-  if (!postId) return null
+  const eventIdFromLink = String((row as any)?.event_id || '').trim()
+  if (!postId) return {}
 
   const { data: post } = await srv
     .from('posts')
-    .select('id,event_id,author_name,text,media_url,status')
+    .select('id,event_id,author_name,text,media_url,status,kind')
     .eq('id', postId)
     .maybeSingle()
 
-  if (!post) return null
+  if (!post || String((post as any)?.kind || '') !== 'blessing') return {}
 
-  const eventId = String((post as any)?.event_id || '').trim() || eventIdFromRow
-  let eventName = 'ברכות'
+  const eventId = String((post as any)?.event_id || '').trim() || eventIdFromLink
+  let eventName = 'אירוע'
+  let shareDescription = 'לחצו לקריאת הברכה'
   if (eventId) {
     const { data: settings } = await srv
       .from('event_settings')
-      .select('event_name,share_blessing_description')
+      .select('event_name,share_blessings_description')
       .eq('event_id', eventId)
       .order('updated_at', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     if ((settings as any)?.event_name) eventName = String((settings as any).event_name)
+    if ((settings as any)?.share_blessings_description) shareDescription = String((settings as any).share_blessings_description)
   }
 
   const author = String((post as any)?.author_name || '').trim()
-  const body = String((post as any)?.text || '').replace(/\s+/g, ' ').trim()
-  const title = author ? `${eventName} · ברכה מ${author}` : `${eventName} · ברכה`
-  const description = body ? body.slice(0, 140) : 'לחצו לצפייה בברכה'
-  const ogImage = `${process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')}/api/og/image?post=${encodeURIComponent(postId)}`
+  const text = String((post as any)?.text || '').replace(/\s+/g, ' ').trim()
+  const title = author ? `ברכות - ${eventName}` : `ברכה - ${eventName}`
+  const description = text || shareDescription
+  const ogImage = `${baseUrl()}/api/og/image?post=${encodeURIComponent(postId)}`
 
-  return { title, description, ogImage }
-}
-
-export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
-  const code = cleanCode(params.code)
-  if (!code) return {}
-  const meta = await getMetadataForCode(code)
-  if (!meta) return {}
   return {
-    title: meta.title,
-    description: meta.description,
-    openGraph: { title: meta.title, description: meta.description, type: 'website', images: [{ url: meta.ogImage, width: 630, height: 630 }] },
-    twitter: { card: 'summary_large_image', title: meta.title, description: meta.description, images: [meta.ogImage] }
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      images: [{ url: ogImage, width: 630, height: 630 }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [ogImage],
+    },
   }
 }
 
