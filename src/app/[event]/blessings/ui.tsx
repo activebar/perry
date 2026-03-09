@@ -644,13 +644,13 @@ async function saveEdit() {
                     })}
                   </div>
 
-                  <div className="flex items-center justify-between gap-3" dir="rtl">
-                    <div className="flex justify-start">
+                  <div className="grid grid-cols-2 items-center gap-2" dir="rtl">
+                    <div className="flex justify-end">
                       {shareEnabled ? (
                         <Button
                           variant="ghost"
                           onClick={() => sharePost(p)}
-                          className="h-12 min-w-[76px] rounded-full border border-zinc-200 bg-white px-3 py-2 text-lg text-zinc-700"
+                          className="min-w-0 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700"
                           title={String(settings?.share_button_label || 'שתף')}
                           type="button"
                         >
@@ -659,7 +659,7 @@ async function saveEdit() {
                       ) : <span />}
                     </div>
 
-                    <div className="flex min-w-0 flex-1 justify-end">
+                    <div className="flex justify-start">
                       <button
                         type="button"
                         onClick={() => {

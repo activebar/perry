@@ -112,7 +112,7 @@ export async function generateMetadata({ params }: { params: { code: string } })
 
   const fallbackOg = String((settings as any)?.og_default_image_url || '').trim() || `${baseUrl()}/api/og/image?default=1`
   const ogImage = resolved.postId
-    ? `${baseUrl()}/api/og/image?post=${encodeURIComponent(resolved.postId)}`
+    ? `${baseUrl()}/api/og/image?post=${encodeURIComponent(String(resolved.postId))}`
     : fallbackOg
   const pageUrl = `${baseUrl()}/bl/${encodeURIComponent(code)}`
 
