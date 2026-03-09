@@ -13,17 +13,36 @@ function cleanCode(input: string) {
 
 async function resolve(code: string) {
   const srv = supabaseServiceRole()
+  const { data: row } = await srv
+    .from('short_links')
+    .select('code, target_path, kind, event_id, post_id')
+    .eq('code', code)
+    .maybeSingle()
 
-  // Prefer schemas that include kind, but fallback to legacy schema without kind.
-  const first = await srv.from('short_links').select('target_path, kind').eq('code', code).maybeSingle()
-  if (first.data?.target_path) {
-    const k = String((first.data as any).kind || '').trim()
-    if (!k || k === 'bl') return String((first.data as any).target_path)
+  const kind = String((row as any)?.kind || '').trim()
+  const eventId = String((row as any)?.event_id || '').trim()
+  const postId = String((row as any)?.post_id || '').trim()
+  const targetPath = String((row as any)?.target_path || '').trim()
+
+  if (postId) {
+    const { data: post } = await srv.from('posts').select('id,event_id,status').eq('id', postId).maybeSingle()
+    const postEventId = String((post as any)?.event_id || '').trim() || eventId
+    if (postEventId) {
+      return `/${postEventId}/blessings#post-${postId}`
+    }
   }
 
-  // Legacy fallback: some schemas may not have `kind` column at all.
-  const second = await srv.from('short_links').select('target_path').eq('code', code).maybeSingle()
-  return (second.data as any)?.target_path ? String((second.data as any).target_path) : null
+  if (targetPath) {
+    if (/^\/[a-z0-9_-]+\/blessings(?:#.*)?$/i.test(targetPath)) return targetPath
+    if (/^\/blessings(?:#.*)?$/i.test(targetPath) && eventId) return `/${eventId}${targetPath}`
+    if (/^\/blessings\/p\/([0-9a-f-]{36})$/i.test(targetPath)) {
+      const id = targetPath.match(/^\/blessings\/p\/([0-9a-f-]{36})$/i)?.[1]
+      if (id) return eventId ? `/${eventId}/blessings#post-${id}` : `/blessings#post-${id}`
+    }
+    if (!kind || kind === 'bl') return targetPath
+  }
+
+  return null
 }
 
 export default async function ShortBLLinkPage({ params }: { params: { code: string } }) {

@@ -10,9 +10,50 @@ type Item = {
   thumb_url?: string | null
   created_at?: string
   editable_until?: string | null
+  uploader_device_id?: string | null
   is_approved?: boolean
   crop_position?: string | null
-  uploader_device_id?: string | null
+  reaction_counts?: Record<string, number>
+  my_reactions?: string[]
+}
+
+const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const escaped = name.replace(/[-.$?*|{}()\[\]\\/+^]/g, '\\$&')
+  const m = document.cookie.match(new RegExp('(^|; )' + escaped + '=([^;]*)'))
+  return m ? decodeURIComponent(m[2]) : null
+}
+
+function getLocalDeviceId(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage.getItem('device_id')
+  } catch {
+    return null
+  }
+}
+
+function ensureDeviceId(): string | null {
+  const fromCookie = getCookie('device_id')
+  const fromLocal = getLocalDeviceId()
+  const existing = fromCookie || fromLocal
+  if (existing) {
+    try {
+      if (!fromLocal) window.localStorage.setItem('device_id', existing)
+      if (!fromCookie) document.cookie = `device_id=${encodeURIComponent(existing)}; path=/; max-age=31536000; samesite=lax`
+    } catch {}
+    return existing
+  }
+  try {
+    const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`
+    window.localStorage.setItem('device_id', id)
+    document.cookie = `device_id=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`
+    return id
+  } catch {
+    return null
+  }
 }
 
 async function downloadUrl(url: string) {
@@ -50,32 +91,7 @@ async function shareUrl(url: string) {
   }
 }
 
-
-function readCookie(name: string) {
-  if (typeof document === 'undefined') return null
-  const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[$()*+.?[\\]^{|}]/g, '\\$&') + '=([^;]*)'))
-  return m ? decodeURIComponent(m[1]) : null
-}
-
-function getClientDeviceId() {
-  if (typeof window === 'undefined') return null
-  return window.localStorage.getItem('device_id') || readCookie('device_id')
-}
-
-function secondsLeftFor(item?: Item | null) {
-  if (!item?.editable_until) return 0
-  const ms = new Date(item.editable_until).getTime() - Date.now()
-  return Math.max(0, Math.floor(ms / 1000))
-}
-
-function fmtMMSS(sec: number) {
-  const s = Math.max(0, sec | 0)
-  const mm = String(Math.floor(s / 60)).padStart(2, '0')
-  const ss = String(s % 60).padStart(2, '0')
-  return `${mm}:${ss}`
-}
-
-async function ensureShortLinkForMedia(mediaItemId: string) {
+async function ensureShortLinkForMedia(mediaItemId: string, eventId?: string | null) {
   const id = String(mediaItemId || '').trim()
   if (!id) return null
   const code = id.slice(0, 8)
@@ -86,6 +102,7 @@ async function ensureShortLinkForMedia(mediaItemId: string) {
       body: JSON.stringify({
         kind: 'gl',
         mediaItemId: id,
+        eventId: eventId || undefined,
         code,
         targetPath: `/media/${id}`,
       }),
@@ -98,7 +115,6 @@ async function ensureShortLinkForMedia(mediaItemId: string) {
 }
 
 async function fileToImageBitmap(file: File) {
-  // createImageBitmap is fast and widely supported
   return await createImageBitmap(file)
 }
 
@@ -108,18 +124,12 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
   const srcH = bmp.height
   const srcPixels = srcW * srcH
 
-  // Scale down to meet maxPixels (2MP) while preserving aspect ratio
   let scale = 1
-  if (srcPixels > maxPixels) {
-    scale = Math.sqrt(maxPixels / srcPixels)
-  }
+  if (srcPixels > maxPixels) scale = Math.sqrt(maxPixels / srcPixels)
 
-  // Also cap the longest side (helps very tall/wide images)
   const maxLongSide = 2200
   const longSide = Math.max(srcW, srcH)
-  if (longSide * scale > maxLongSide) {
-    scale = maxLongSide / longSide
-  }
+  if (longSide * scale > maxLongSide) scale = maxLongSide / longSide
 
   const dstW = Math.max(1, Math.round(srcW * scale))
   const dstH = Math.max(1, Math.round(srcH * scale))
@@ -131,7 +141,6 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
   if (!ctx) throw new Error('canvas not supported')
   ctx.drawImage(bmp, 0, 0, dstW, dstH)
 
-  // Try a few quality levels to stay under maxBytes
   const qualities = [0.86, 0.82, 0.78, 0.72, 0.66, 0.6]
   for (const q of qualities) {
     const blob: Blob = await new Promise((resolve, reject) =>
@@ -140,11 +149,25 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
     if (blob.size <= maxBytes) return blob
   }
 
-  // Last resort: return lowest quality blob
   const finalBlob: Blob = await new Promise((resolve, reject) =>
     canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', 0.55)
   )
   return finalBlob
+}
+
+function mapItem(x: any): Item {
+  return {
+    id: x.id,
+    url: x.url || x.media_url || x.public_url || '',
+    thumb_url: x.thumb_url || x.url || x.media_url || x.public_url || '',
+    created_at: x.created_at,
+    editable_until: x.editable_until ?? null,
+    uploader_device_id: x.uploader_device_id ?? null,
+    is_approved: x.is_approved ?? true,
+    crop_position: x.crop_position ?? null,
+    reaction_counts: x.reaction_counts || { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
+    my_reactions: x.my_reactions || []
+  }
 }
 
 export default function GalleryClient({
@@ -158,117 +181,92 @@ export default function GalleryClient({
   uploadEnabled: boolean
   eventId: string
 }) {
-  const [items, setItems] = useState<Item[]>(
-    (initialItems || []).map((x: any) => ({
-      id: x.id,
-      url: x.url || x.media_url || x.public_url || '',
-      thumb_url: x.thumb_url || x.url || x.media_url || x.public_url || '',
-      created_at: x.created_at,
-      editable_until: x.editable_until ?? null,
-      is_approved: x.is_approved ?? true,
-      crop_position: x.crop_position ?? null,
-      uploader_device_id: x.uploader_device_id ?? null
-    }))
-  )
+  const [items, setItems] = useState<Item[]>((initialItems || []).map(mapItem))
   const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<Item | null>(null)
   const [deviceId, setDeviceId] = useState<string | null>(null)
-  const replaceInputRef = useRef<HTMLInputElement | null>(null)
-
-  // Keep state in sync when navigating between galleries.
-  useEffect(() => {
-    setItems(
-      (initialItems || []).map((x: any) => ({
-        id: x.id,
-        url: x.url || x.media_url || x.public_url || '',
-        created_at: x.created_at,
-        editable_until: x.editable_until ?? null,
-        is_approved: x.is_approved ?? true,
-        crop_position: x.crop_position ?? null
-      }))
-    )
-  }, [galleryId, initialItems])
-
-
-  useEffect(() => {
-    let id = getClientDeviceId()
-    if (!id && typeof window !== 'undefined' && typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      id = crypto.randomUUID()
-      try { window.localStorage.setItem('device_id', id) } catch {}
-      try { document.cookie = `device_id=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax` } catch {}
-    }
-    setDeviceId(id)
-  }, [])
-
-  const canManageItem = (it?: Item | null) => {
-    if (!it || !it.editable_until || !it.uploader_device_id || !deviceId) return false
-    return deviceId === it.uploader_device_id && secondsLeftFor(it) > 0
-  }
-
-  // Self-heal (once): client navigation can occasionally hydrate with stale/empty server props.
-  const healedRef = useRef<string | null>(null)
-  useEffect(() => {
-    const key = `${eventId}__${galleryId}`
-    if (!eventId || !galleryId) return
-    if (healedRef.current === key) return
-    if ((items || []).length > 0) return
-
-    healedRef.current = key
-
-    ;(async () => {
-      try {
-        const qs = new URLSearchParams({
-          event: String(eventId),
-          gallery_id: String(galleryId)
-        })
-        const res = await fetch(`/api/public/gallery-items?${qs.toString()}`, {
-          cache: 'no-store'
-        })
-        if (!res.ok) return
-        const j = await res.json()
-        const next = Array.isArray(j?.items) ? j.items : []
-        setItems(
-          next.map((x: any) => ({
-            id: x.id,
-            url: x.url || x.media_url || x.public_url || '',
-            created_at: x.created_at,
-            editable_until: x.editable_until ?? null,
-            is_approved: x.is_approved ?? true,
-            crop_position: x.crop_position ?? null
-          }))
-        )
-      } catch {
-        // ignore
-      }
-    })()
-  }, [eventId, galleryId, initialItems, items])
-
-  // Select + ZIP (client-side)
-    const DIRECT_MAX = 8
-    const ZIP_MAX = 20
+  const [nowTs, setNowTs] = useState<number>(Date.now())
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [zipBusy, setZipBusy] = useState(false)
 
-  const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
+  const replaceInputRef = useRef<HTMLInputElement | null>(null)
+  const pickerRef = useRef<HTMLInputElement | null>(null)
+  const cameraRef = useRef<HTMLInputElement | null>(null)
 
-    const isIOSSafari = useMemo(() => {
-      if (typeof navigator === 'undefined') return false
-      const ua = navigator.userAgent || ''
-      const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
-      const safari = /^((?!chrome|android).)*safari/i.test(ua)
-      return iOS && safari
-    }, [])
+  useEffect(() => {
+    setItems((initialItems || []).map(mapItem))
+  }, [galleryId, initialItems])
 
-    const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
+  useEffect(() => {
+    setDeviceId(ensureDeviceId())
+    const t = window.setInterval(() => setNowTs(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    async function pull() {
+      try {
+        const qs = new URLSearchParams({ event: String(eventId), gallery_id: String(galleryId) })
+        const res = await fetch(`/api/public/gallery-items?${qs.toString()}&ts=${Date.now()}`, { cache: 'no-store' })
+        if (!res.ok) return
+        const j = await res.json().catch(() => ({}))
+        const next = Array.isArray(j?.items) ? j.items.map(mapItem) : []
+        if (cancelled) return
+        setItems(next)
+        setLightbox(prev => {
+          if (!prev) return prev
+          const fresh = next.find((x: Item) => x.id === prev.id)
+          return fresh || null
+        })
+      } catch {
+        // ignore
+      }
+    }
+    pull()
+    const t = window.setInterval(pull, 15000)
+    return () => {
+      cancelled = true
+      window.clearInterval(t)
+    }
+  }, [eventId, galleryId])
 
-  const clearSelected = () => {
-    setSelected({})
+  function canManageItem(it?: Item | null) {
+    const until = it?.editable_until ? new Date(it.editable_until).getTime() : 0
+    if (!it || !until || !it.uploader_device_id || !deviceId) return false
+    return deviceId === it.uploader_device_id && nowTs < until
   }
+
+  function secondsLeftFor(it?: Item | null) {
+    const until = it?.editable_until ? new Date(it.editable_until).getTime() : 0
+    return Math.max(0, Math.floor((until - nowTs) / 1000))
+  }
+
+  function fmtMMSS(sec: number) {
+    const s = Math.max(0, sec | 0)
+    const mm = String(Math.floor(s / 60)).padStart(2, '0')
+    const ss = String(s % 60).padStart(2, '0')
+    return `${mm}:${ss}`
+  }
+
+  const DIRECT_MAX = 8
+  const ZIP_MAX = 20
+  const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
+  const isIOSSafari = useMemo(() => {
+    if (typeof navigator === 'undefined') return false
+    const ua = navigator.userAgent || ''
+    const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+    const safari = /^((?!chrome|android).)*safari/i.test(ua)
+    return iOS && safari
+  }, [])
+  const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
+  const feed = useMemo(() => (items || []).filter(i => i.url), [items])
+
+  const clearSelected = () => setSelected({})
 
   const toggleSelected = (id: string) => {
     setErr(null)
@@ -296,103 +294,35 @@ export default function GalleryClient({
     setLightbox(it)
   }
 
-    const downloadSelectedDirect = async () => {
-      try {
-        setErr(null)
-        setMsg(null)
-        const ids = Object.keys(selected)
-        if (ids.length === 0) return
-
-        setZipBusy(true)
-
-        // Direct download (1-8): fetch each file and force a short filename: activebar_01.jpg ...
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i]
-          const it = items.find(x => x.id === id)
-          if (!it?.url) continue
-
-          const res = await fetch(it.url)
-          if (!res.ok) throw new Error('download failed')
-          const blob = await res.blob()
-          const ext = blob.type === 'image/png' ? 'png' : 'jpg'
-          const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
-
-          const href = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = href
-          a.download = name
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          URL.revokeObjectURL(href)
-
-          // small delay so browsers don't block multiple downloads aggressively
-          await new Promise(r => setTimeout(r, 250))
-        }
-
-        setMsg('✅ ההורדות התחילו')
-        clearSelected()
-        setSelectMode(false)
-      } catch (e: any) {
-        setErr(e?.message || 'שגיאה בהורדה')
-      } finally {
-        setZipBusy(false)
-      }
-    }
-
-    const downloadSelectedZip = async () => {
-    try {
-      setErr(null)
-      setMsg(null)
-      const ids = Object.keys(selected)
-      if (ids.length === 0) return
-
-      setZipBusy(true)
-      const zip = new JSZip()
-
-      for (let i = 0; i < ids.length; i++) {
-        const id = ids[i]
-        const it = items.find(x => x.id === id)
-        if (!it?.url) continue
-        const res = await fetch(it.url)
-        const blob = await res.blob()
-        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
-        zip.file(`activebar_${String(i + 1).padStart(2, '0')}.${ext}`, blob)
-      }
-
-      const out = await zip.generateAsync({ type: 'blob' })
-      const href = URL.createObjectURL(out)
-      const a = document.createElement('a')
-      a.href = href
-      a.download = `activebar_${(galleryId || '').slice(0, 6)}.zip`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(href)
-
-      setMsg('הורדת ZIP התחילה')
-      clearSelected()
-      setSelectMode(false)
-    } catch (e: any) {
-      setErr(e?.message || 'שגיאה בהורדת ZIP')
-    } finally {
-      setZipBusy(false)
-    }
+  async function shareItem(it: Item) {
+    const short = await ensureShortLinkForMedia(it.id, eventId)
+    await shareUrl(short || it.url)
   }
 
-
-  const pickerRef = useRef<HTMLInputElement | null>(null)
-
-  const feed = useMemo(() => (items || []).filter(i => i.url), [items])
-
-  async function shareItem(it: Item) {
-    const short = await ensureShortLinkForMedia(it.id)
-    await shareUrl(short || it.url)
+  async function toggleReaction(itemId: string, emoji: string) {
+    setErr(null)
+    try {
+      const res = await fetch('/api/reactions/toggle', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ post_id: itemId, emoji })
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || 'שגיאה')
+      setItems(prev => prev.map(it => it.id === itemId ? { ...it, reaction_counts: j.counts || it.reaction_counts, my_reactions: j.my || it.my_reactions } : it))
+      setLightbox(prev => prev?.id === itemId ? { ...prev, reaction_counts: j.counts || prev.reaction_counts, my_reactions: j.my || prev.my_reactions } : prev)
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה')
+    }
   }
 
   function addFiles(list: FileList | null) {
     const arr = Array.from(list || []).filter(f => (f.type || '').startsWith('image/'))
     if (arr.length === 0) return
+    if (lightbox && arr.length === 1 && canManageItem(lightbox)) {
+      replaceItem(lightbox, arr[0])
+      return
+    }
     setFiles(prev => [...prev, ...arr].slice(0, 50))
   }
 
@@ -406,7 +336,7 @@ export default function GalleryClient({
     setMsg(null)
     setBusy(true)
     try {
-            for (const f of files) {
+      for (const f of files) {
         const blob = await compressToJpeg2MP(f)
         const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
 
@@ -421,7 +351,17 @@ export default function GalleryClient({
         if (!res.ok) throw new Error(j?.error || 'upload failed')
 
         if (j?.publicUrl) {
-          const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
+          const created: Item = {
+            id: j.id || j.path || crypto.randomUUID(),
+            url: j.publicUrl,
+            thumb_url: j.thumbUrl || j.publicUrl,
+            created_at: new Date().toISOString(),
+            editable_until: j.editable_until || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            uploader_device_id: deviceId,
+            is_approved: !!j.is_approved,
+            reaction_counts: { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
+            my_reactions: []
+          }
           if (j.is_approved) {
             setItems(prev => [created, ...prev])
           } else {
@@ -436,7 +376,6 @@ export default function GalleryClient({
       setBusy(false)
     }
   }
-
 
   async function deleteItem(it: Item) {
     if (!canManageItem(it)) return
@@ -474,16 +413,98 @@ export default function GalleryClient({
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error || 'upload failed')
-      const created: Item = { id: j.id || j.path || crypto.randomUUID(), url: j.publicUrl, thumb_url: j.thumbUrl || j.publicUrl, created_at: new Date().toISOString(), editable_until: j.editable_until || new Date(Date.now()+60*60*1000).toISOString(), is_approved: !!j.is_approved, uploader_device_id: deviceId }
+      const created: Item = {
+        id: j.id || j.path || crypto.randomUUID(),
+        url: j.publicUrl,
+        thumb_url: j.thumbUrl || j.publicUrl,
+        created_at: new Date().toISOString(),
+        editable_until: j.editable_until || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        is_approved: !!j.is_approved,
+        uploader_device_id: deviceId,
+        reaction_counts: { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
+        my_reactions: []
+      }
       await fetch('/api/public/media-delete', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: it.id, device_id: deviceId }) })
       setItems(prev => [created, ...prev.filter(x => x.id !== it.id)])
       setLightbox(created)
       setMsg('✅ עודכן')
-    } catch (e:any) {
+    } catch (e: any) {
       setErr(e?.message || 'שגיאה בעריכה')
     } finally {
       setBusy(false)
       if (replaceInputRef.current) replaceInputRef.current.value = ''
+    }
+  }
+
+  const downloadSelectedDirect = async () => {
+    try {
+      setErr(null)
+      setMsg(null)
+      const ids = Object.keys(selected)
+      if (ids.length === 0) return
+      setZipBusy(true)
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const it = items.find(x => x.id === id)
+        if (!it?.url) continue
+        const res = await fetch(it.url)
+        if (!res.ok) throw new Error('download failed')
+        const blob = await res.blob()
+        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+        const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
+        const href = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = href
+        a.download = name
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(href)
+        await new Promise(r => setTimeout(r, 250))
+      }
+      setMsg('✅ ההורדות התחילו')
+      clearSelected()
+      setSelectMode(false)
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בהורדה')
+    } finally {
+      setZipBusy(false)
+    }
+  }
+
+  const downloadSelectedZip = async () => {
+    try {
+      setErr(null)
+      setMsg(null)
+      const ids = Object.keys(selected)
+      if (ids.length === 0) return
+      setZipBusy(true)
+      const zip = new JSZip()
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const it = items.find(x => x.id === id)
+        if (!it?.url) continue
+        const res = await fetch(it.url)
+        const blob = await res.blob()
+        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+        zip.file(`activebar_${String(i + 1).padStart(2, '0')}.${ext}`, blob)
+      }
+      const out = await zip.generateAsync({ type: 'blob' })
+      const href = URL.createObjectURL(out)
+      const a = document.createElement('a')
+      a.href = href
+      a.download = `activebar_${(galleryId || '').slice(0, 6)}.zip`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(href)
+      setMsg('הורדת ZIP התחילה')
+      clearSelected()
+      setSelectMode(false)
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בהורדת ZIP')
+    } finally {
+      setZipBusy(false)
     }
   }
 
@@ -500,6 +521,9 @@ export default function GalleryClient({
             <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
             </Button>
+            <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()} disabled={!uploadEnabled} className="sm:w-44">
+              צלם תמונה
+            </Button>
             <input
               ref={pickerRef}
               type="file"
@@ -509,22 +533,21 @@ export default function GalleryClient({
               className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
               disabled={!uploadEnabled}
             />
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={e => addFiles(e.target.files)}
+              className="hidden"
+              disabled={!uploadEnabled}
+            />
           </div>
         </div>
 
-        {/* Select + ZIP */}
         <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
           {!selectMode ? (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setErr(null)
-                setMsg(null)
-                clearSelected()
-                setSelectMode(true)
-              }}
-              disabled={zipBusy}
-            >
+            <Button variant="ghost" onClick={() => { setErr(null); setMsg(null); clearSelected(); setSelectMode(true) }} disabled={zipBusy}>
               בחר תמונות
             </Button>
           ) : (
@@ -532,16 +555,7 @@ export default function GalleryClient({
               <Button onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip} disabled={zipBusy || selectedCount === 0}>
                 {zipBusy ? (useDirect ? 'מוריד…' : 'מכין ZIP…') : (selectedCount <= DIRECT_MAX ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})` : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
               </Button>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setSelectMode(false)
-                  clearSelected()
-                  setErr(null)
-                  setMsg(null)
-                }}
-                disabled={zipBusy}
-              >
+              <Button variant="ghost" onClick={() => { setSelectMode(false); clearSelected(); setErr(null); setMsg(null) }} disabled={zipBusy}>
                 ביטול
               </Button>
             </div>
@@ -549,9 +563,7 @@ export default function GalleryClient({
 
           {selectMode ? (
             <p className="text-xs text-zinc-500 text-right">סמן עד {ZIP_MAX} תמונות. 1–{DIRECT_MAX} יורד ישיר, {DIRECT_MAX + 1}–{ZIP_MAX} יורד ZIP. אחרי הורדה אפשר לבחור שוב.</p>
-          ) : (
-            <span />
-          )}
+          ) : <span />}
         </div>
 
         {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
@@ -562,19 +574,26 @@ export default function GalleryClient({
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
           <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              onClick={() => setLightbox(null)}
-              className="absolute left-2 top-2 z-10 bg-white/90 text-black shadow hover:bg-white"
-              type="button"
-            >
+            <Button variant="ghost" onClick={() => setLightbox(null)} className="absolute left-2 top-2 z-10 bg-white/90 text-black shadow hover:bg-white" type="button">
               סגור
             </Button>
 
             <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
 
             <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow-lg" dir="rtl">
-              <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {EMOJIS.map(emo => {
+                  const active = (lightbox.my_reactions || []).includes(emo)
+                  const c = (lightbox.reaction_counts || {})[emo] || 0
+                  return (
+                    <Button key={emo} variant={active ? 'primary' : 'ghost'} className="min-w-[54px] rounded-full px-3" onClick={() => toggleReaction(lightbox.id, emo)} type="button">
+                      {c ? `${c} ` : ''}{emo}
+                    </Button>
+                  )
+                })}
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
                 {canManageItem(lightbox) ? <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeftFor(lightbox))}</span> : null}
                 {canManageItem(lightbox) ? (
                   <>
@@ -593,44 +612,19 @@ export default function GalleryClient({
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {feed.map(it => (
-          <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
-            <button
-              className="relative block aspect-square w-full bg-zinc-50"
-              onClick={() => onThumbClick(it)}
-              type="button"
-            >
-              <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
-
+          <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
+            <button className="relative block aspect-square w-full bg-zinc-50" onClick={() => onThumbClick(it)} type="button">
+              <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') as any }} />
               {selectMode ? (
                 <div className="absolute left-2 top-2">
-                  <div
-                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
-                    aria-hidden
-                  >
+                  <div className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${selected[it.id] ? 'font-bold' : ''}`} aria-hidden>
                     {selected[it.id] ? '✓' : ''}
                   </div>
                 </div>
               ) : null}
             </button>
-
-            <div className="p-3 space-y-2">
-              {!selectMode ? (
-                <>
-                  <div className="flex items-center justify-between gap-2" dir="rtl">
-                    <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">הורד</Button>
-                    <Button variant="ghost" onClick={() => shareItem(it)} type="button">שתף</Button>
-                  </div>
-                  {canManageItem(it) ? (
-                    <div className="flex flex-wrap items-center justify-end gap-2" dir="rtl">
-                      <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeftFor(it))}</span>
-                      <Button variant="ghost" onClick={() => { setLightbox(it); setTimeout(() => replaceInputRef.current?.click(), 0) }} type="button">עריכה</Button>
-                      <Button variant="ghost" onClick={() => deleteItem(it)} type="button">מחק</Button>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
-              )}
+            <div className="p-3">
+              {selectMode ? <span className="text-xs text-zinc-500">מצב בחירה פעיל</span> : null}
             </div>
           </div>
         ))}

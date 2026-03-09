@@ -444,12 +444,13 @@ async function saveEdit() {
   function buildLinkForPost(postId?: string) {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const base = origin ? `${origin}` : ''
-    const blessings = `${base}/blessings`
+    const blessingsPath = effectiveEventId ? `/${encodeURIComponent(effectiveEventId)}/blessings` : '/blessings'
+    const blessings = `${base}${blessingsPath}`
     if (postId && shareUsePermalink) {
-      const code = String(postId).split('-')[0]
+      const code = String(postId).slice(0, 8)
       return `${base}/bl/${code}`
     }
-    return blessings
+    return postId ? `${blessings}#post-${postId}` : blessings
   }
 
   async function sharePost(p: Post) {
@@ -457,13 +458,15 @@ async function saveEdit() {
     const code = (p.id || '').slice(0, 8)
     // Ensure the short link exists in DB so /b/{code} can always be resolved
     try {
-      await fetch(`/api/short-links${eventQuery}`, {
+      await fetch('/api/short-links', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          kind: 'bl',
           postId: p.id,
+          eventId: effectiveEventId || undefined,
           code,
-          targetPath: `/blessings/p/${p.id}`,
+          targetPath: effectiveEventId ? `/${effectiveEventId}/blessings#post-${p.id}` : `/blessings#post-${p.id}`,
         }),
       })
     } catch {
@@ -504,7 +507,7 @@ async function saveEdit() {
   return (
     <main dir="rtl" className="text-right">
       <Container>
-<Card>
+<Card id="blessing-form">
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
@@ -635,7 +638,7 @@ async function saveEdit() {
                         <Button
                           key={emo}
                           variant={active ? 'primary' : 'ghost'}
-                          className="min-w-[64px] shrink-0 rounded-full"
+                          className="h-10 min-w-[52px] shrink-0 rounded-full px-3"
                           onClick={() => toggleReaction(p.id, emo)}
                         >
                           {c ? `${c} ` : ''}{emo}
@@ -644,24 +647,11 @@ async function saveEdit() {
                     })}
                   </div>
 
-                  <div className="flex items-center justify-between gap-3" dir="rtl">
-                    {shareEnabled ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => sharePost(p)}
-                        className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 shrink-0"
-                        title={String(settings?.share_button_label || 'שתף')}
-                        type="button"
-                      >
-                        🔗
-                      </Button>
-                    ) : <span />}
-
+                  <div className="flex items-center justify-between gap-3" dir="ltr">
                     <button
                       type="button"
                       onClick={() => {
                         try {
-                          window.scrollTo({ top: 0, behavior: 'smooth' })
                           const el = document.getElementById('blessing-form') as HTMLElement | null
                           el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                           const ta = document.querySelector('#blessing-form textarea') as HTMLTextAreaElement | null
@@ -672,6 +662,18 @@ async function saveEdit() {
                     >
                       כתוב ברכה
                     </button>
+
+                    {shareEnabled ? (
+                      <Button
+                        variant="ghost"
+                        onClick={() => sharePost(p)}
+                        className="shrink-0 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700"
+                        title={String(settings?.share_button_label || 'שתף')}
+                        type="button"
+                      >
+                        🔗
+                      </Button>
+                    ) : <span />}
                   </div>
                 </div>
 

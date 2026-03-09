@@ -1,20 +1,32 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 
 import { Container, Card, Button } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
-import { fetchSettings } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+function baseUrlFromHeaders() {
+  const h = headers()
+  const host = h.get('x-forwarded-host') ?? h.get('host')
+  const proto = h.get('x-forwarded-proto') ?? 'https'
+  return host ? `${proto}://${host}`.replace(/\/$/, '') : ''
+}
 
 function baseUrl() {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL
   if (explicit) return explicit.replace(/\/$/, '')
   const vercel = process.env.VERCEL_URL
   if (vercel) return `https://${vercel}`.replace(/\/$/, '')
-  return ''
+  return baseUrlFromHeaders()
+}
+
+function toPublic(storagePath: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  return supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/uploads/${storagePath}` : ''
 }
 
 async function getMedia(id: string) {
@@ -31,15 +43,31 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const id = decodeURIComponent(params.id)
   if (!/^[0-9a-f-]{36}$/i.test(id)) return {}
 
-  const settings = await fetchSettings().catch(() => null)
   const mi = await getMedia(id)
   if (!mi) return {}
 
-  const eventName = String((settings as any)?.event_name || 'אירוע')
-  const title = `${eventName} · תמונה` 
-  const description = String((settings as any)?.share_gallery_description || 'לחצו לצפייה בתמונה')
-  const b = baseUrl()
-  const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}`
+  let eventName = 'אירוע'
+  let description = 'לחצו לצפייה בתמונה'
+  if (mi.event_id) {
+    const sb = supabaseServiceRole()
+    const { data: settings } = await sb
+      .from('event_settings')
+      .select('event_name,share_gallery_description')
+      .eq('event_id', String(mi.event_id))
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if ((settings as any)?.event_name) eventName = String((settings as any).event_name)
+    if ((settings as any)?.share_gallery_description) description = String((settings as any).share_gallery_description)
+  }
+
+  const title = `${eventName} · תמונה`
+  const ogImage =
+    String(mi.thumb_url || '').trim() ||
+    String(mi.public_url || '').trim() ||
+    String(mi.url || '').trim() ||
+    (String(mi.storage_path || '').trim() ? toPublic(String(mi.storage_path)) : `${baseUrl()}/api/og/image?media=${encodeURIComponent(String(mi.id))}`)
 
   return {
     title,
@@ -70,6 +98,7 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
   if (!url) notFound()
 
   const galleryId = mi.gallery_id ? String(mi.gallery_id) : null
+  const eventId = mi.event_id ? String(mi.event_id) : null
 
   return (
     <main className="py-10" dir="rtl">
@@ -82,7 +111,6 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
         <Card dir="rtl">
           <div className="space-y-4">
             <div className="overflow-hidden rounded-2xl bg-zinc-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt="" className="w-full max-h-[75vh] object-contain" />
             </div>
 
@@ -95,9 +123,13 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
                   <Button variant="ghost">הורדה</Button>
                 </a>
               </div>
-              {galleryId ? (
-                <Link href={`/gallery/${encodeURIComponent(galleryId)}`}>
+              {galleryId && eventId ? (
+                <Link href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(galleryId)}`}>
                   <Button variant="ghost">חזרה לגלריה</Button>
+                </Link>
+              ) : eventId ? (
+                <Link href={`/${encodeURIComponent(eventId)}/gallery`}>
+                  <Button variant="ghost">לכל הגלריות</Button>
                 </Link>
               ) : (
                 <Link href="/">
