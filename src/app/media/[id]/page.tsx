@@ -29,6 +29,33 @@ function toPublic(storagePath: string) {
   return supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/uploads/${storagePath}` : ''
 }
 
+function galleryTitleFromConfig(cfg: any, fallback = '') {
+  return (
+    String(cfg?.title || '').trim() ||
+    String(cfg?.button_label || '').trim() ||
+    String(cfg?.label || '').trim() ||
+    String(cfg?.name || '').trim() ||
+    fallback
+  )
+}
+
+async function getGalleryDisplayTitle(eventId: string, galleryId: string, fallback = 'תמונה') {
+  if (!eventId || !galleryId) return fallback
+  const sb = supabaseServiceRole()
+  const { data: blocks } = await sb
+    .from('blocks')
+    .select('config,order_index,is_visible,type')
+    .eq('event_id', eventId)
+    .eq('is_visible', true)
+    .or('type.eq.gallery,type.like.gallery_%')
+    .order('order_index', { ascending: true })
+  for (const b of blocks || []) {
+    const cfg = (b as any)?.config || {}
+    if (String(cfg?.gallery_id || '').trim() === galleryId) return galleryTitleFromConfig(cfg, fallback)
+  }
+  return fallback
+}
+
 async function getMedia(id: string) {
   const sb = supabaseServiceRole()
   const { data } = await sb
@@ -48,6 +75,11 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
   let eventName = 'אירוע'
   let description = 'לחצו לצפייה בתמונה'
+  let galleryTitle = 'תמונה'
+  if (mi.gallery_id && mi.event_id) {
+    galleryTitle = await getGalleryDisplayTitle(String(mi.event_id), String(mi.gallery_id), 'תמונה')
+  }
+
   if (mi.event_id) {
     const sb = supabaseServiceRole()
     const { data: settings } = await sb
@@ -62,12 +94,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     if ((settings as any)?.share_gallery_description) description = String((settings as any).share_gallery_description)
   }
 
-  const title = `${eventName} · תמונה`
-  const ogImage =
-    String(mi.public_url || '').trim() ||
-    String(mi.thumb_url || '').trim() ||
-    String(mi.url || '').trim() ||
-    (String(mi.storage_path || '').trim() ? toPublic(String(mi.storage_path)) : `${baseUrl()}/api/og/image?media=${encodeURIComponent(String(mi.id))}`)
+  const title = `${eventName} · ${galleryTitle}`
+  const ogImage = `${baseUrl()}/api/og/image?media=${encodeURIComponent(String(mi.id))}`
 
   return {
     title,
@@ -76,7 +104,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
       title,
       description,
       type: 'website',
-      images: [{ url: ogImage, width: 800, height: 800 }],
+      images: [{ url: ogImage, width: 630, height: 630 }],
     },
     twitter: {
       card: 'summary_large_image',
@@ -104,7 +132,7 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
     <main className="py-10" dir="rtl">
       <Container>
         <div className="mb-4 text-right">
-          <h1 className="text-2xl font-semibold">תמונה</h1>
+          <h1 className="text-2xl font-semibold">{galleryId && eventId ? 'תמונה מהגלריה' : 'תמונה'}</h1>
           <p className="mt-1 text-sm text-zinc-600">לחצו לפתיחה מלאה או הורדה.</p>
         </div>
 

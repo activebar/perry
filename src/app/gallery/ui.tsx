@@ -301,6 +301,7 @@ export default function GalleryClient({
 
   async function toggleReaction(itemId: string, emoji: string) {
     setErr(null)
+    ensureDeviceId()
     try {
       const res = await fetch('/api/reactions/toggle', {
         method: 'POST',
@@ -521,8 +522,9 @@ export default function GalleryClient({
             <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()} disabled={!uploadEnabled} className="sm:w-44">
-              📷 צלם תמונה
+            <Button type="button" variant="ghost" onClick={() => cameraRef.current?.click()} disabled={!uploadEnabled} className="sm:w-44 gap-2">
+              <span aria-hidden>📷</span>
+              <span>צלם תמונה</span>
             </Button>
             <input
               ref={pickerRef}
@@ -586,23 +588,23 @@ export default function GalleryClient({
                   const active = (lightbox.my_reactions || []).includes(emo)
                   const c = (lightbox.reaction_counts || {})[emo] || 0
                   return (
-                    <Button key={emo} variant={active ? 'primary' : 'ghost'} className="min-w-[54px] rounded-full px-3" onClick={() => toggleReaction(lightbox.id, emo)} type="button">
+                    <Button key={emo} variant={active ? 'primary' : 'ghost'} className="min-w-[62px] rounded-full px-3" onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleReaction(lightbox.id, emo) }} type="button">
                       {c ? `${c} ` : ''}{emo}
                     </Button>
                   )
                 })}
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                {canManageItem(lightbox) ? <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeftFor(lightbox))}</span> : null}
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button" className="gap-2"><span aria-hidden>🔗</span><span>שתף</span></Button>
+                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button" className="gap-2"><span aria-hidden>⬇️</span><span>הורד</span></Button>
                 {canManageItem(lightbox) ? (
                   <>
-                    <Button variant="ghost" type="button" onClick={() => replaceInputRef.current?.click()}>עריכה</Button>
-                    <Button variant="ghost" type="button" onClick={() => deleteItem(lightbox)}>מחק</Button>
+                    <Button variant="ghost" type="button" onClick={() => replaceInputRef.current?.click()} className="gap-2"><span aria-hidden>✏️</span><span>עריכה</span></Button>
+                    <Button variant="ghost" type="button" onClick={() => deleteItem(lightbox)} className="gap-2"><span aria-hidden>🗑️</span><span>מחק</span></Button>
+                    <span className="rounded-full bg-zinc-100 px-3 py-2 text-xs text-zinc-600">⏳ {fmtMMSS(secondsLeftFor(lightbox))}</span>
                   </>
                 ) : null}
-                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">הורד</Button>
-                <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">שתף</Button>
               </div>
               <input ref={replaceInputRef} type="file" accept="image/*" className="hidden" onChange={e => replaceItem(lightbox, e.target.files?.[0] || null)} />
             </div>
@@ -612,7 +614,7 @@ export default function GalleryClient({
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {feed.map(it => (
-          <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+          <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
             <button className="relative block aspect-square w-full bg-zinc-50" onClick={() => onThumbClick(it)} type="button">
               <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') as any }} />
               {selectMode ? (
@@ -623,14 +625,28 @@ export default function GalleryClient({
                 </div>
               ) : null}
             </button>
-            <div className="p-2">
+            <div className="p-3">
               {selectMode ? (
-                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+                <span className="block text-center text-xs text-zinc-500">מצב בחירה פעיל</span>
               ) : (
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <button type="button" className="rounded-full border px-2 py-1" onClick={() => shareItem(it)}>שתף</button>
-                  <button type="button" className="rounded-full border px-2 py-1" onClick={() => downloadUrl(it.url)}>הורד</button>
-                  <button type="button" className="rounded-full border px-2 py-1" onClick={() => setLightbox(it)}>אימוג׳י</button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Button variant="ghost" type="button" onClick={() => shareItem(it)} className="min-w-[54px] rounded-full px-3">🔗</Button>
+                  <Button variant="ghost" type="button" onClick={() => downloadUrl(it.url)} className="min-w-[54px] rounded-full px-3">⬇️</Button>
+                  {EMOJIS.map(emo => {
+                    const active = (it.my_reactions || []).includes(emo)
+                    const c = (it.reaction_counts || {})[emo] || 0
+                    return (
+                      <Button
+                        key={emo}
+                        variant={active ? 'primary' : 'ghost'}
+                        type="button"
+                        className="min-w-[54px] rounded-full px-3"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleReaction(it.id, emo) }}
+                      >
+                        {c ? `${c} ` : ''}{emo}
+                      </Button>
+                    )
+                  })}
                 </div>
               )}
             </div>

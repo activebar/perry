@@ -33,6 +33,35 @@ function toPublic(storagePath: string) {
   return supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/uploads/${storagePath}` : ''
 }
 
+function galleryTitleFromConfig(cfg: any, fallback = '') {
+  return (
+    String(cfg?.title || '').trim() ||
+    String(cfg?.button_label || '').trim() ||
+    String(cfg?.label || '').trim() ||
+    String(cfg?.name || '').trim() ||
+    fallback
+  )
+}
+
+async function getGalleryDisplayTitle(eventId: string, galleryId: string, fallback = 'גלריה') {
+  const srv = supabaseServiceRole()
+  const { data: blocks } = await srv
+    .from('blocks')
+    .select('config,order_index,is_visible,type')
+    .eq('event_id', eventId)
+    .eq('is_visible', true)
+    .or('type.eq.gallery,type.like.gallery_%')
+    .order('order_index', { ascending: true })
+
+  for (const b of blocks || []) {
+    const cfg = (b as any)?.config || {}
+    if (String(cfg?.gallery_id || '').trim() === galleryId) {
+      return galleryTitleFromConfig(cfg, fallback) || fallback
+    }
+  }
+  return fallback
+}
+
 async function resolveTarget(code: string) {
   const srv = supabaseServiceRole()
   const { data: row } = await srv
@@ -95,16 +124,13 @@ async function getOgForMedia(mediaItemId: string) {
     .eq('id', mediaItemId)
     .maybeSingle()
 
-  const directUrl =
-    String((mi as any)?.public_url || '').trim() ||
-    String((mi as any)?.thumb_url || '').trim() ||
-    String((mi as any)?.url || '').trim() ||
-    (String((mi as any)?.storage_path || '').trim() ? toPublic(String((mi as any).storage_path)) : '')
+  const directUrl = `${baseUrl()}/api/og/image?media=${encodeURIComponent(mediaItemId)}`
 
   let galleryTitle = 'תמונה'
   if ((mi as any)?.gallery_id) {
-    const { data: g } = await srv.from('galleries').select('id,title').eq('id', String((mi as any).gallery_id)).maybeSingle()
-    if ((g as any)?.title) galleryTitle = String((g as any).title)
+    const gid = String((mi as any).gallery_id)
+    const { data: g } = await srv.from('galleries').select('id,title').eq('id', gid).maybeSingle()
+    galleryTitle = await getGalleryDisplayTitle(String((mi as any)?.event_id || '').trim(), gid, String((g as any)?.title || 'תמונה'))
   }
 
   let eventName = 'אירוע'
