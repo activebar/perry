@@ -49,9 +49,25 @@ async function resolvePost(postId: string | null, target: string | null) {
   return (data as any) || null
 }
 
-export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
-  const code = cleanCode(params.code)
-  if (!code) return {}
+export async function generateMetadata({ params }: { params: { code: string } }) {
+
+  const ogImage = `${process.env.NEXT_PUBLIC_SITE_URL}/api/og/bl/${params.code}`
+
+  return {
+    openGraph: {
+      images: [
+        {
+          url: ogImage,
+          width: 630,
+          height: 630
+        }
+      ]
+    },
+    twitter: {
+      images: [ogImage]
+    }
+  }
+}
 
   const { target, postId } = await resolve(code)
   const post = await resolvePost(postId, target)
