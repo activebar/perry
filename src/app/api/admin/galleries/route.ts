@@ -331,8 +331,6 @@ export async function POST(req: NextRequest) {
       limit: Number(templateCfg.limit || 12) || 12
     }
 
-    const existingCreated = await findExistingCreatedGallery(sb, eventId, nextKey)
-
     const { data: cleanupBlocks } = await sb
       .from('blocks')
       .select('id,type,config,created_at')
