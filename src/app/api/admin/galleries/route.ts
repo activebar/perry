@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     .from('blocks')
     .select('id,type,is_visible,order_index,config,event_id')
     .eq('event_id', eventId)
-    .or('type.eq.gallery,type.like.gallery_%')
+    .like('type', 'gallery_%')
 
   const titleByGalleryId = new Map<string, { title?: string; button_label?: string }>()
   for (const b of blocks || []) {
@@ -145,7 +145,7 @@ export async function PUT(req: NextRequest) {
       .from('blocks')
       .select('id,config')
       .eq('event_id', eventId)
-      .or('type.eq.gallery,type.like.gallery_%')
+      .like('type', 'gallery_%')
       .limit(500)
 
     const toUpdate = (blk || []).filter((b: any) => String((b.config as any)?.gallery_id || '') === id)
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
       .from('blocks')
       .select('id,type,is_visible,order_index,config,event_id')
       .eq('event_id', eventId)
-      .or('type.eq.gallery,type.like.gallery_%')
+      .like('type', 'gallery_%')
       .order('order_index', { ascending: true })
 
     if (blocksErr) return jsonError(blocksErr.message, 500)
