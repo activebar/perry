@@ -95,7 +95,6 @@ export default async function EventLayout({
       footerLine2Url={footerLine2Url}
       showGiftNavButton={showGiftNavButton}
       giftNavLabel={giftNavLabel}
-      galleryNavLabel={galleryNavLabel}
       blessingsNavLabel={blessingsNavLabel}
     >
       {children}
