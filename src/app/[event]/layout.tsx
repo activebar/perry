@@ -60,6 +60,8 @@ export default async function EventLayout({
     <SiteChrome
       basePath={`/${eventId}`}
       eventName={eventName}
+      galleryNavLabel={galleryTitle}
+      blessingsNavLabel={blessingsTitle}
       footerEnabled={footerEnabled}
       footerLabel={footerLabel}
       footerUrl={footerUrl}
