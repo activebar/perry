@@ -39,7 +39,7 @@ async function getGalleryBlockByGalleryId(sb: ReturnType<typeof supabaseServiceR
     .from('blocks')
     .select('id,type,is_visible,order_index,config,event_id')
     .eq('event_id', eventId)
-    .or('type.eq.gallery,type.like.gallery_%')
+    .like('type','gallery_%')
     .limit(500)
 
   const block = (data || []).find((b: any) => {
