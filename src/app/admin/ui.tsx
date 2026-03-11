@@ -1088,13 +1088,19 @@ export default function AdminApp({
   }
 
   async function createGallery() {
+    if (galleryBusy) return
+
+    const templateGalleryId = String(selectedGalleryId || '').trim()
+
     setGalleryMsg(null)
     setGalleryBusy(true)
     try {
       const res = await jfetch('/api/admin/galleries', {
         method: 'POST',
         body: JSON.stringify({
-          event_id: activeEventId
+          action: 'create',
+          event_id: activeEventId,
+          template_gallery_id: templateGalleryId || undefined
         })
       })
 
@@ -2166,6 +2172,17 @@ export default function AdminApp({
                         }}
                         placeholder="שם בלוק לתצוגה (רשות)"
                       />
+
+                      {String(b.type || '').startsWith('gallery') && (
+                        <Input
+                          value={String(b?.config?.button_label || '')}
+                          onChange={e => {
+                            const v = e.target.value
+                            updateBlock({ id: b.id, config: { ...(b.config || {}), button_label: v } })
+                          }}
+                          placeholder="טקסט כפתור (button_label)"
+                        />
+                      )}
                     </div>
 
                     {b.type === 'gift' && (
@@ -2484,6 +2501,7 @@ export default function AdminApp({
             <div className="rounded-2xl border border-zinc-200 p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <Button
+                  type="button"
                   onClick={createGallery}
                   disabled={galleryBusy}
                 >

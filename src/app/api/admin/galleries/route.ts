@@ -50,6 +50,25 @@ async function getGalleryBlockByGalleryId(sb: ReturnType<typeof supabaseServiceR
   return block || null
 }
 
+
+async function findExistingCreatedGallery(sb: ReturnType<typeof supabaseServiceRole>, eventId: string, nextKey: string) {
+  const { data: galleryRow } = await sb
+    .from('galleries')
+    .select('*')
+    .eq('event_id', eventId)
+    .eq('title', nextKey)
+    .maybeSingle()
+
+  const { data: blockRow } = await sb
+    .from('blocks')
+    .select('id,type,is_visible,order_index,config,event_id')
+    .eq('event_id', eventId)
+    .eq('type', nextKey)
+    .maybeSingle()
+
+  return { galleryRow: galleryRow || null, blockRow: blockRow || null }
+}
+
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return jsonError('unauthorized', 401)
@@ -218,6 +237,18 @@ export async function POST(req: NextRequest) {
 
     const nextKey = `gallery_${nextSeq}`
 
+    const existingCreated = await findExistingCreatedGallery(sb, eventId, nextKey)
+    if (existingCreated.galleryRow) {
+      return NextResponse.json({
+        ok: true,
+        gallery: existingCreated.galleryRow,
+        created: {
+          gallery_key: nextKey,
+          display_title: String(existingCreated.blockRow?.config?.title || existingCreated.galleryRow.title || nextKey)
+        }
+      })
+    }
+
     let templateGallery: any = null
     let templateBlock: any = null
 
@@ -300,15 +331,35 @@ export async function POST(req: NextRequest) {
       limit: Number(templateCfg.limit || 12) || 12
     }
 
-    const { error: insErr } = await sb.from('blocks').insert({
-      event_id: eventId,
-      type: nextKey,
-      order_index: nextBlockOrder,
-      is_visible: templateBlock?.is_visible ?? true,
-      config: blockConfig
+    const existingCreated = await findExistingCreatedGallery(sb, eventId, nextKey)
+
+    if (!existingCreated.blockRow) {
+      const { error: insErr } = await sb.from('blocks').insert({
+        event_id: eventId,
+        type: nextKey,
+        order_index: nextBlockOrder,
+        is_visible: templateBlock?.is_visible ?? true,
+        config: blockConfig
+      })
+
+      if (insErr) return jsonError(insErr.message, 500)
+    }
+
+    const { data: cleanupBlocks } = await sb
+      .from('blocks')
+      .select('id,type,config,created_at')
+      .eq('event_id', eventId)
+      .eq('type', 'gallery')
+      .limit(50)
+
+    const duplicateLegacyBlocks = (cleanupBlocks || []).filter((b: any) => {
+      const cfg = isPlainObject(b?.config) ? b.config : {}
+      return String(cfg.gallery_id || '') === String(gal.id)
     })
 
-    if (insErr) return jsonError(insErr.message, 500)
+    for (const row of duplicateLegacyBlocks) {
+      await sb.from('blocks').delete().eq('id', row.id).eq('event_id', eventId)
+    }
 
     return NextResponse.json({
       ok: true,
