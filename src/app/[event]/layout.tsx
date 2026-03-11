@@ -20,6 +20,8 @@ export default async function EventLayout({
   let footerLine2Url: string | null | undefined = undefined
   let showGiftNavButton: boolean | undefined = undefined
   let giftNavLabel: string | undefined = undefined
+  let galleryNavLabel: string | undefined = undefined
+  let blessingsNavLabel: string | undefined = undefined
 
   try {
     const s: any = await fetchSettings(eventId)
@@ -33,8 +35,33 @@ export default async function EventLayout({
     footerLine2Label = s?.footer_line2_label ?? null
     footerLine2Url = s?.footer_line2_url ?? null
 
+    // Dynamic nav labels
+    const sortedBlocks = [...(blocks || [])].sort(
+      (a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0)
+    )
+
+    const galleryBlock = sortedBlocks.find(
+      (b: any) =>
+        String(b?.type) === 'gallery' ||
+        String(b?.type || '').startsWith('gallery_')
+    )
+
+    const blessingsBlock = sortedBlocks.find(
+      (b: any) => String(b?.type) === 'blessings'
+    )
+
+    galleryNavLabel =
+      String(galleryBlock?.config?.title || '').trim() || 'גלריות'
+
+    blessingsNavLabel =
+      String(
+        blessingsBlock?.config?.title ||
+          s?.blessings_title ||
+          ''
+      ).trim() || 'ברכות'
+
     // Gift nav button: shown only if the 'gift' block is visible and not auto-hidden by time.
-    const giftBlock = (blocks || []).find((b: any) => String(b?.type) === 'gift')
+    const giftBlock = sortedBlocks.find((b: any) => String(b?.type) === 'gift')
     giftNavLabel = String(giftBlock?.config?.title || '').trim() || 'מתנה'
     if (!giftBlock?.is_visible) {
       showGiftNavButton = false
@@ -60,8 +87,6 @@ export default async function EventLayout({
     <SiteChrome
       basePath={`/${eventId}`}
       eventName={eventName}
-      galleryNavLabel={galleryTitle}
-      blessingsNavLabel={blessingsTitle}
       footerEnabled={footerEnabled}
       footerLabel={footerLabel}
       footerUrl={footerUrl}
@@ -70,6 +95,8 @@ export default async function EventLayout({
       footerLine2Url={footerLine2Url}
       showGiftNavButton={showGiftNavButton}
       giftNavLabel={giftNavLabel}
+      galleryNavLabel={galleryNavLabel}
+      blessingsNavLabel={blessingsNavLabel}
     >
       {children}
     </SiteChrome>
