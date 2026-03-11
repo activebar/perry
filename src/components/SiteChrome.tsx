@@ -55,7 +55,11 @@ export default function SiteChrome({
   giftNavLabel?: string
 }) {
   const pathname = usePathname() || '/'
+const galleryBlock = blocks?.find(
+  (b: any) => b.type === "gallery" || b.type?.startsWith("gallery_")
+)
 
+const galleryTitle = galleryBlock?.config?.title
   const safeBase = (basePath || '').trim()
   const base = safeBase === '/' ? '' : safeBase.replace(/\/$/, '')
   const relPath = base && pathname.startsWith(base) ? (pathname.slice(base.length) || '/') : pathname
@@ -89,7 +93,11 @@ export default function SiteChrome({
   {/* RTL: keep 'בית' visually on the right */}
   <div className="flex flex-row-reverse items-center gap-2">
     <NavButton href={withBase('/')} label="בית" active={isHome} />
-    <NavButton href={withBase('/gallery')} label="גלריות" active={isGalleries} />
+    <NavButton
+  href={withBase('/gallery')}
+  label={galleryTitle || "גלריות"}
+  active={isGalleries}
+/>
     <NavButton href={withBase('/blessings')} label="ברכות" active={isBlessings} />
     {showGiftNavButton ? (
   <Link
