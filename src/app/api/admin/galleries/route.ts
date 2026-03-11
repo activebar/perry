@@ -331,6 +331,20 @@ export async function POST(req: NextRequest) {
       limit: Number(templateCfg.limit || 12) || 12
     }
 
+    const existingCreated = await findExistingCreatedGallery(sb, eventId, nextKey)
+
+    if (!existingCreated.blockRow) {
+      const { error: insErr } = await sb.from('blocks').insert({
+        event_id: eventId,
+        type: nextKey,
+        order_index: nextBlockOrder,
+        is_visible: templateBlock?.is_visible ?? true,
+        config: blockConfig
+      })
+
+      if (insErr) return jsonError(insErr.message, 500)
+    }
+
     const { data: cleanupBlocks } = await sb
       .from('blocks')
       .select('id,type,config,created_at')
