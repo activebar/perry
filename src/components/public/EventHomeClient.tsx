@@ -488,7 +488,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{blessingsTitle}</p>
-                        <p className="text-sm text-zinc-600">כתבו ברכה, צרפו תמונה ותנו ריאקשן.</p>
+                        <p className="text-sm text-zinc-600">כתבו, צרפו תמונה, ותנו 👍</p>
                       </div>
                       <Link href={hrefOf("/blessings")}>
                         <Button>לכל הברכות</Button>
