@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 import PermissionsPanel from './PermissionsPanel'
+import AiPanel from './AiPanel'
+import ClonePanel from './ClonePanel'
 
 const DEFAULT_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
 
@@ -1325,6 +1327,19 @@ export default function AdminApp({
 
       {tab === 'permissions' && admin?.role === 'master' && (
         <PermissionsPanel eventId={activeEventId} />
+      )}
+
+      {tab === 'ai' && settings && (
+        <AiPanel
+          settings={settings}
+          setSettings={setSettings}
+          onSave={saveSettings}
+          saving={saving}
+        />
+      )}
+
+      {tab === 'clone' && (
+        <ClonePanel eventId={activeEventId} />
       )}
 
       {tab === 'settings' && settings && (
