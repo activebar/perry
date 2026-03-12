@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, Input, Textarea } from '@/components/ui'
 import QrPanel from '@/components/qr/QrPanel'
 import PermissionsPanel from './PermissionsPanel'
+import AiPanel from './AiPanel'
+import ClonePanel from './ClonePanel'
 
 const DEFAULT_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
 
@@ -19,6 +21,7 @@ async function fileToImage(file: File): Promise<HTMLImageElement> {
     })
     return img
   } finally {
+    // keep objectURL alive until image loads; safe to revoke here after load
     URL.revokeObjectURL(url)
   }
 }
@@ -40,9 +43,11 @@ async function makeOgJpeg(file: File, focusX: number, focusY: number): Promise<B
   let cropW = srcW
   let cropH = srcH
   if (srcAspect > targetAspect) {
+    // too wide
     cropH = srcH
     cropW = Math.round(srcH * targetAspect)
   } else {
+    // too tall
     cropW = srcW
     cropH = Math.round(srcW / targetAspect)
   }
@@ -137,6 +142,7 @@ function useUnfurl(url?: string) {
   return data
 }
 
+/** Preview נקי כמו בדף הבית/ברכות: תמונה + דומיין, בלי כותרות/תיאורים אלא אם showDetails=true */
 function LinkPreview({
   url,
   size,
@@ -163,6 +169,8 @@ function LinkPreview({
 
   return (
     <div className="mt-2">
+
+
       <div className="flex justify-center">
         <a
           href={d.url}
@@ -236,7 +244,7 @@ function MediaBox({
 /* ===================== Admin App ===================== */
 
 type Admin = { role: 'master' | 'client'; username: string; email: string; event_id?: string; access_id?: string }
-type Tab = 'login' | 'settings' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions' | 'ai' | 'clone'
+type Tab = 'login' | 'settings' | 'ai' | 'clone' | 'blocks' | 'moderation' | 'ads' | 'admin_gallery' | 'diag' | 'permissions'
 
 const TAB_LABEL: Record<string, string> = {
   settings: 'הגדרות',
@@ -246,26 +254,11 @@ const TAB_LABEL: Record<string, string> = {
   admin_gallery: 'גלריית מנהל',
   diag: 'דיאגנוסטיקה',
   permissions: 'הרשאות',
-  ai: 'AI',
-  clone: 'שכפול',
   login: 'התחברות'
 }
 
-function addEventParam(url: string) {
-  try {
-    const ev = new URLSearchParams(window.location.search).get('event')
-    if (!ev) return url
-
-    const u = new URL(url, window.location.origin)
-    if (!u.searchParams.get('event')) u.searchParams.set('event', ev)
-    return u.pathname + (u.search || '')
-  } catch {
-    return url
-  }
-}
-
 async function jfetch(url: string, opts?: RequestInit) {
-  const res = await fetch(addEventParam(url), {
+  const res = await fetch(url, {
     ...opts,
     headers: { 'content-type': 'application/json', ...(opts?.headers || {}) }
   })
@@ -321,40 +314,39 @@ function parseLinesToArray(s: string) {
 export default function AdminApp({
   initialTab,
   initialPendingKind,
-  embeddedMode,
-  eventIdOverride,
+  embeddedMode
 }: {
   initialTab?: Tab
   initialPendingKind?: 'blessing' | 'gallery'
   embeddedMode?: boolean
-  eventIdOverride?: string
 } = {}) {
   const [admin, setAdmin] = useState<Admin | null>(null)
   const [tab, setTab] = useState<Tab>(initialTab || 'login')
   const [err, setErr] = useState<string | null>(null)
 
-  const activeEventId = (eventIdOverride || admin?.event_id || String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || DEFAULT_EVENT_ID).trim()
+  // active event id: prefer event-access session, fallback to env
+  const activeEventId = (admin?.event_id || String(process.env.NEXT_PUBLIC_EVENT_ID || process.env.EVENT_ID || '').trim() || DEFAULT_EVENT_ID).trim()
 
+  // login
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [capsOn, setCapsOn] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  // settings
   const [settings, setSettings] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [startAtLocal, setStartAtLocal] = useState('')
 
+  // OG default image uploader (1200x630)
   const [ogFile, setOgFile] = useState<File | null>(null)
   const [ogPreview, setOgPreview] = useState<string>('')
   const [ogFocus, setOgFocus] = useState({ x: 0.5, y: 0.5 })
   const [ogUploading, setOgUploading] = useState(false)
   const [ogMsg, setOgMsg] = useState<string | null>(null)
-  const [shareLogoFile, setShareLogoFile] = useState<File | null>(null)
-  const [shareLogoPreview, setShareLogoPreview] = useState<string>('')
-  const [shareLogoUploading, setShareLogoUploading] = useState(false)
-  const [shareLogoMsg, setShareLogoMsg] = useState<string | null>(null)
+  // Cache-buster for admin preview. Supabase public URLs may be cached in the browser.
   const [ogPreviewKey, setOgPreviewKey] = useState<number>(() => Date.now())
 
   const qrUrl = useMemo(() => {
@@ -375,22 +367,15 @@ export default function AdminApp({
     return () => URL.revokeObjectURL(u)
   }, [ogFile])
 
-  useEffect(() => {
-    if (!shareLogoFile) {
-      setShareLogoPreview('')
-      return
-    }
-    const u = URL.createObjectURL(shareLogoFile)
-    setShareLogoPreview(u)
-    return () => URL.revokeObjectURL(u)
-  }, [shareLogoFile])
-
+  // HERO upload
   const [heroFiles, setHeroFiles] = useState<File[]>([])
   const [heroBusy, setHeroBusy] = useState(false)
   const [heroMsg, setHeroMsg] = useState<string | null>(null)
 
+  // blocks
   const [blocks, setBlocks] = useState<any[]>([])
 
+  // content rules (allow/block)
   type ContentRule = {
     id: number | string
     rule_type: 'block' | 'allow'
@@ -406,6 +391,7 @@ export default function AdminApp({
   const [contentRules, setContentRules] = useState<ContentRule[]>([])
   const [rulesMsg, setRulesMsg] = useState<string | null>(null)
 
+  // rule editor
   const [editingRuleId, setEditingRuleId] = useState<number | null>(null)
   const [ruleType, setRuleType] = useState<'block' | 'allow'>('block')
   const [ruleScope, setRuleScope] = useState<'event' | 'global'>('event')
@@ -414,23 +400,27 @@ export default function AdminApp({
   const [ruleNote, setRuleNote] = useState('')
   const [ruleIsActive, setRuleIsActive] = useState(true)
 
+  // moderation
   const [pendingKind, setPendingKind] = useState<'blessing' | 'gallery'>(initialPendingKind || 'blessing')
   const [pending, setPending] = useState<any[]>([])
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingBlessingsCount, setPendingBlessingsCount] = useState(0)
+  // blessings manage (approved)
   const [approvedBlessings, setApprovedBlessings] = useState<any[]>([])
   const [editBlessing, setEditBlessing] = useState<any | null>(null)
   const [editBusy, setEditBusy] = useState(false)
 
+  // ads
   const [ads, setAds] = useState<any[]>([])
   const [newAd, setNewAd] = useState<any>({ title: '', body: '', image_url: '', link_url: '', is_active: true })
 
+  // admin gallery
   const [adminGallery, setAdminGallery] = useState<any[]>([])
   const [adminFiles, setAdminFiles] = useState<File[]>([])
   const [adminBusy, setAdminBusy] = useState(false)
   const [adminMsg, setAdminMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
-
+  // galleries management (new)
   const [galleries, setGalleries] = useState<any[]>([])
   const galleriesTotalPending = useMemo(() => galleries.reduce((sum: number, g: any) => sum + (g?.pending_count || 0), 0), [galleries])
   const [selectedGalleryId, setSelectedGalleryId] = useState<string>('')
@@ -438,7 +428,7 @@ export default function AdminApp({
   const [galleryMsg, setGalleryMsg] = useState<string | null>(null)
   const [pendingMedia, setPendingMedia] = useState<any[]>([])
   const [approvedMedia, setApprovedMedia] = useState<any[]>([])
-
+  // Selection + download (admin gallery only)
   const DIRECT_MAX = 8
   const ZIP_MAX = 2000
 
@@ -473,6 +463,7 @@ export default function AdminApp({
     if (approvedMedia.length > ZIP_MAX) setErr(`בוצעה בחירה של ${ZIP_MAX} תמונות (מגבלת בטיחות)`)
   }
 
+
   const downloadSelectedDirect = async () => {
     try {
       setErr('')
@@ -481,6 +472,7 @@ export default function AdminApp({
       if (ids.length === 0) return
       if (ids.length > DIRECT_MAX) return downloadSelectedZip()
 
+      // Download sequentially (some browsers block too many parallel downloads)
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i]
         const it = approvedMedia.find(x => x.id === id)
@@ -541,6 +533,7 @@ export default function AdminApp({
   }
   const [hoursToOpen, setHoursToOpen] = useState<number>(8)
 
+
   async function triggerDownload(url: string, filenameBase?: string) {
     try {
       const res = await fetch(url)
@@ -569,6 +562,7 @@ export default function AdminApp({
     }
   }
 
+  // diag
   const [diag, setDiag] = useState<any | null>(null)
 
   const bSize = Number(settings?.blessings_media_size ?? 96)
@@ -601,7 +595,7 @@ export default function AdminApp({
 
   const tabs = useMemo(() => {
     if (!admin) return []
-    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'ai', 'clone', 'diag']
+    const baseTabs: Tab[] = ['settings', 'blocks', 'moderation', 'ads', 'admin_gallery', 'diag']
     return admin.role === 'master' ? (['permissions', ...baseTabs] as Tab[]) : baseTabs
   }, [admin])
 
@@ -735,6 +729,7 @@ export default function AdminApp({
     if (!confirm('למחוק את החוק?')) return
     setRulesMsg(null)
     try {
+      // API expects query param ?id=
       await jfetch(`/api/admin/content-rules?id=${id}`, { method: 'DELETE', headers: {} as any })
       setContentRules(prev => prev.filter(r => Number(r.id) !== id))
       if (editingRuleId === id) resetRuleForm()
@@ -779,11 +774,10 @@ export default function AdminApp({
         const fd = new FormData()
         fd.set('file', f)
         fd.set('kind', 'hero')
-        fd.set('event_id', activeEventId)
         const up = await fetch('/api/upload', { method: 'POST', body: fd })
         const upJson = await up.json()
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
-        uploaded.push(String(upJson.thumbUrl || upJson.publicUrl))
+        uploaded.push(upJson.publicUrl)
       }
 
       const prev = Array.isArray(settings.hero_images) ? settings.hero_images : []
@@ -809,38 +803,6 @@ export default function AdminApp({
     const patch = { ...settings, hero_images: next }
     setSettings(patch)
     await saveSettings(patch)
-
-    try {
-      await fetch(addEventParam('/api/admin/storage-delete'), {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: [url] })
-      })
-    } catch {}
-  }
-
-  async function uploadShareLogo() {
-    setShareLogoMsg(null)
-    if (!shareLogoFile) {
-      setShareLogoMsg('בחר לוגו')
-      return
-    }
-    try {
-      setShareLogoUploading(true)
-      const fd = new FormData()
-      fd.append('file', shareLogoFile)
-      const res = await fetch(addEventParam('/api/admin/share-logo'), { method: 'POST', body: fd })
-      const j = await res.json()
-      if (!res.ok || !j?.ok) throw new Error(j?.error || 'upload failed')
-      const publicUrl = String(j.publicUrl || '')
-      setSettings((prev: any) => (prev ? { ...prev, share_logo_url: publicUrl, share_logo_enabled: true } : prev))
-      setShareLogoMsg('✅ נשמר הלוגו לשיתוף')
-      setShareLogoFile(null)
-    } catch (e: any) {
-      setShareLogoMsg(friendlyError(e?.message || 'שגיאה'))
-    } finally {
-      setShareLogoUploading(false)
-    }
   }
 
   async function uploadOgDefaultImage() {
@@ -854,11 +816,12 @@ export default function AdminApp({
       const blob = await makeOgJpeg(ogFile, ogFocus.x, ogFocus.y)
       const fd = new FormData()
       fd.append('file', new File([blob], 'og-default.jpg', { type: 'image/jpeg' }))
-      const res = await fetch(addEventParam('/api/admin/og-default'), { method: 'POST', body: fd })
+      const res = await fetch('/api/admin/og-default', { method: 'POST', body: fd })
       const j = await res.json()
       if (!res.ok || !j?.ok) throw new Error(j?.error || 'upload failed')
       const publicUrl = String(j.publicUrl || '')
       setSettings((prev: any) => (prev ? { ...prev, og_default_image_url: publicUrl } : prev))
+      // bump preview cache-buster so the admin immediately sees the new image
       setOgPreviewKey(Date.now())
       setOgMsg('✅ נשמרה תמונת תצוגה (1200x630)')
       setOgFile(null)
@@ -869,7 +832,8 @@ export default function AdminApp({
     }
   }
 
-  async function loadBlocks() {
+  
+async function loadBlocks() {
     const res = await jfetch('/api/admin/blocks', { method: 'GET', headers: {} as any })
     setBlocks(res.blocks)
   }
@@ -878,6 +842,7 @@ export default function AdminApp({
     setErr(null)
     try {
       await jfetch('/api/admin/blocks', { method: 'POST', body: JSON.stringify({ ids: nextIds }) })
+      // optimistic update
       setBlocks(prev => {
         const byId = new Map(prev.map((b: any) => [String(b.id), b]))
         return nextIds
@@ -889,6 +854,7 @@ export default function AdminApp({
       })
     } catch (e: any) {
       setErr(friendlyError(e?.message || 'שגיאה'))
+      // fallback to reload
       try {
         await loadBlocks()
       } catch {}
@@ -1075,7 +1041,6 @@ export default function AdminApp({
       setAdminMsg(friendlyError(e?.message || 'שגיאה במחיקה'))
     }
   }
-
   async function loadGalleries() {
     try {
       const res = await jfetch('/api/admin/galleries', { method: 'GET' })
@@ -1084,42 +1049,6 @@ export default function AdminApp({
       if (!selectedGalleryId && rows[0]?.id) setSelectedGalleryId(rows[0].id)
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת גלריות'))
-    }
-  }
-
-  async function createGallery() {
-    if (galleryBusy) return
-
-    const templateGalleryId = String(selectedGalleryId || '').trim()
-
-    setGalleryMsg(null)
-    setGalleryBusy(true)
-    try {
-      const res = await jfetch('/api/admin/galleries', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'create',
-          event_id: activeEventId,
-          template_gallery_id: templateGalleryId || undefined
-        })
-      })
-
-      const newGallery = res.gallery || res
-      await loadGalleries()
-
-      if (newGallery?.id) {
-        setSelectedGalleryId(String(newGallery.id))
-        setPendingMedia([])
-        setApprovedMedia([])
-        await loadPendingMedia(String(newGallery.id))
-        await loadApprovedMedia(String(newGallery.id))
-      }
-
-      setGalleryMsg('✅ גלריה חדשה נוצרה בהצלחה')
-    } catch (e: any) {
-      setGalleryMsg(friendlyError(e?.message || 'שגיאה ביצירת גלריה'))
-    } finally {
-      setGalleryBusy(false)
     }
   }
 
@@ -1144,6 +1073,7 @@ export default function AdminApp({
       setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת תמונות מאושרות'))
     }
   }
+
 
   async function updateGallery(id: string, patch: any) {
     setGalleryMsg(null)
@@ -1190,11 +1120,11 @@ export default function AdminApp({
     try {
       await jfetch('/api/admin/media-items', { method: 'DELETE', body: JSON.stringify({ id }) })
       setPendingMedia(prev => prev.filter(x => x.id !== id))
-      setApprovedMedia(prev => prev.filter(x => x.id !== id))
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה במחיקה'))
     }
   }
+
 
   async function loadDiag() {
     const d = await jfetch('/api/admin/diag', { method: 'GET', headers: {} as any })
@@ -1216,17 +1146,14 @@ export default function AdminApp({
     if (tab === 'admin_gallery') {
       loadSettings()
       loadGalleries()
+      loadPendingMedia()
+      loadApprovedMedia()
     }
     if (tab === 'diag') loadDiag()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, admin, pendingKind])
 
-  useEffect(() => {
-    if (tab !== 'admin_gallery') return
-    if (!selectedGalleryId) return
-    loadPendingMedia(selectedGalleryId)
-    loadApprovedMedia(selectedGalleryId)
-  }, [tab, selectedGalleryId])
-
+  /* ===== LOGIN UI ===== */
   if (!admin) {
     return (
       <Card>
@@ -1281,6 +1208,7 @@ export default function AdminApp({
     )
   }
 
+  /* ===== AUTHENTICATED UI ===== */
   return (
     <div className="space-y-4" dir="rtl">
       <Card>
@@ -1288,8 +1216,10 @@ export default function AdminApp({
           <div className="text-right">
             <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
+
+            
             <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{activeEventId || 'IDO'}</span></p>
-            <div className="mt-1 flex flex-wrap gap-2 text-xs">
+<div className="mt-1 flex flex-wrap gap-2 text-xs">
               <span className={`rounded-full px-2 py-0.5 ${pendingBlessingsCount > 0 ? 'bg-amber-50 text-amber-800' : 'bg-zinc-100 text-zinc-600'}`}>ברכות ממתינות: {pendingBlessingsCount}</span>
               <span className={`rounded-full px-2 py-0.5 ${galleriesTotalPending > 0 ? 'bg-amber-50 text-amber-800' : 'bg-zinc-100 text-zinc-600'}`}>ממתינות לאישור: {galleriesTotalPending}</span>
             </div>
@@ -1323,10 +1253,13 @@ export default function AdminApp({
         </div>
       </Card>
 
-      {tab === 'permissions' && admin?.role === 'master' && (
-        <PermissionsPanel eventId={activeEventId} />
-      )}
 
+{/* ===== PERMISSIONS ===== */}
+{tab === 'permissions' && admin?.role === 'master' && (
+  <PermissionsPanel eventId={activeEventId} />
+)}
+
+      {/* ===== SETTINGS ===== */}
       {tab === 'settings' && settings && (
         <Card>
           <h3 className="font-semibold">הגדרות</h3>
@@ -1344,6 +1277,7 @@ export default function AdminApp({
           </div>
 
           <div className="mt-3 grid gap-3">
+            {/* כללי */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">הגדרות כלליות</p>
 
@@ -1369,16 +1303,18 @@ export default function AdminApp({
                 placeholder="אולם / כתובת"
               />
 
-              <div className="grid gap-1">
-                <label className="text-xs text-zinc-500">תיאור לשיתוף (meta_description)</label>
-                <textarea
-                  rows={3}
-                  value={(settings as any).meta_description || ''}
-                  onChange={(e) => setSettings({ ...(settings as any), meta_description: e.target.value })}
-                  placeholder="מופיע בתצוגה המקדימה בווצאפ/פייסבוק"
-                  className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                />
-              </div>
+
+<div className="grid gap-1">
+  <label className="text-xs text-zinc-500">תיאור לשיתוף (meta_description)</label>
+  <textarea
+    rows={3}
+    value={(settings as any).meta_description || ''}
+    onChange={(e) => setSettings({ ...(settings as any), meta_description: e.target.value })}
+    placeholder="מופיע בתצוגה המקדימה בווצאפ/פייסבוק"
+    className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+  />
+</div>
+
 
               <Input
                 value={settings.waze_url || ''}
@@ -1388,6 +1324,7 @@ export default function AdminApp({
               />
             </div>
 
+            {/* HERO */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">HERO – טקסטים + תמונות</p>
 
@@ -1455,6 +1392,7 @@ export default function AdminApp({
               </div>
             </div>
 
+            {/* ברכות */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
               <p className="text-sm font-medium text-right">ברכות</p>
 
@@ -1583,6 +1521,7 @@ export default function AdminApp({
                 placeholder="למשל 50"
               />
 
+
               <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
                 <input
                   type="checkbox"
@@ -1593,6 +1532,7 @@ export default function AdminApp({
               </label>
             </div>
 
+            {/* QR & שיתוף */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
               <p className="text-sm font-medium text-right">QR & שיתוף</p>
 
@@ -1652,6 +1592,7 @@ export default function AdminApp({
                 </label>
               </div>
 
+
               <div className="grid gap-2 mt-1 rounded-xl border border-zinc-200 p-3" dir="rtl">
                 <p className="text-sm font-medium text-right">תמונת תצוגה לקישורים (OpenGraph)</p>
 
@@ -1660,8 +1601,10 @@ export default function AdminApp({
                     זו התמונה ש-WhatsApp / Facebook / Telegram מציגים כשהשולחים משתפים קישור.
                   </p>
 
+                  {/* current */}
                   {String(settings.og_default_image_url || '').length > 0 && (
                     <div className="rounded-xl overflow-hidden border border-zinc-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={(() => {
                           const u = String(settings.og_default_image_url || '')
@@ -1696,6 +1639,7 @@ export default function AdminApp({
                           setOgFocus({ x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) })
                         }}
                       >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={ogPreview} alt="preview" className="w-full block" />
                         <div
                           className="absolute -translate-x-1/2 -translate-y-1/2"
@@ -1746,69 +1690,6 @@ export default function AdminApp({
                   <p className="text-xs text-zinc-500 text-right">
                     לקישור ישיר לברכה עם תמונה — השיתוף ישתמש בנתיב /blessings/p/&lt;id&gt;.
                   </p>
-
-                  <div className="mt-3 rounded-xl border border-zinc-200 p-3 grid gap-3" dir="rtl">
-                    <p className="text-sm font-medium text-right">עיצוב תמונת שיתוף לברכות/גלריה</p>
-                    <label className="text-sm text-right">סגנון תמונת שיתוף</label>
-                    <select
-                      className="rounded-xl border border-zinc-200 px-3 py-2 text-right bg-white"
-                      dir="rtl"
-                      value={String((settings as any).share_image_style ?? 'plain_square')}
-                      onChange={e => setSettings({ ...settings, share_image_style: e.target.value })}
-                    >
-                      <option value="plain_square">ריבוע רגיל 1:1</option>
-                      <option value="designed_card">כרטיס מעוצב</option>
-                    </select>
-
-                    <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                      <input
-                        type="checkbox"
-                        checked={(settings as any).share_title_enabled !== false}
-                        onChange={e => setSettings({ ...settings, share_title_enabled: e.target.checked })}
-                      />
-                      להציג כותרת אירוע על התמונה
-                    </label>
-
-                    <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
-                      <input
-                        type="checkbox"
-                        checked={(settings as any).share_logo_enabled !== false}
-                        onChange={e => setSettings({ ...settings, share_logo_enabled: e.target.checked })}
-                      />
-                      להציג לוגו על התמונה
-                    </label>
-
-                    {String((settings as any).share_logo_url || '').length > 0 && (
-                      <div className="rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50 p-3">
-                        <img src={String((settings as any).share_logo_url)} alt="share logo" className="max-h-20 ml-auto" />
-                      </div>
-                    )}
-
-                    <label className="text-sm text-zinc-700 text-right">העלאת לוגו:</label>
-                    <input type="file" accept="image/*" onChange={e => setShareLogoFile((e.target.files || [])[0] || null)} />
-                    {shareLogoPreview && (
-                      <div className="grid gap-2">
-                        <div className="rounded-xl overflow-hidden border border-zinc-200 bg-zinc-50 p-3">
-                          <img src={shareLogoPreview} alt="share-logo-preview" className="max-h-20 ml-auto" />
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                          <Button onClick={uploadShareLogo} disabled={shareLogoUploading}>{shareLogoUploading ? 'מעלה…' : 'שמור לוגו'}</Button>
-                          <Button variant="ghost" onClick={() => setShareLogoFile(null)} disabled={shareLogoUploading}>ביטול</Button>
-                        </div>
-                        {shareLogoMsg && <p className="text-sm text-right">{shareLogoMsg}</p>}
-                      </div>
-                    )}
-
-                    <label className="text-sm text-zinc-700 text-right">או להזין URL לוגו ידני:</label>
-                    <Input
-                      className="text-right"
-                      dir="rtl"
-                      value={String((settings as any).share_logo_url ?? '')}
-                      onChange={e => setSettings({ ...settings, share_logo_url: e.target.value })}
-                      placeholder="URL ללוגו שיופיע על תמונת השיתוף"
-                    />
-                    <p className="text-xs text-zinc-500 text-right">לאחר שינוי ההגדרות, לחץ על "שמור" למעלה.</p>
-                  </div>
                 </div>
               </div>
 
@@ -1828,6 +1709,7 @@ export default function AdminApp({
                   onChange={e => setSettings({ ...settings, qr_subtitle: e.target.value })}
                   placeholder="תת-כותרת QR (למשל: פותח את עמוד הברכות)"
                 />
+
 
                 <Input
                   className="text-right"
@@ -1923,6 +1805,7 @@ export default function AdminApp({
               ) : null}
             </div>
 
+            {/* ניהול תוכן (חסימות/חריגים) */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3" dir="rtl">
               <p className="text-sm font-medium text-right">ניהול תוכן – חסימות וחריגים</p>
               <p className="text-xs text-zinc-500 text-right">
@@ -2031,6 +1914,7 @@ export default function AdminApp({
               </div>
             </div>
 
+            {/* פוטר */}
             <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
               <p className="text-sm font-medium">פוטר</p>
 
@@ -2056,6 +1940,7 @@ export default function AdminApp({
                 dir="ltr"
               />
 
+              {/* שורה 2 בפוטר */}
               <div className="mt-2 grid gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
                 <p className="text-sm font-medium">פוטר – שורה 2</p>
                 <label className="text-sm flex items-center gap-2">
@@ -2092,6 +1977,15 @@ export default function AdminApp({
         </Card>
       )}
 
+      {/* ===== BLOCKS ===== */}
+      {tab === 'ai' && (
+        <AiPanel settings={settings} setSettings={setSettings} onSave={saveSettings} saving={saving} />
+      )}
+
+      {tab === 'clone' && (
+        <ClonePanel eventId={activeEventId} />
+      )}
+
       {tab === 'blocks' && (
         <Card>
           <h3 className="font-semibold">בלוקים</h3>
@@ -2117,88 +2011,79 @@ export default function AdminApp({
                 const canDown = idx < blocks.length - 1
 
                 return (
-                  <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="text-right">
-                        <p className="font-medium">{title}</p>
-                        <p className="text-xs text-zinc-500">key: {b.type} • סדר: {b.order_index}</p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          disabled={!canUp}
-                          title="הזז למעלה"
-                          onClick={() => {
-                            if (!canUp) return
-                            const ids = blocks.map((x: any) => String(x.id))
-                            ;[ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]]
-                            reorderBlocks(ids)
-                          }}
-                        >
-                          ↑
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          disabled={!canDown}
-                          title="הזז למטה"
-                          onClick={() => {
-                            if (!canDown) return
-                            const ids = blocks.map((x: any) => String(x.id))
-                            ;[ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]]
-                            reorderBlocks(ids)
-                          }}
-                        >
-                          ↓
-                        </Button>
-
-                        <label className="text-sm flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!b.is_visible}
-                            onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })}
-                          />
-                          מוצג
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid gap-2">
-                      <Input
-                        value={String(b?.config?.title || '')}
-                        onChange={e => {
-                          const v = e.target.value
-                          updateBlock({ id: b.id, config: { ...(b.config || {}), title: v } })
-                        }}
-                        placeholder="שם בלוק לתצוגה (רשות)"
-                      />
-
-                      {String(b.type || '').startsWith('gallery') && (
-                        <Input
-                          value={String(b?.config?.button_label || '')}
-                          onChange={e => {
-                            const v = e.target.value
-                            updateBlock({ id: b.id, config: { ...(b.config || {}), button_label: v } })
-                          }}
-                          placeholder="טקסט כפתור (button_label)"
-                        />
-                      )}
-                    </div>
-
-                    {b.type === 'gift' && (
-                      <div className="mt-2 grid gap-2">
-                        <Input
-                          value={String(b.config?.auto_hide_after_hours ?? '')}
-                          onChange={e => {
-                            const v = e.target.value
-                            updateBlock({ id: b.id, config: { ...(b.config || {}), auto_hide_after_hours: v ? Number(v) : null } })
-                          }}
-                          placeholder="הסתר אחרי X שעות (למשל 24)"
-                        />
-                        <p className="text-xs text-zinc-500">אחרי X שעות מתחילת האירוע — בלוק מתנה נעלם מהדף הראשי.</p>
-                      </div>
-                    )}
+              <div key={b.id} className="rounded-xl border border-zinc-200 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-right">
+                    <p className="font-medium">{title}</p>
+                    <p className="text-xs text-zinc-500">key: {b.type} • סדר: {b.order_index}</p>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      disabled={!canUp}
+                      title="הזז למעלה"
+                      onClick={() => {
+                        if (!canUp) return
+                        const ids = blocks.map((x: any) => String(x.id))
+                        ;[ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]]
+                        reorderBlocks(ids)
+                      }}
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={!canDown}
+                      title="הזז למטה"
+                      onClick={() => {
+                        if (!canDown) return
+                        const ids = blocks.map((x: any) => String(x.id))
+                        ;[ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]]
+                        reorderBlocks(ids)
+                      }}
+                    >
+                      ↓
+                    </Button>
+
+                    <label className="text-sm flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!b.is_visible}
+                        onChange={e => updateBlock({ id: b.id, is_visible: e.target.checked })}
+                      />
+                      מוצג
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2">
+                  <Input
+                    value={String(b?.config?.title || '')}
+                    onChange={e => {
+                      const v = e.target.value
+                      updateBlock({ id: b.id, config: { ...(b.config || {}), title: v } })
+                    }}
+                    placeholder="שם בלוק לתצוגה (רשות)"
+                  />
+
+                  {/* בקרוב: cta_label / cta_action */}
+                </div>
+
+                {b.type === 'gift' && (
+                  <div className="mt-2 grid gap-2">
+                    <Input
+                      value={String(b.config?.auto_hide_after_hours ?? '')}
+                      onChange={e => {
+                        const v = e.target.value
+                        updateBlock({ id: b.id, config: { ...(b.config || {}), auto_hide_after_hours: v ? Number(v) : null } })
+                      }}
+                      placeholder="הסתר אחרי X שעות (למשל 24)"
+                    />
+                    <p className="text-xs text-zinc-500">אחרי X שעות מתחילת האירוע — בלוק מתנה נעלם מהדף הראשי.</p>
+                  </div>
+                )}
+              </div>
                 )
               })
             })()}
@@ -2208,6 +2093,7 @@ export default function AdminApp({
         </Card>
       )}
 
+      {/* ===== MODERATION ===== */}
       {tab === 'moderation' && (
         <Card dir="rtl">
           <h3 className="font-semibold">אישור תכנים</h3>
@@ -2246,6 +2132,7 @@ export default function AdminApp({
                   <p className="text-xs text-zinc-500" dir="ltr">{new Date(p.created_at).toLocaleString('he-IL')}</p>
                 </div>
 
+                {/* media (always centered) */}
                 {(p.media_url || p.video_url) ? (
                   <div className="mt-3 flex justify-center">
                     <MediaBox media_url={p.media_url} video_url={p.video_url} size={safeBSize} />
@@ -2254,6 +2141,7 @@ export default function AdminApp({
 
                 {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
+                {/* pending blessings: always show link preview (thumb + title + url), regardless of global "showDetails" */}
                 {linkPreviewEnabled && p.link_url ? (
                   <div className="mt-3">
                     <LinkPreview url={p.link_url} size={safeBSize} showDetails={true} />
@@ -2284,6 +2172,7 @@ export default function AdminApp({
                     <p className="text-xs text-zinc-500" dir="ltr">{new Date(b.created_at).toLocaleString('he-IL')}</p>
                   </div>
 
+                  {/* media centered */}
                   {(b.media_url || b.video_url) ? (
                     <div className="mt-3 flex justify-center">
                       <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} />
@@ -2292,6 +2181,7 @@ export default function AdminApp({
 
                   {b.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{b.text}</p>}
 
+                  {/* Approved: show link preview details only when toggle is ON */}
                   {linkPreviewEnabled && b.link_url ? (
                     <div className="mt-3">
                       <LinkPreview url={b.link_url} size={safeBSize} showDetails={showLinkDetails} />
@@ -2362,6 +2252,7 @@ export default function AdminApp({
         </Card>
       )}
 
+      {/* ===== ADS ===== */}
       {tab === 'ads' && (
         <Card>
           <h3 className="font-semibold">פרסומות</h3>
@@ -2399,6 +2290,7 @@ export default function AdminApp({
         </Card>
       )}
 
+      {/* ===== ADMIN GALLERY ===== */}
       {tab === 'admin_gallery' && (
         <Card>
           <h3 className="font-semibold">גלריות</h3>
@@ -2440,6 +2332,8 @@ export default function AdminApp({
                 />
                 להציג כפתור “לכל התמונות” בגלריית מנהל
               </label>
+
+              
 
               <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-3">
                 <p className="mb-2 text-sm font-semibold text-zinc-700 text-right">פריוויו גלריות בדף הבית</p>
@@ -2488,8 +2382,7 @@ export default function AdminApp({
                   </p>
                 </div>
               </div>
-
-              <div className="flex items-center justify-end">
+<div className="flex items-center justify-end">
                 <Button onClick={() => saveSettings()} disabled={saving}>
                   {saving ? 'שומר...' : 'שמור הגדרות גלריות'}
                 </Button>
@@ -2498,18 +2391,9 @@ export default function AdminApp({
           )}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[260px_1fr]">
+            {/* Left: galleries list */}
             <div className="rounded-2xl border border-zinc-200 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <Button
-                  type="button"
-                  onClick={createGallery}
-                  disabled={galleryBusy}
-                >
-                  {galleryBusy ? 'יוצר...' : '+ גלריה חדשה'}
-                </Button>
-                <div className="text-sm font-medium text-right">גלריות</div>
-              </div>
-
+              <div className="text-sm font-medium mb-2 text-right">גלריות</div>
               <div className="grid gap-2">
                 {galleries.map((g: any) => (
                   <button
@@ -2520,6 +2404,8 @@ export default function AdminApp({
                       setGalleryMsg(null)
                       setSelectMode(false)
                       clearSelected()
+                      loadPendingMedia(g.id)
+                      loadApprovedMedia(g.id)
                     }}
                     className={
                       'w-full rounded-xl border px-3 py-2 text-right text-sm ' +
@@ -2541,6 +2427,7 @@ export default function AdminApp({
               </div>
             </div>
 
+            {/* Right: selected gallery */}
             <div className="rounded-2xl border border-zinc-200 p-4">
               {(() => {
                 const g = galleries.find((x: any) => x.id === selectedGalleryId)
@@ -2756,6 +2643,7 @@ export default function AdminApp({
         </Card>
       )}
 
+      {/* ===== DIAG ===== */}
       {tab === 'diag' && (
         <Card>
           <h3 className="font-semibold">דיאגנוסטיקה</h3>
