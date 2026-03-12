@@ -253,6 +253,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   // Blessings labels (dynamic for white-label reuse)
   const blessingsTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
   const blessingsSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה/וידאו או קישור.') as string
+  const blessingsAllLabel = String(settings?.blessings_show_all_label || `לכל ה${blessingsTitle}`)
 
   const heroImages = Array.isArray(settings?.hero_images) ? settings.hero_images : []
   const heroSeconds = Number(settings?.hero_rotate_seconds ?? 4)
@@ -488,10 +489,10 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="text-right">
                         <p className="font-semibold">{blessingsTitle}</p>
-                        <p className="text-sm text-zinc-600">כתבו, צרפו תמונה, ותנו 👍</p>
+                        <p className="text-sm text-zinc-600">{blessingsSubtitle}</p>
                       </div>
                       <Link href={hrefOf("/blessings")}>
-                        <Button>לכל הברכות</Button>
+                        <Button>{blessingsAllLabel}</Button>
                       </Link>
                     </div>
 
