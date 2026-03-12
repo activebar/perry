@@ -491,7 +491,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                         <p className="text-sm text-zinc-600">כתבו, צרפו תמונה, ותנו 👍</p>
                       </div>
                       <Link href={hrefOf("/blessings")}>
-                        <<Button>{blessingsTitle}</Button>
+                        <Button>לכל הברכות</Button>
                       </Link>
                     </div>
 
