@@ -18,6 +18,11 @@ type PostRow = {
   event_id?: string | null
 }
 
+type EventSettingsRow = {
+  blessings_title?: string | null
+  blessings_show_all_label?: string | null
+}
+
 async function getPost(postId: string): Promise<PostRow | null> {
   const sb = supabaseServiceRole()
   const { data } = await sb
@@ -26,6 +31,20 @@ async function getPost(postId: string): Promise<PostRow | null> {
     .eq('id', postId)
     .eq('kind', 'blessing')
     .maybeSingle()
+  return (data as any) || null
+}
+
+async function getEventSettings(eventId?: string | null): Promise<EventSettingsRow | null> {
+  const event = String(eventId || '').trim()
+  if (!event) return null
+
+  const sb = supabaseServiceRole()
+  const { data } = await sb
+    .from('event_settings')
+    .select('blessings_title, blessings_show_all_label')
+    .eq('event_id', event)
+    .maybeSingle()
+
   return (data as any) || null
 }
 
@@ -42,8 +61,10 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     }
   }
 
-  const title = post.author_name ? `ברכה מאת ${post.author_name}` : 'ברכה מהאירוע'
-  const description = String(post.text || 'לחצו לראות את הברכה').trim() || 'לחצו לראות את הברכה'
+  const eventSettings = await getEventSettings(post.event_id)
+  const blessingsTitle = String(eventSettings?.blessings_title || 'ברכות').trim() || 'ברכות'
+  const title = post.author_name ? `${blessingsTitle} מאת ${post.author_name}` : `${blessingsTitle} מהאירוע`
+  const description = String(post.text || `לחצו לראות את ה${blessingsTitle.slice(0, -1) || 'ברכה'}`).trim() || `לחצו לראות את ה${blessingsTitle.slice(0, -1) || 'ברכה'}`
   const url = toAbsoluteUrl(`/blessings/p/${post.id}`)
   const image = toAbsoluteUrl(`/api/og/image?post=${post.id}`)
 
@@ -73,18 +94,21 @@ export default async function BlessingSharePage({ params }: { params: { id: stri
   const eventHref = post.event_id ? `/${encodeURIComponent(String(post.event_id))}/blessings` : '/'
   const image = String(post.media_url || '').trim()
   const video = String(post.video_url || '').trim()
+  const eventSettings = await getEventSettings(post.event_id)
+  const blessingsTitle = String(eventSettings?.blessings_title || 'ברכות').trim() || 'ברכות'
+  const blessingsAllLabel = String(eventSettings?.blessings_show_all_label || `לכל ה${blessingsTitle}`)
 
   return (
     <main dir="rtl" className="min-h-screen bg-zinc-50 px-4 py-8 text-right">
       <div className="mx-auto max-w-2xl rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6">
-        <div className="mb-4 text-sm text-zinc-500">ברכה מהאירוע</div>
+        <div className="mb-4 text-sm text-zinc-500">{`${blessingsTitle} מהאירוע`}</div>
         <h1 className="text-2xl font-bold text-zinc-900">{post.author_name || 'אורח/ת'}</h1>
         {post.created_at ? (
           <div className="mt-1 text-sm text-zinc-500">{new Date(post.created_at).toLocaleString('he-IL')}</div>
         ) : null}
 
         {image ? (
-          <img src={image} alt={post.author_name || 'ברכה'} className="mt-5 w-full rounded-3xl border border-zinc-200 object-cover" />
+          <img src={image} alt={post.author_name || blessingsTitle} className="mt-5 w-full rounded-3xl border border-zinc-200 object-cover" />
         ) : null}
         {!image && video ? (
           <video src={video} controls className="mt-5 w-full rounded-3xl border border-zinc-200" />
@@ -99,7 +123,7 @@ export default async function BlessingSharePage({ params }: { params: { id: stri
 
         <div className="mt-8">
           <Link href={eventHref} className="inline-flex rounded-2xl bg-zinc-900 px-5 py-3 text-white">
-            לכל הברכות
+            {blessingsAllLabel}
           </Link>
         </div>
       </div>
