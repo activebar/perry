@@ -1329,13 +1329,8 @@ export default function AdminApp({
         <PermissionsPanel eventId={activeEventId} />
       )}
 
-      {tab === 'ai' && settings && (
-        <AiPanel
-          settings={settings}
-          setSettings={setSettings}
-          onSave={saveSettings}
-          saving={saving}
-        />
+      {tab === 'ai' && (
+        <AiPanel eventIdOverride={activeEventId} />
       )}
 
       {tab === 'clone' && (
