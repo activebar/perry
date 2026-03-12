@@ -432,7 +432,7 @@ async function saveEdit() {
     }
   }
   const blessingTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
-  const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו ברכה, צרפו תמונה, ותנו ריאקשן.') as string
+  const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו, צרפו תמונה, ותנו 👍') as string
   const rawMediaSize = Number(settings?.blessings_media_size ?? 140)
   const mediaSize = Math.max(60, Math.min(520, Number.isFinite(rawMediaSize) ? rawMediaSize : 140))
 
