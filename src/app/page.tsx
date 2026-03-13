@@ -69,7 +69,7 @@ function EventPreviewCard({ event }: { event: EventCard }) {
         />
       </div>
 
-      <div className="space-y-1 p-4">
+      <div className="space-y-1 px-4 pb-3 pt-4">
         <div className="truncate text-lg font-bold">{event.event_name}</div>
         <div className="text-xs text-zinc-600" dir="ltr">
           /{event.event_id}
@@ -77,12 +77,13 @@ function EventPreviewCard({ event }: { event: EventCard }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2 px-4 pb-4">
-        <Link href={eventAdminHref}>
+        <Link href={eventAdminHref} className="block no-underline">
           <button
             type="button"
-            className="flex min-h-[58px] w-full items-center justify-center rounded-full border border-zinc-300 bg-white px-2 py-2 text-center text-sm leading-tight text-zinc-800 shadow-sm transition hover:bg-zinc-50"
+            className="flex min-h-[54px] w-full items-center justify-center rounded-full border border-zinc-300 bg-white px-2 py-2 text-center text-[13px] font-medium leading-[1.15] text-zinc-800 no-underline shadow-sm transition hover:border-zinc-400 hover:bg-zinc-50"
+            style={{ textDecoration: 'none' }}
           >
-            <span>
+            <span className="no-underline" style={{ textDecoration: 'none' }}>
               ניהול
               <br />
               האירוע
@@ -90,12 +91,13 @@ function EventPreviewCard({ event }: { event: EventCard }) {
           </button>
         </Link>
 
-        <Link href={siteHref}>
+        <Link href={siteHref} className="block no-underline">
           <button
             type="button"
-            className="flex min-h-[58px] w-full items-center justify-center rounded-full bg-green-600 px-2 py-2 text-center text-sm leading-tight text-white shadow-sm transition hover:bg-green-700"
+            className="flex min-h-[54px] w-full items-center justify-center rounded-full bg-green-600 px-2 py-2 text-center text-[13px] font-medium leading-[1.15] text-white no-underline shadow-sm transition hover:bg-green-700"
+            style={{ textDecoration: 'none' }}
           >
-            <span>
+            <span className="no-underline" style={{ textDecoration: 'none' }}>
               כניסה
               <br />
               לאתר
@@ -103,12 +105,13 @@ function EventPreviewCard({ event }: { event: EventCard }) {
           </button>
         </Link>
 
-        <Link href={siteAdminHref}>
+        <Link href={siteAdminHref} className="block no-underline">
           <button
             type="button"
-            className="flex min-h-[58px] w-full items-center justify-center rounded-full bg-zinc-200 px-2 py-2 text-center text-sm leading-tight text-zinc-800 shadow-sm transition hover:bg-zinc-300"
+            className="flex min-h-[54px] w-full items-center justify-center rounded-full bg-zinc-200 px-2 py-2 text-center text-[13px] font-medium leading-[1.15] text-zinc-800 no-underline shadow-sm transition hover:bg-zinc-300"
+            style={{ textDecoration: 'none' }}
           >
-            <span>
+            <span className="no-underline" style={{ textDecoration: 'none' }}>
               ניהול
               <br />
               האתר
@@ -133,10 +136,11 @@ export default async function RootDemoPage() {
               בחרו אתר לדוגמה או עברו לניהול. לכל אתר מוצגת תמונת השיתוף הראשית של האירוע.
             </p>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <Link href="/admin">
+              <Link href="/admin" className="no-underline">
                 <button
                   type="button"
-                  className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-50"
+                  className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-800 no-underline transition hover:bg-zinc-50"
+                  style={{ textDecoration: 'none' }}
                 >
                   כניסה למנהל
                 </button>
