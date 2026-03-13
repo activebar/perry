@@ -30,32 +30,42 @@ export async function POST(req: NextRequest) {
     if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json().catch(() => ({}))
-    const sourceEventId = String(body?.source_event_id || '').trim()
     const targetEventId = String(body?.target_event_id || '').trim()
     const targetEventName = String(body?.target_event_name || '').trim() || null
     const templateId = String(body?.template_id || '').trim()
+    const explicitSourceEventId = String(body?.source_event_id || '').trim()
 
-    if (!sourceEventId) return NextResponse.json({ error: 'Missing source_event_id' }, { status: 400 })
-    if (!targetEventId) return NextResponse.json({ error: 'Missing target_event_id' }, { status: 400 })
-    if (!templateId) return NextResponse.json({ error: 'Missing template_id' }, { status: 400 })
+    if (!targetEventId) {
+      return NextResponse.json({ error: 'Missing target_event_id' }, { status: 400 })
+    }
 
     const sb = supabaseServiceRole()
 
-    const tplRes = await sb
-      .from('site_templates')
-      .select('id,config_json')
-      .eq('id', templateId)
-      .single()
+    let sourceEventId = explicitSourceEventId
 
-    if (tplRes.error) return NextResponse.json({ error: tplRes.error.message }, { status: 400 })
+    if (templateId) {
+      const tplRes = await sb
+        .from('site_templates')
+        .select('id,source_event_id,name')
+        .eq('id', templateId)
+        .single()
 
-    const cfg = (tplRes.data as any)?.config_json || {}
-    const settings = Array.isArray(cfg?.event_settings) ? cfg.event_settings : []
-    const galleries = Array.isArray(cfg?.galleries) ? cfg.galleries : []
-    const blocks = Array.isArray(cfg?.blocks) ? cfg.blocks : []
-    const rules = Array.isArray(cfg?.content_rules) ? cfg.content_rules : []
-    const mediaItems = Array.isArray(cfg?.media_items) ? cfg.media_items : []
-    const blessingPosts = Array.isArray(cfg?.blessing_posts) ? cfg.blessing_posts : []
+      if (tplRes.error) {
+        return NextResponse.json({ error: tplRes.error.message }, { status: 400 })
+      }
+
+      sourceEventId = String((tplRes.data as any)?.source_event_id || '').trim()
+      if (!sourceEventId) {
+        return NextResponse.json(
+          { error: 'Missing source_event_id in site_templates. Add source_event_id to the template first.' },
+          { status: 400 }
+        )
+      }
+    }
+
+    if (!sourceEventId) {
+      return NextResponse.json({ error: 'Missing source_event_id' }, { status: 400 })
+    }
 
     const existsRes = await sb.from('event_settings').select('event_id').eq('event_id', targetEventId).limit(1)
     if (existsRes.error) return NextResponse.json({ error: existsRes.error.message }, { status: 400 })
@@ -63,18 +73,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Target event_id already exists' }, { status: 400 })
     }
 
+    const [settingsRes, galleriesRes, blocksRes, rulesRes, mediaRes, postsRes] = await Promise.all([
+      sb.from('event_settings').select('*').eq('event_id', sourceEventId),
+      sb.from('galleries').select('*').eq('event_id', sourceEventId),
+      sb.from('blocks').select('*').eq('event_id', sourceEventId),
+      sb.from('content_rules').select('*').eq('event_id', sourceEventId),
+      sb.from('media_items').select('*').eq('event_id', sourceEventId),
+      sb.from('posts').select('*').eq('event_id', sourceEventId).eq('kind', 'blessing').eq('status', 'approved'),
+    ])
+
+    const firstErr =
+      settingsRes.error ||
+      galleriesRes.error ||
+      blocksRes.error ||
+      rulesRes.error ||
+      mediaRes.error ||
+      postsRes.error
+
+    if (firstErr) {
+      return NextResponse.json({ error: firstErr.message }, { status: 400 })
+    }
+
+    const settings = settingsRes.data || []
+    const galleries = galleriesRes.data || []
+    const blocks = blocksRes.data || []
+    const rules = rulesRes.data || []
+    const mediaItems = mediaRes.data || []
+    const blessingPosts = postsRes.data || []
+
     // 1) event_settings
     const settingsRows = settings.map((row: any) => {
       const next = stripRow(row, { event_id: targetEventId })
 
-      // key/value schema
+      // key/value schema support
       if (targetEventName && (next.key === 'event_name' || next.name === 'event_name')) {
         if ('value' in next) next.value = targetEventName
         if ('val' in next) next.val = targetEventName
         if ('value_json' in next) next.value_json = targetEventName
       }
 
-      // wide-table schema
+      // wide-table schema support
       if (targetEventName && 'event_name' in next) {
         next.event_name = targetEventName
       }
@@ -126,7 +164,7 @@ export async function POST(req: NextRequest) {
       if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
     }
 
-    // 5) media_items of the template/default event, with gallery remap
+    // 5) media_items with gallery remap
     const mediaRows = mediaItems.map((row: any) => {
       const next = stripRow(row, { event_id: targetEventId })
       const oldGalleryId = String(next.gallery_id || '').trim()
@@ -153,6 +191,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: 'השכפול הושלם בהצלחה',
+      source_event_id: sourceEventId,
+      target_event_id: targetEventId,
       stats: {
         event_settings: settingsRows.length,
         galleries: sortedGalleries.length,
