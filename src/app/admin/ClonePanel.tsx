@@ -131,11 +131,18 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
     setOk(null)
     setBusy(true)
     try {
+      const fallbackName = eventId ? `Template ${eventId}` : 'Template'
       const json = await jfetch('/api/admin/site-templates', {
         method: 'POST',
-        body: JSON.stringify({ source_event_id: eventId })
+        body: JSON.stringify({
+          action: 'create_from_event',
+          source_event_id: eventId,
+          name: fallbackName,
+          kind: 'generic',
+          description: `נוצר מהאירוע ${eventId}`
+        })
       })
-      setOk(json?.message || 'נשמר')
+      setOk(json?.message || 'התבנית נשמרה בהצלחה')
       await refresh()
     } catch (e: any) {
       setErr(e?.message || 'שגיאה בשמירה כתבנית')
@@ -232,6 +239,11 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
                 ))}
             </select>
             {selected?.description ? <p className="text-xs text-zinc-500">{selected.description}</p> : null}
+            {!loading && templates.filter((t) => t.is_active).length === 0 ? (
+              <p className="text-xs text-zinc-500">
+                עדיין אין תבניות פעילות. אפשר ללחוץ על "שמור כתבנית מהאירוע הנוכחי" כדי ליצור תבנית ראשונה.
+              </p>
+            ) : null}
             {!templateValid ? <p className="text-xs text-red-600">חובה לבחור תבנית</p> : null}
           </div>
 

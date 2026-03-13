@@ -28,15 +28,15 @@ export async function POST(req: NextRequest) {
     if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json().catch(() => ({}))
-    const action = String(body?.action || '')
+    const action = String(body?.action || '').trim()
 
     const sb = supabaseServiceRole()
 
-    if (action === 'create_from_event') {
-      const sourceEventId = String(body?.source_event_id || '')
-      const name = String(body?.name || '').trim()
-      const kind = String(body?.kind || 'generic').trim()
-      const description = String(body?.description || '').trim() || null
+    if (action === 'create_from_event' || (!!body?.source_event_id && !action)) {
+      const sourceEventId = String(body?.source_event_id || '').trim()
+      const name = String(body?.name || '').trim() || `Template ${sourceEventId}`
+      const kind = String(body?.kind || 'generic').trim() || 'generic'
+      const description = String(body?.description || '').trim() || `נוצר מהאירוע ${sourceEventId}`
       if (!sourceEventId) return NextResponse.json({ error: 'Missing source_event_id' }, { status: 400 })
       if (!name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
 
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-      return NextResponse.json({ ok: true, id: data?.id })
+      return NextResponse.json({ ok: true, id: data?.id, message: 'התבנית נשמרה בהצלחה' })
     }
 
     return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })
