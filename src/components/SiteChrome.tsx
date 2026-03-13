@@ -41,6 +41,10 @@ export default function SiteChrome({
   blessingsNavLabel,
 }: {
   children: React.ReactNode
+  /**
+   * Prefix for all public routes (e.g. "/wedding").
+   * If omitted/empty – behaves like the legacy single-site routes ("/blessings").
+   */
   basePath?: string
   eventName?: string
   footerEnabled?: boolean
@@ -67,9 +71,8 @@ export default function SiteChrome({
   }
 
   const eventId = base.replace(/^\//, '').trim()
-  const adminEventHref = eventId ? `/admin?event=${encodeURIComponent(eventId)}` : '/admin'
-  const adminLoginHref = eventId ? `/admin/login?event=${encodeURIComponent(eventId)}` : '/admin/login'
 
+  // No public chrome in admin area
   if (pathname.startsWith('/admin')) return <>{children}</>
 
   const isHome = relPath === '/'
@@ -113,7 +116,7 @@ export default function SiteChrome({
 
       <main className="mx-auto w-full max-w-none px-3 py-6 sm:px-4 md:max-w-3xl">{children}</main>
 
-      <footer className="relative mt-10 border-t border-zinc-200 bg-white">
+      <footer className="mt-10 border-t border-zinc-200 bg-white">
         <div className="mx-auto w-full max-w-none px-3 py-6 text-center text-sm text-zinc-500 sm:px-4 md:max-w-3xl">
           <div className="space-y-2">
             <div>
@@ -144,31 +147,35 @@ export default function SiteChrome({
               <div className="opacity-70">{eventName ? `${eventName} • ` : ''}מופעל ע״י ActiveBar</div>
             ) : null}
 
+            {eventId ? (
+              <div className="mt-3 flex items-center justify-between px-1 text-lg opacity-35">
+                <a
+                  href={`/admin?event=${encodeURIComponent(eventId)}`}
+                  aria-label="ניהול אירוע"
+                  title="ניהול אירוע"
+                  className="select-none no-underline"
+                  style={{ textDecoration: 'none' }}
+                >
+                  ⚙️
+                </a>
+
+                <a
+                  href={`/admin/login?event=${encodeURIComponent(eventId)}`}
+                  aria-label="כניסה לניהול"
+                  title="כניסה לניהול"
+                  className="select-none no-underline"
+                  style={{ textDecoration: 'none' }}
+                >
+                  🔐
+                </a>
+              </div>
+            ) : null}
+
             <div className="mt-2 text-[10px] opacity-40" dir="ltr">
               build v13.21
             </div>
           </div>
         </div>
-
-        <Link
-          href={adminEventHref}
-          aria-label="ניהול אירוע"
-          title="ניהול אירוע"
-          className="fixed bottom-3 left-3 z-[60] flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-[18px] no-underline shadow-sm ring-1 ring-zinc-300/70 backdrop-blur transition hover:bg-white/90 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-zinc-400"
-          style={{ textDecoration: 'none', opacity: 0.38 }}
-        >
-          ⚙️
-        </Link>
-
-        <Link
-          href={adminLoginHref}
-          aria-label="התחברות לניהול"
-          title="התחברות לניהול"
-          className="fixed bottom-3 right-3 z-[60] flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-[18px] no-underline shadow-sm ring-1 ring-zinc-300/70 backdrop-blur transition hover:bg-white/90 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-zinc-400"
-          style={{ textDecoration: 'none', opacity: 0.38 }}
-        >
-          🔐
-        </Link>
       </footer>
     </div>
   )
