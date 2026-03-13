@@ -66,7 +66,8 @@ const tabs = useMemo(
   return (
     <div>
       {/* טאבים עליונים */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
         {tabs.map(t => (
           <Link
             key={t.key}
@@ -81,6 +82,14 @@ const tabs = useMemo(
             {t.label}
           </Link>
         ))}
+        </div>
+
+        <Link
+          href={eventIdOverride ? `/${encodeURIComponent(eventIdOverride)}` : '/'}
+          className="rounded-xl px-4 py-2 text-sm border bg-white text-zinc-800 border-zinc-200 hover:bg-zinc-50"
+        >
+          🌐 לאתר
+        </Link>
       </div>
 
       {/* דף המנהל המלא (הקיים) עם אתחול לפי הטאב העליון */}

@@ -80,6 +80,8 @@ export default function SiteChrome({
 
   const safeGalleryNavLabel = (galleryNavLabel || '').trim() || 'גלריות'
   const safeBlessingsNavLabel = (blessingsNavLabel || '').trim() || 'ברכות'
+  const eventAdminHref = base ? `/admin/login?event=${encodeURIComponent(base.replace(/^\//, ''))}` : '/admin/login'
+  const siteAdminHref = '/admin'
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -113,6 +115,31 @@ export default function SiteChrome({
       </header>
 
       <main className="mx-auto w-full max-w-none px-3 py-6 sm:px-4 md:max-w-3xl">{children}</main>
+
+
+      <div className="fixed bottom-3 left-3 right-3 z-40 pointer-events-none">
+        <div className="mx-auto flex w-full max-w-none items-end justify-between md:max-w-3xl">
+          <a
+            href={siteAdminHref}
+            aria-label="ניהול אתר"
+            title="ניהול אתר"
+            className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300/60 bg-white/55 text-sm text-zinc-700 shadow-sm backdrop-blur transition hover:bg-white/80 active:scale-95"
+            style={{ opacity: 0.42 }}
+          >
+            🔧
+          </a>
+
+          <a
+            href={eventAdminHref}
+            aria-label="ניהול אירוע"
+            title="ניהול אירוע"
+            className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300/60 bg-white/55 text-sm text-zinc-700 shadow-sm backdrop-blur transition hover:bg-white/80 active:scale-95"
+            style={{ opacity: 0.42 }}
+          >
+            ⚙️
+          </a>
+        </div>
+      </div>
 
       <footer className="mt-10 border-t border-zinc-200 bg-white">
         <div className="mx-auto w-full max-w-none px-3 py-6 text-center text-sm text-zinc-500 sm:px-4 md:max-w-3xl">
