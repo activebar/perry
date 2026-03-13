@@ -41,10 +41,6 @@ export default function SiteChrome({
   blessingsNavLabel,
 }: {
   children: React.ReactNode
-  /**
-   * Prefix for all public routes (e.g. "/wedding").
-   * If omitted/empty – behaves like the legacy single-site routes ("/blessings").
-   */
   basePath?: string
   eventName?: string
   footerEnabled?: boolean
@@ -70,7 +66,10 @@ export default function SiteChrome({
     return `${base}${p}`
   }
 
-  // No public chrome in admin area
+  const eventId = base.replace(/^\//, '').trim()
+  const adminEventHref = eventId ? `/admin?event=${encodeURIComponent(eventId)}` : '/admin'
+  const adminLoginHref = eventId ? `/admin/login?event=${encodeURIComponent(eventId)}` : '/admin/login'
+
   if (pathname.startsWith('/admin')) return <>{children}</>
 
   const isHome = relPath === '/'
@@ -80,8 +79,6 @@ export default function SiteChrome({
 
   const safeGalleryNavLabel = (galleryNavLabel || '').trim() || 'גלריות'
   const safeBlessingsNavLabel = (blessingsNavLabel || '').trim() || 'ברכות'
-  const eventAdminHref = base ? `/admin/login?event=${encodeURIComponent(base.replace(/^\//, ''))}` : '/admin/login'
-  const siteAdminHref = '/admin'
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -116,32 +113,7 @@ export default function SiteChrome({
 
       <main className="mx-auto w-full max-w-none px-3 py-6 sm:px-4 md:max-w-3xl">{children}</main>
 
-
-      <div className="fixed bottom-3 left-3 right-3 z-40 pointer-events-none">
-        <div className="mx-auto flex w-full max-w-none items-end justify-between md:max-w-3xl">
-          <a
-            href={siteAdminHref}
-            aria-label="ניהול אתר"
-            title="ניהול אתר"
-            className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300/60 bg-white/55 text-sm text-zinc-700 shadow-sm backdrop-blur transition hover:bg-white/80 active:scale-95"
-            style={{ opacity: 0.42 }}
-          >
-            🔧
-          </a>
-
-          <a
-            href={eventAdminHref}
-            aria-label="ניהול אירוע"
-            title="ניהול אירוע"
-            className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300/60 bg-white/55 text-sm text-zinc-700 shadow-sm backdrop-blur transition hover:bg-white/80 active:scale-95"
-            style={{ opacity: 0.42 }}
-          >
-            ⚙️
-          </a>
-        </div>
-      </div>
-
-      <footer className="mt-10 border-t border-zinc-200 bg-white">
+      <footer className="relative mt-10 border-t border-zinc-200 bg-white">
         <div className="mx-auto w-full max-w-none px-3 py-6 text-center text-sm text-zinc-500 sm:px-4 md:max-w-3xl">
           <div className="space-y-2">
             <div>
@@ -177,6 +149,26 @@ export default function SiteChrome({
             </div>
           </div>
         </div>
+
+        <Link
+          href={adminEventHref}
+          aria-label="ניהול אירוע"
+          title="ניהול אירוע"
+          className="fixed bottom-3 left-3 z-[60] flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-[18px] no-underline shadow-sm ring-1 ring-zinc-300/70 backdrop-blur transition hover:bg-white/90 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+          style={{ textDecoration: 'none', opacity: 0.38 }}
+        >
+          ⚙️
+        </Link>
+
+        <Link
+          href={adminLoginHref}
+          aria-label="התחברות לניהול"
+          title="התחברות לניהול"
+          className="fixed bottom-3 right-3 z-[60] flex h-9 w-9 items-center justify-center rounded-full bg-white/70 text-[18px] no-underline shadow-sm ring-1 ring-zinc-300/70 backdrop-blur transition hover:bg-white/90 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+          style={{ textDecoration: 'none', opacity: 0.38 }}
+        >
+          🔐
+        </Link>
       </footer>
     </div>
   )
