@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { Container, Card, Button } from '@/components/ui'
+import { Container, Card } from '@/components/ui'
 import { supabaseAnon } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -59,7 +59,7 @@ function EventPreviewCard({ event }: { event: EventCard }) {
   const imageUrl = event.og_image_url || OG_FALLBACK
 
   return (
-    <Card className="overflow-hidden rounded-2xl border border-zinc-200 shadow-sm transition hover:shadow-md">
+    <Card className="overflow-hidden rounded-2xl border border-zinc-200 shadow-lg shadow-zinc-300/40 transition duration-200 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-zinc-400/30">
       <div className="relative aspect-[16/9] overflow-hidden bg-zinc-100">
         <img
           src={imageUrl}
@@ -76,27 +76,44 @@ function EventPreviewCard({ event }: { event: EventCard }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 px-4 pb-4">
-        <Link href={eventAdminHref} className="flex-1">
-          <Button
-            variant="ghost"
-            className="w-full border border-transparent bg-transparent text-zinc-700 shadow-none hover:bg-zinc-100"
+      <div className="grid grid-cols-3 gap-2 px-4 pb-4">
+        <Link href={eventAdminHref}>
+          <button
+            type="button"
+            className="flex min-h-[58px] w-full items-center justify-center rounded-full border border-zinc-300 bg-white px-2 py-2 text-center text-sm leading-tight text-zinc-800 shadow-sm transition hover:bg-zinc-50"
           >
-            נ.אירוע
-          </Button>
+            <span>
+              ניהול
+              <br />
+              האירוע
+            </span>
+          </button>
         </Link>
 
-        <Link href={siteHref} className="flex-1">
-          <Button className="w-full bg-green-600 text-white hover:bg-green-700">אתר</Button>
+        <Link href={siteHref}>
+          <button
+            type="button"
+            className="flex min-h-[58px] w-full items-center justify-center rounded-full bg-green-600 px-2 py-2 text-center text-sm leading-tight text-white shadow-sm transition hover:bg-green-700"
+          >
+            <span>
+              כניסה
+              <br />
+              לאתר
+            </span>
+          </button>
         </Link>
 
-        <Link href={siteAdminHref} className="flex-1">
-          <Button
-            variant="ghost"
-            className="w-full border border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+        <Link href={siteAdminHref}>
+          <button
+            type="button"
+            className="flex min-h-[58px] w-full items-center justify-center rounded-full bg-zinc-200 px-2 py-2 text-center text-sm leading-tight text-zinc-800 shadow-sm transition hover:bg-zinc-300"
           >
-            נ.אתר
-          </Button>
+            <span>
+              ניהול
+              <br />
+              האתר
+            </span>
+          </button>
         </Link>
       </div>
     </Card>
@@ -112,12 +129,17 @@ export default async function RootDemoPage() {
         <div className="mt-6 space-y-4">
           <Card>
             <h1 className="text-2xl font-bold">דוגמאות אתרים</h1>
-            <p className="mt-1 text-sm text-zinc-600">בחרו אתר לדוגמה או עברו לניהול. לכל אתר מוצגת תמונת השיתוף הראשית של האירוע.</p>
-            <div className="mt-4 flex flex-wrap gap-2 justify-end">
+            <p className="mt-1 text-sm text-zinc-600">
+              בחרו אתר לדוגמה או עברו לניהול. לכל אתר מוצגת תמונת השיתוף הראשית של האירוע.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <Link href="/admin">
-                <Button variant="ghost" className="border border-zinc-200 bg-white hover:bg-zinc-50">
+                <button
+                  type="button"
+                  className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-800 transition hover:bg-zinc-50"
+                >
                   כניסה למנהל
-                </Button>
+                </button>
               </Link>
             </div>
           </Card>
