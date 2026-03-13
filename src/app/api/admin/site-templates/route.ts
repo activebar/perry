@@ -40,15 +40,23 @@ export async function POST(req: NextRequest) {
       if (!sourceEventId) return NextResponse.json({ error: 'Missing source_event_id' }, { status: 400 })
       if (!name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
 
-      // Collect data from event
-      const [blocksRes, galleriesRes, rulesRes, settingsRes] = await Promise.all([
+      const [blocksRes, galleriesRes, rulesRes, settingsRes, mediaRes, postsRes] = await Promise.all([
         sb.from('blocks').select('*').eq('event_id', sourceEventId),
         sb.from('galleries').select('*').eq('event_id', sourceEventId),
         sb.from('content_rules').select('*').eq('event_id', sourceEventId),
-        sb.from('event_settings').select('*').eq('event_id', sourceEventId)
+        sb.from('event_settings').select('*').eq('event_id', sourceEventId),
+        sb.from('media_items').select('*').eq('event_id', sourceEventId),
+        sb.from('posts').select('*').eq('event_id', sourceEventId).eq('kind', 'blessing')
       ])
 
-      const firstErr = blocksRes.error || galleriesRes.error || rulesRes.error || settingsRes.error
+      const firstErr =
+        blocksRes.error ||
+        galleriesRes.error ||
+        rulesRes.error ||
+        settingsRes.error ||
+        mediaRes.error ||
+        postsRes.error
+
       if (firstErr) return NextResponse.json({ error: firstErr.message }, { status: 400 })
 
       const configJson = {
@@ -56,7 +64,9 @@ export async function POST(req: NextRequest) {
         blocks: blocksRes.data || [],
         galleries: galleriesRes.data || [],
         content_rules: rulesRes.data || [],
-        event_settings: settingsRes.data || []
+        event_settings: settingsRes.data || [],
+        media_items: mediaRes.data || [],
+        blessing_posts: postsRes.data || []
       }
 
       const { data, error } = await sb
