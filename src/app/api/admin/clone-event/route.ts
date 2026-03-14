@@ -440,26 +440,29 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      ok: true,
-      message: 'השכפול הושלם בהצלחה',
-      source_event_id: sourceEventId,
-      target_event_id: targetEventId,
-      stats: {
-        event_settings: settingsRows.length,
-        galleries: sortedGalleries.length,
-        blocks: blocksRows.length,
-        content_rules: rulesRows.length,
-        media_items: mediaRows.length,
-        blessing_posts: blessingRows.length,
-        storage_files_copied: storageCloneStats.files_copied,
-        storage_source_prefix: storageCloneStats.source_prefix,
-        storage_target_prefix: storageCloneStats.target_prefix,
-        skipped_legacy_gallery_blocks: hasNewGalleryBlocks
-          ? blocks.filter((b: any) => String(b?.type || '') === 'gallery').length
-          : 0,
-        cleanup_deleted_gallery_blocks: 'legacy type=gallery removed',
-      },
-    })
+  ok: true,
+  message: `האירוע "${targetEventId}" נוצר בהצלחה`,
+  source_event_id: sourceEventId,
+  target_event_id: targetEventId,
+  stats: {
+    event_settings: settingsRows.length,
+    galleries: sortedGalleries.length,
+    blocks: blocksRows.length,
+    content_rules: rulesRows.length,
+    media_items: mediaRows.length,
+    blessing_posts: blessingRows.length,
+    storage_files_copied: storageCloneStats.files_copied
+  },
+  summary: [
+    `הגדרות אירוע: ${settingsRows.length}`,
+    `גלריות: ${sortedGalleries.length}`,
+    `בלוקים: ${blocksRows.length}`,
+    `חוקי תוכן: ${rulesRows.length}`,
+    `מדיה: ${mediaRows.length}`,
+    `ברכות: ${blessingRows.length}`,
+    `קבצי Storage: ${storageCloneStats.files_copied}`
+  ]
+})
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 })
   }
