@@ -117,7 +117,6 @@ export default async function GalleryByIdPage({ params }: PageProps) {
           initialItems={items || []}
           galleryId={galleryId}
           uploadEnabled={uploadEnabled}
-          eventId={env.EVENT_SLUG}
         />
       </Container>
     </main>
