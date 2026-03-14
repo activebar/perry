@@ -1,226 +1,399 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest } from '@/lib/adminSession'
+import { getAdminFromRequest, requireAnyPermission } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
+import { getEventIdFromRequest } from '@/lib/event-id'
 
-export const dynamic = 'force-dynamic'
-
-function stripRow(row: any, overrides: Record<string, any> = {}) {
-  const copy: any = { ...row }
-  delete copy.id
-  delete copy.created_at
-  delete copy.updated_at
-  delete copy.inserted_at
-  delete copy.user_id
-  delete copy.device_id
-  return { ...copy, ...overrides }
+function jsonError(msg: string, status = 400) {
+  return NextResponse.json({ error: msg }, { status })
 }
 
-function remapBlockConfig(config: any, galleryMap: Map<string, string>) {
-  const next = config && typeof config === 'object' && !Array.isArray(config) ? { ...config } : {}
-  const oldGalleryId = String(next.gallery_id || '').trim()
-  if (oldGalleryId && galleryMap.has(oldGalleryId)) {
-    next.gallery_id = galleryMap.get(oldGalleryId)
+function isPlainObject(v: unknown): v is Record<string, any> {
+  return !!v && typeof v === 'object' && !Array.isArray(v)
+}
+
+function pickExistingKeys(source: Record<string, any> | null | undefined, keys: string[]) {
+  const out: Record<string, any> = {}
+  if (!source) return out
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      out[key] = source[key]
+    }
   }
-  return next
+  return out
+}
+
+function extractGallerySequence(values: Array<string | null | undefined>) {
+  let max = 0
+  for (const raw of values) {
+    const v = String(raw || '').trim()
+    const m = v.match(/^gallery_(\d+)$/i)
+    if (!m) continue
+    const n = Number(m[1])
+    if (Number.isFinite(n) && n > max) max = n
+  }
+  return max
+}
+
+async function getGalleryBlockByGalleryId(sb: ReturnType<typeof supabaseServiceRole>, eventId: string, galleryId: string) {
+  const { data } = await sb
+    .from('blocks')
+    .select('id,type,is_visible,order_index,config,event_id')
+    .eq('event_id', eventId)
+    .like('type', 'gallery_%')
+    .limit(500)
+
+  const block = (data || []).find((b: any) => {
+    const cfg = isPlainObject(b?.config) ? b.config : {}
+    return String(cfg.gallery_id || '') === String(galleryId)
+  })
+
+  return block || null
+}
+
+
+async function findExistingCreatedGallery(sb: ReturnType<typeof supabaseServiceRole>, eventId: string, nextKey: string) {
+  const { data: galleryRow } = await sb
+    .from('galleries')
+    .select('*')
+    .eq('event_id', eventId)
+    .eq('title', nextKey)
+    .maybeSingle()
+
+  const { data: blockRow } = await sb
+    .from('blocks')
+    .select('id,type,is_visible,order_index,config,event_id')
+    .eq('event_id', eventId)
+    .eq('type', nextKey)
+    .maybeSingle()
+
+  return { galleryRow: galleryRow || null, blockRow: blockRow || null }
+}
+
+export async function GET(req: NextRequest) {
+  const admin = await getAdminFromRequest(req)
+  if (!admin) return jsonError('unauthorized', 401)
+
+  try {
+    requireAnyPermission(admin, ['galleries.read', 'galleries.manage', 'site.manage'])
+  } catch {
+    return jsonError('forbidden', 403)
+  }
+
+  const eventId = admin.event_id || getEventIdFromRequest(req)
+
+  const sb = supabaseServiceRole()
+  const { data, error } = await sb
+    .from('galleries')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('order_index', { ascending: true })
+
+  if (error) return jsonError(error.message, 500)
+
+  const { data: blocks } = await sb
+    .from('blocks')
+    .select('id,type,is_visible,order_index,config,event_id')
+    .eq('event_id', eventId)
+    .like('type', 'gallery_%')
+
+  const titleByGalleryId = new Map<string, { title?: string; button_label?: string }>()
+  for (const b of blocks || []) {
+    const cfg: any = isPlainObject((b as any).config) ? (b as any).config : {}
+    const gid = String(cfg.gallery_id || '').trim()
+    if (!gid) continue
+    if (!titleByGalleryId.has(gid)) {
+      titleByGalleryId.set(gid, {
+        title: cfg.title,
+        button_label: cfg.button_label
+      })
+    }
+  }
+
+  const galleries = (data || []).map((g: any) => {
+    const extra = titleByGalleryId.get(String(g.id))
+    return {
+      ...g,
+      display_title: extra?.title || g.title,
+      display_button_label: extra?.button_label || null
+    }
+  })
+
+  const galleriesWithCounts = await Promise.all(
+    galleries.map(async (g: any) => {
+      const { count } = await sb
+        .from('media_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('gallery_id', g.id)
+        .eq('is_approved', false)
+
+      return { ...g, pending_count: count || 0 }
+    })
+  )
+
+  const total_pending = galleriesWithCounts.reduce((sum: number, g: any) => sum + (g.pending_count || 0), 0)
+
+  return NextResponse.json({ ok: true, galleries: galleriesWithCounts, total_pending })
+}
+
+export async function PUT(req: NextRequest) {
+  const admin = await getAdminFromRequest(req)
+  if (!admin) return jsonError('unauthorized', 401)
+
+  try {
+    requireAnyPermission(admin, ['galleries.manage', 'site.manage'])
+  } catch {
+    return jsonError('forbidden', 403)
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const id = String(body.id || '').trim()
+  if (!id) return jsonError('missing id', 400)
+
+  const patch: any = {}
+  if (body.title !== undefined) patch.title = body.title
+  if (body.upload_enabled !== undefined) patch.upload_enabled = !!body.upload_enabled
+  if (body.require_approval !== undefined) patch.require_approval = !!body.require_approval
+  if (body.auto_approve_until !== undefined) patch.auto_approve_until = body.auto_approve_until
+  if (body.upload_default_hours !== undefined) patch.upload_default_hours = Number(body.upload_default_hours) || 8
+
+  const sb = supabaseServiceRole()
+  const eventId = admin.event_id || getEventIdFromRequest(req)
+
+  if (patch.title !== undefined) {
+    const { data: blk } = await sb
+      .from('blocks')
+      .select('id,config')
+      .eq('event_id', eventId)
+      .like('type', 'gallery_%')
+      .limit(500)
+
+    const toUpdate = (blk || []).filter((b: any) => String((b.config as any)?.gallery_id || '') === id)
+
+    for (const b of toUpdate) {
+      const cfg: any = isPlainObject(b.config) ? b.config : {}
+      const nextCfg = { ...cfg, title: patch.title }
+      await sb
+        .from('blocks')
+        .update({ config: nextCfg })
+        .eq('id', b.id)
+        .eq('event_id', eventId)
+    }
+  }
+
+  const { data, error } = await sb
+    .from('galleries')
+    .update(patch)
+    .eq('id', id)
+    .eq('event_id', eventId)
+    .select('*')
+    .single()
+
+  if (error) return jsonError(error.message, 500)
+  return NextResponse.json({ ok: true, gallery: data })
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const admin = await getAdminFromRequest(req)
-    if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const admin = await getAdminFromRequest(req)
+  if (!admin) return jsonError('unauthorized', 401)
 
-    const body = await req.json().catch(() => ({}))
-    const targetEventId = String(body?.target_event_id || '').trim()
-    const targetEventName = String(body?.target_event_name || '').trim() || null
-    const templateId = String(body?.template_id || '').trim()
-    const explicitSourceEventId = String(body?.source_event_id || '').trim()
+  const body = await req.json().catch(() => ({}))
+  const action = String(body.action || '').trim()
 
-    if (!targetEventId) {
-      return NextResponse.json({ error: 'Missing target_event_id' }, { status: 400 })
+  const sb = supabaseServiceRole()
+  const eventId = admin.event_id || getEventIdFromRequest(req)
+
+  const requestedCreate =
+    action === 'create' ||
+    action === 'clone' ||
+    (!action && !String(body.id || '').trim())
+
+  if (requestedCreate) {
+    if (admin.role !== 'master' && !admin.permissions?.galleries_create) {
+      return jsonError('forbidden', 403)
     }
 
-    const sb = supabaseServiceRole()
+    const { data: existing, error: exErr } = await sb
+      .from('galleries')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('order_index', { ascending: true })
 
-    let sourceEventId = explicitSourceEventId
+    if (exErr) return jsonError(exErr.message, 500)
 
-    if (templateId) {
-      const tplRes = await sb
-        .from('site_templates')
-        .select('id,source_event_id,name')
-        .eq('id', templateId)
-        .single()
+    const { data: allBlocks, error: blocksErr } = await sb
+      .from('blocks')
+      .select('id,type,is_visible,order_index,config,event_id')
+      .eq('event_id', eventId)
+      .like('type', 'gallery_%')
+      .order('order_index', { ascending: true })
 
-      if (tplRes.error) {
-        return NextResponse.json({ error: tplRes.error.message }, { status: 400 })
-      }
+    if (blocksErr) return jsonError(blocksErr.message, 500)
 
-      sourceEventId = String((tplRes.data as any)?.source_event_id || '').trim()
-      if (!sourceEventId) {
-        return NextResponse.json(
-          { error: 'Missing source_event_id in site_templates. Add source_event_id to the template first.' },
-          { status: 400 }
-        )
-      }
+    const nextSeq =
+      extractGallerySequence([
+        ...(existing || []).map((g: any) => g?.title),
+        ...(allBlocks || []).map((b: any) => b?.type),
+      ]) + 1
+
+    const nextKey = `gallery_${nextSeq}`
+
+    const existingCreated = await findExistingCreatedGallery(sb, eventId, nextKey)
+    if (existingCreated.galleryRow) {
+      return NextResponse.json({
+        ok: true,
+        gallery: existingCreated.galleryRow,
+        created: {
+          gallery_key: nextKey,
+          display_title: String(existingCreated.blockRow?.config?.title || existingCreated.galleryRow.title || nextKey)
+        }
+      })
     }
 
-    if (!sourceEventId) {
-      return NextResponse.json({ error: 'Missing source_event_id' }, { status: 400 })
+    let templateGallery: any = null
+    let templateBlock: any = null
+
+    const templateGalleryId =
+      String(body.template_gallery_id || body.from_id || '').trim()
+
+    if (templateGalleryId) {
+      templateGallery = (existing || []).find((g: any) => String(g.id) === templateGalleryId) || null
     }
 
-    const existsRes = await sb.from('event_settings').select('event_id').eq('event_id', targetEventId).limit(1)
-    if (existsRes.error) return NextResponse.json({ error: existsRes.error.message }, { status: 400 })
-    if ((existsRes.data || []).length > 0) {
-      return NextResponse.json({ error: 'Target event_id already exists' }, { status: 400 })
+    if (!templateGallery && (existing || []).length > 0) {
+      templateGallery = (existing || [])[existing.length - 1]
     }
 
-    const [settingsRes, galleriesRes, blocksRes, rulesRes, mediaRes, postsRes] = await Promise.all([
-      sb.from('event_settings').select('*').eq('event_id', sourceEventId),
-      sb.from('galleries').select('*').eq('event_id', sourceEventId),
-      sb.from('blocks').select('*').eq('event_id', sourceEventId),
-      sb.from('content_rules').select('*').eq('event_id', sourceEventId),
-      sb.from('media_items').select('*').eq('event_id', sourceEventId),
-      sb.from('posts').select('*').eq('event_id', sourceEventId).eq('kind', 'blessing').eq('status', 'approved'),
+    if (templateGallery?.id) {
+      templateBlock = await getGalleryBlockByGalleryId(sb, eventId, String(templateGallery.id))
+    }
+
+    const templateGalleryFields = pickExistingKeys(templateGallery, [
+      'upload_enabled',
+      'require_approval',
+      'upload_default_hours',
+      'web_max_dimension',
+      'is_active',
+      'editable_until',
+      'uploader_device_id',
+      'crop_position'
     ])
 
-    const firstErr =
-      settingsRes.error ||
-      galleriesRes.error ||
-      blocksRes.error ||
-      rulesRes.error ||
-      mediaRes.error ||
-      postsRes.error
-
-    if (firstErr) {
-      return NextResponse.json({ error: firstErr.message }, { status: 400 })
+    const insertGallery: Record<string, any> = {
+      event_id: eventId,
+      title: nextKey,
+      order_index: (existing?.length || 0) + 1,
+      ...templateGalleryFields
     }
 
-    const settings = settingsRes.data || []
-    const galleries = galleriesRes.data || []
-    const blocks = blocksRes.data || []
-    const rules = rulesRes.data || []
-    const mediaItems = mediaRes.data || []
-    const blessingPosts = postsRes.data || []
-
-    // 1) event_settings
-    const settingsRows = settings.map((row: any) => {
-      const next = stripRow(row, { event_id: targetEventId })
-
-      if (targetEventName && (next.key === 'event_name' || next.name === 'event_name')) {
-        if ('value' in next) next.value = targetEventName
-        if ('val' in next) next.val = targetEventName
-        if ('value_json' in next) next.value_json = targetEventName
-      }
-
-      if (targetEventName && 'event_name' in next) {
-        next.event_name = targetEventName
-      }
-
-      return next
-    })
-
-    if (settingsRows.length) {
-      const ins = await sb.from('event_settings').insert(settingsRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
+    if (!Object.prototype.hasOwnProperty.call(insertGallery, 'upload_enabled')) {
+      insertGallery.upload_enabled = false
+    }
+    if (!Object.prototype.hasOwnProperty.call(insertGallery, 'require_approval')) {
+      insertGallery.require_approval = true
+    }
+    if (!Object.prototype.hasOwnProperty.call(insertGallery, 'is_active')) {
+      insertGallery.is_active = true
+    }
+    if (!Object.prototype.hasOwnProperty.call(insertGallery, 'auto_approve_until')) {
+      insertGallery.auto_approve_until = null
+    } else {
+      insertGallery.auto_approve_until = null
     }
 
-    // 2) galleries first + build gallery map
-    const galleryMap = new Map<string, string>()
-    const sortedGalleries = galleries
-      .slice()
-      .sort((a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0))
+    const { data: gal, error: galErr } = await sb
+      .from('galleries')
+      .insert(insertGallery)
+      .select('*')
+      .single()
 
-    for (const row of sortedGalleries) {
-      const oldId = String(row?.id || '').trim()
-      const payload = stripRow(row, { event_id: targetEventId })
+    if (galErr) return jsonError(galErr.message, 500)
 
-      const ins = await sb.from('galleries').insert(payload).select('*').single()
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-
-      const newId = String((ins.data as any)?.id || '').trim()
-      if (oldId && newId) galleryMap.set(oldId, newId)
-    }
-
-    // 3) blocks after galleries, with gallery_id remap
-    const hasNewGalleryBlocks = blocks.some((b: any) => String(b?.type || '').startsWith('gallery_'))
-    const filteredBlocks = hasNewGalleryBlocks
-      ? blocks.filter((b: any) => String(b?.type || '') !== 'gallery')
-      : blocks
-
-    const blocksRows = filteredBlocks
-      .slice()
-      .sort((a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0))
-      .map((row: any) => {
-        const next = stripRow(row, { event_id: targetEventId })
-        next.config = remapBlockConfig(next.config, galleryMap)
-        return next
-      })
-
-    if (blocksRows.length) {
-      const ins = await sb.from('blocks').insert(blocksRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-    }
-
-    // Hard cleanup: remove any legacy gallery blocks that may have been created by any flow.
-    const cleanupLegacyRes = await sb
+    const { data: lastBlockRows, error: lastBlockErr } = await sb
       .from('blocks')
-      .delete()
-      .eq('event_id', targetEventId)
+      .select('order_index')
+      .eq('event_id', eventId)
+      .order('order_index', { ascending: false })
+      .limit(1)
+
+    if (lastBlockErr) return jsonError(lastBlockErr.message, 500)
+
+    const nextBlockOrder = (lastBlockRows?.[0]?.order_index ?? 0) + 1
+
+    const templateCfg = isPlainObject(templateBlock?.config) ? templateBlock.config : {}
+    const blockTitle =
+      String(body.display_title || templateCfg.title || `גלריה ${nextSeq}`).trim() || `גלריה ${nextSeq}`
+
+    const blockConfig = {
+      ...templateCfg,
+      gallery_id: gal.id,
+      title: blockTitle,
+      button_label: String(templateCfg.button_label || 'לכל התמונות'),
+      limit: Number(templateCfg.limit || 12) || 12
+    }
+
+    if (!existingCreated.blockRow) {
+  const { error: insErr } = await sb.from('blocks').insert({
+    event_id: eventId,
+    type: nextKey,
+    order_index: nextBlockOrder,
+    is_visible: templateBlock?.is_visible ?? true,
+    config: blockConfig
+  })
+
+  if (insErr) return jsonError(insErr.message, 500)
+}
+
+    const { data: cleanupBlocks } = await sb
+      .from('blocks')
+      .select('id,type,config,created_at')
+      .eq('event_id', eventId)
       .eq('type', 'gallery')
+      .limit(50)
 
-    if (cleanupLegacyRes.error) {
-      return NextResponse.json({ error: cleanupLegacyRes.error.message }, { status: 400 })
-    }
-
-    // 4) content rules
-    const rulesRows = rules.map((row: any) => stripRow(row, { event_id: targetEventId }))
-    if (rulesRows.length) {
-      const ins = await sb.from('content_rules').insert(rulesRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-    }
-
-    // 5) media_items with gallery remap
-    const mediaRows = mediaItems.map((row: any) => {
-      const next = stripRow(row, { event_id: targetEventId })
-      const oldGalleryId = String(next.gallery_id || '').trim()
-      if (oldGalleryId && galleryMap.has(oldGalleryId)) {
-        next.gallery_id = galleryMap.get(oldGalleryId)
-      } else if (oldGalleryId && !galleryMap.has(oldGalleryId)) {
-        next.gallery_id = null
-      }
-      return next
+    const duplicateLegacyBlocks = (cleanupBlocks || []).filter((b: any) => {
+      const cfg = isPlainObject(b?.config) ? b.config : {}
+      return String(cfg.gallery_id || '') === String(gal.id)
     })
 
-    if (mediaRows.length) {
-      const ins = await sb.from('media_items').insert(mediaRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-    }
-
-    // 6) default blessings
-    const blessingRows = blessingPosts.map((row: any) => stripRow(row, { event_id: targetEventId }))
-    if (blessingRows.length) {
-      const ins = await sb.from('posts').insert(blessingRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
+    for (const row of duplicateLegacyBlocks) {
+      await sb.from('blocks').delete().eq('id', row.id).eq('event_id', eventId)
     }
 
     return NextResponse.json({
       ok: true,
-      message: 'השכפול הושלם בהצלחה',
-      source_event_id: sourceEventId,
-      target_event_id: targetEventId,
-      stats: {
-        event_settings: settingsRows.length,
-        galleries: sortedGalleries.length,
-        blocks: blocksRows.length,
-        content_rules: rulesRows.length,
-        media_items: mediaRows.length,
-        blessing_posts: blessingRows.length,
-        skipped_legacy_gallery_blocks: hasNewGalleryBlocks
-          ? blocks.filter((b: any) => String(b?.type || '') === 'gallery').length
-          : 0,
-        cleanup_deleted_gallery_blocks: 'all legacy gallery blocks removed at end of clone',
-      },
+      gallery: gal,
+      created: {
+        gallery_key: nextKey,
+        display_title: blockTitle
+      }
     })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 })
   }
+
+  const id = String(body.id || '').trim()
+  const hours = Number(body.hours || 8)
+
+  if (admin.role !== 'master' && !admin.permissions?.galleries_open) {
+    return jsonError('forbidden', 403)
+  }
+
+  if (!id) return jsonError('missing id', 400)
+
+  const safeHours = Number.isFinite(hours) && hours > 0 ? Math.min(hours, 72) : 8
+  const until = new Date(Date.now() + safeHours * 60 * 60 * 1000).toISOString()
+
+  const { data, error } = await sb
+    .from('galleries')
+    .update({
+      upload_enabled: true,
+      auto_approve_until: until,
+      require_approval: true
+    })
+    .eq('id', id)
+    .eq('event_id', eventId)
+    .select('*')
+    .single()
+
+  if (error) return jsonError(error.message, 500)
+
+  return NextResponse.json({ ok: true, gallery: data })
 }
