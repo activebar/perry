@@ -22,7 +22,7 @@ function getOrCreateDeviceId() {
   const existing = localStorage.getItem(key)
   if (existing) return existing
   const next =
-    (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`
   localStorage.setItem(key, next)
@@ -99,6 +99,8 @@ export default function GalleryClient({
   const [myReactionsByItem, setMyReactionsByItem] = useState<Record<string, string[]>>({})
   const [deviceId, setDeviceId] = useState('')
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
+  const [uploadLabel, setUploadLabel] = useState<string>('')
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
@@ -121,7 +123,7 @@ export default function GalleryClient({
     if (!items.length) return
     loadReactions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length])
+  }, [items])
 
   async function loadReactions() {
     try {
@@ -132,7 +134,6 @@ export default function GalleryClient({
       ids.forEach((id) => qs.append('media_item_id', id))
       const res = await fetch(`/api/public/gallery-items?${qs.toString()}`, { cache: 'no-store' })
       const json = await res.json().catch(() => ({}))
-
       if (!res.ok) return
 
       if (json?.reactionsByItem) {
@@ -173,10 +174,16 @@ export default function GalleryClient({
     if (!list.length) return
 
     setBusy(true)
-    setMsg(source === 'camera' ? 'מעלה צילום...' : 'מעלה קבצים...')
+    setUploadProgress(0)
+    setUploadLabel(source === 'camera' ? 'מעלה צילום...' : 'מעלה קבצים...')
+    setMsg('')
 
     try {
-      for (const file of list) {
+      let pendingCount = 0
+      let approvedCount = 0
+
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i]
         const fd = new FormData()
 
         const isVideo = file.type.startsWith('video/')
@@ -202,17 +209,38 @@ export default function GalleryClient({
           method: 'POST',
           body: fd,
         })
+
         const upJson = await up.json().catch(() => ({}))
         if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+
+        if (upJson?.is_approved === false) pendingCount += 1
+        else approvedCount += 1
+
+        const pct = Math.round(((i + 1) / list.length) * 100)
+        setUploadProgress(pct)
+        setUploadLabel(`מעלה קבצים... ${i + 1}/${list.length}`)
       }
 
-      setMsg('הקבצים הועלו בהצלחה')
       await refreshItems()
       await loadReactions()
+
+      if (pendingCount > 0 && approvedCount > 0) {
+        setMsg(`הועלו ${approvedCount} קבצים בהצלחה, ו-${pendingCount} ממתינים לאישור מנהל`)
+      } else if (pendingCount > 0) {
+        setMsg(
+          pendingCount === 1
+            ? 'הקובץ הועלה וממתין לאישור מנהל'
+            : `${pendingCount} קבצים הועלו וממתינים לאישור מנהל`
+        )
+      } else {
+        setMsg(list.length === 1 ? 'הקובץ הועלה בהצלחה' : `${list.length} קבצים הועלו בהצלחה`)
+      }
     } catch (e: any) {
       setMsg(e?.message || 'שגיאה בהעלאה')
     } finally {
       setBusy(false)
+      setUploadProgress(0)
+      setUploadLabel('')
       if (fileInputRef.current) fileInputRef.current.value = ''
       if (cameraInputRef.current) cameraInputRef.current.value = ''
       if (attachInputRef.current) attachInputRef.current.value = ''
@@ -340,6 +368,35 @@ export default function GalleryClient({
     }
   }
 
+  async function shareItem(item: GalleryItem) {
+    try {
+      const res = await fetch('/api/short-links', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'gl',
+          media_item_id: item.id,
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'שגיאה ביצירת קישור')
+
+      const shareUrl = `${window.location.origin}/gl/${json.code}`
+
+      if (navigator.share) {
+        await navigator.share({ url: shareUrl })
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl)
+        setMsg('קישור השיתוף הועתק')
+      } else {
+        window.prompt('העתק את הקישור', shareUrl)
+      }
+    } catch (e: any) {
+      setMsg(e?.message || 'שגיאה בשיתוף')
+    }
+  }
+
   const sortedItems = useMemo(
     () =>
       [...items].sort((a, b) => {
@@ -362,8 +419,9 @@ export default function GalleryClient({
             onClick={() => cameraInputRef.current?.click()}
             disabled={!uploadEnabled || busy}
             className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            title="צילום"
           >
-            הצעת נישואין
+            📷 צילום
           </button>
 
           <button
@@ -371,8 +429,9 @@ export default function GalleryClient({
             onClick={() => fileInputRef.current?.click()}
             disabled={!uploadEnabled || busy}
             className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            title="העלאת תמונות או סרטונים"
           >
-            חינה
+            ⬆️ העלאה
           </button>
 
           <button
@@ -380,8 +439,9 @@ export default function GalleryClient({
             onClick={() => attachInputRef.current?.click()}
             disabled={!uploadEnabled || busy}
             className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            title="צירוף תמונה או סרטון"
           >
-            חופה
+            📎 צירוף
           </button>
         </div>
 
@@ -401,14 +461,26 @@ export default function GalleryClient({
             </div>
           </div>
 
-          <div className="mt-4 text-sm font-medium">בחר תמונות</div>
-          {msg ? <div className="mt-2 text-sm text-zinc-600">{msg}</div> : null}
+          {busy ? (
+            <div className="mt-4">
+              <div className="mb-2 text-sm text-zinc-600">{uploadLabel || 'מעלה...'}</div>
+              <div className="h-3 w-full overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className="h-full rounded-full bg-zinc-700 transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <div className="mt-2 text-xs text-zinc-500">{uploadProgress}%</div>
+            </div>
+          ) : null}
+
+          {msg ? <div className="mt-4 text-sm text-zinc-600">{msg}</div> : null}
         </div>
 
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           hidden
           onChange={(e) => uploadFiles(e.target.files, 'upload')}
@@ -436,7 +508,8 @@ export default function GalleryClient({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {sortedItems.map((item) => {
           const thumb = item.thumb_url || item.url
-          const video = isVideoUrl(item.url) || String(item.kind || '').toLowerCase().includes('video')
+          const video =
+            isVideoUrl(item.url) || String(item.kind || '').toLowerCase().includes('video')
           const reactions = reactionsByItem[item.id] || {}
           const topReaction = Object.entries(reactions).sort((a, b) => b[1] - a[1])[0]
           const editable = canEdit(item)
@@ -474,33 +547,25 @@ export default function GalleryClient({
 
                 {editable ? (
                   <div className="absolute right-2 top-2 rounded-full bg-white/90 px-2 py-1 text-xs text-zinc-800 shadow">
-                    עריכה {remainingForItem(item)}
+                    {remainingForItem(item)}
                   </div>
                 ) : null}
 
                 {video ? (
                   <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white">
-                    וידאו
+                    🎥
                   </div>
                 ) : null}
               </button>
 
-              <div className="flex items-center justify-center gap-6 px-4 py-3 text-sm">
+              <div className="flex items-center justify-center gap-6 px-4 py-3 text-lg">
                 <button
                   type="button"
-                  className="hover:underline"
-                  onClick={async () => {
-                    if (navigator.share) {
-                      try {
-                        await navigator.share({ url: item.url })
-                        return
-                      } catch {}
-                    }
-                    await navigator.clipboard.writeText(item.url)
-                    setMsg('הקישור הועתק')
-                  }}
+                  className="transition hover:scale-110"
+                  onClick={() => shareItem(item)}
+                  title="שיתוף"
                 >
-                  שתף
+                  🔗
                 </button>
 
                 <a
@@ -508,10 +573,20 @@ export default function GalleryClient({
                   download
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:underline"
+                  className="transition hover:scale-110"
+                  title="הורדה"
                 >
-                  הורד
+                  ⬇️
                 </a>
+
+                <button
+                  type="button"
+                  className="transition hover:scale-110"
+                  onClick={() => setPreview(item)}
+                  title="תגובות"
+                >
+                  😊
+                </button>
               </div>
             </div>
           )
@@ -530,7 +605,7 @@ export default function GalleryClient({
           >
             <div className="mb-3 flex items-center justify-between gap-2">
               <div className="text-sm text-zinc-500">
-                {canEdit(preview) ? `אפשר לערוך עוד ${remainingForItem(preview)}` : 'צפייה בלבד'}
+                {canEdit(preview) ? `אפשר לערוך עוד ${remainingForItem(preview)}` : ''}
               </div>
 
               <button
@@ -557,6 +632,26 @@ export default function GalleryClient({
                   className="max-h-[70vh] w-full object-contain"
                 />
               )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => shareItem(preview)}
+                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
+              >
+                🔗 שיתוף
+              </button>
+
+              <a
+                href={preview.url}
+                download
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
+              >
+                ⬇️ הורדה
+              </a>
             </div>
 
             <div className="mt-4">
