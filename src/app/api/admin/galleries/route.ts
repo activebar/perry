@@ -378,7 +378,7 @@ export async function POST(req: NextRequest) {
 
   if (!id) return jsonError('missing id', 400)
 
-  const safeHours = Number.isFinite(hours) && hours > 0 ? Math.min(hours, 999999) : 8
+  const safeHours = Number.isFinite(hours) && hours > 0 ? Math.min(hours, 9999) : 8
   const until = new Date(Date.now() + safeHours * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await sb
