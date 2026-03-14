@@ -42,7 +42,7 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
     .select('id,type,order_index,is_visible,config,event_id')
     .eq('event_id', eventId)
     .eq('is_visible', true)
-    .or('type.eq.gallery,type.like.gallery_%')
+    .like('type', 'gallery_%')
     .order('order_index', { ascending: true })
 
   if (bErr) throw bErr
