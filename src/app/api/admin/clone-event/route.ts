@@ -143,7 +143,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 3) blocks after galleries, with gallery_id remap
-    const blocksRows = blocks
+    // If source already has gallery_1/gallery_2/... blocks,
+    // skip legacy "gallery" blocks to avoid duplicates.
+    const hasNewGalleryBlocks = blocks.some((b: any) => String(b?.type || '').startsWith('gallery_'))
+    const filteredBlocks = hasNewGalleryBlocks
+      ? blocks.filter((b: any) => String(b?.type || '') !== 'gallery')
+      : blocks
+
+    const blocksRows = filteredBlocks
       .slice()
       .sort((a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0))
       .map((row: any) => {
@@ -200,6 +207,9 @@ export async function POST(req: NextRequest) {
         content_rules: rulesRows.length,
         media_items: mediaRows.length,
         blessing_posts: blessingRows.length,
+        skipped_legacy_gallery_blocks: hasNewGalleryBlocks
+          ? blocks.filter((b: any) => String(b?.type || '') === 'gallery').length
+          : 0,
       },
     })
   } catch (e: any) {
