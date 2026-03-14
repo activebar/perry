@@ -1,551 +1,618 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import JSZip from 'jszip'
-import { Button, Card } from '@/components/ui'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-type Item = {
+type GalleryItem = {
   id: string
   url: string
-  created_at?: string
+  thumb_url?: string | null
+  kind?: string | null
+  created_at?: string | null
   editable_until?: string | null
-  is_approved?: boolean
-  crop_position?: string | null
+  uploader_device_id?: string | null
 }
 
-async function downloadUrl(url: string) {
-  try {
-    const res = await fetch(url)
-    const blob = await res.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    const fileName = (url.split('/').pop() || 'image').split('?')[0] || 'image'
-    const a = document.createElement('a')
-    a.href = blobUrl
-    a.download = fileName
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1500)
-  } catch {
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
+type ReactionSummary = Record<string, number>
+
+const EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '😮']
+
+function getOrCreateDeviceId() {
+  if (typeof window === 'undefined') return ''
+  const key = 'device_id'
+  const existing = localStorage.getItem(key)
+  if (existing) return existing
+  const next =
+    (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  localStorage.setItem(key, next)
+  document.cookie = `device_id=${next}; path=/; max-age=31536000; samesite=lax`
+  return next
 }
 
-async function shareUrl(url: string) {
-  const clean = String(url || '').trim()
-  if (!clean) return
-  try {
-    if ((navigator as any).share) {
-      await (navigator as any).share({ url: clean })
-      return
-    }
-  } catch {}
-  try {
-    await navigator.clipboard.writeText(clean)
-    alert('הקישור הועתק ✅')
-  } catch {
-    window.open(clean, '_blank', 'noopener,noreferrer')
-  }
+function isVideoUrl(url?: string | null) {
+  return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
 }
 
-async function ensureShortLinkForMedia(mediaItemId: string) {
-  const id = String(mediaItemId || '').trim()
-  if (!id) return null
-  const code = id.slice(0, 8)
+function formatRemaining(ms: number) {
+  if (ms <= 0) return '00:00'
+  const total = Math.floor(ms / 1000)
+  const mm = String(Math.floor(total / 60)).padStart(2, '0')
+  const ss = String(total % 60).padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
+async function fileToCompressedBlob(file: File): Promise<Blob> {
+  if (!file.type.startsWith('image/')) return file
+
+  const imgUrl = URL.createObjectURL(file)
   try {
-    await fetch('/api/short-links', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        kind: 'gl',
-        mediaItemId: id,
-        code,
-        targetPath: `/media/${id}`,
-      }),
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('failed to load image'))
+      el.src = imgUrl
     })
-  } catch {
-    // ignore
-  }
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  return origin ? `${origin}/gl/${code}` : `/gl/${code}`
-}
 
-async function fileToImageBitmap(file: File) {
-  // createImageBitmap is fast and widely supported
-  return await createImageBitmap(file)
-}
+    const maxW = 1800
+    const maxH = 1800
 
-async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2_500_000): Promise<Blob> {
-  const bmp = await fileToImageBitmap(file)
-  const srcW = bmp.width
-  const srcH = bmp.height
-  const srcPixels = srcW * srcH
+    let w = img.naturalWidth
+    let h = img.naturalHeight
 
-  // Scale down to meet maxPixels (2MP) while preserving aspect ratio
-  let scale = 1
-  if (srcPixels > maxPixels) {
-    scale = Math.sqrt(maxPixels / srcPixels)
-  }
+    const ratio = Math.min(maxW / w, maxH / h, 1)
+    w = Math.round(w * ratio)
+    h = Math.round(h * ratio)
 
-  // Also cap the longest side (helps very tall/wide images)
-  const maxLongSide = 2200
-  const longSide = Math.max(srcW, srcH)
-  if (longSide * scale > maxLongSide) {
-    scale = maxLongSide / longSide
-  }
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return file
+    ctx.drawImage(img, 0, 0, w, h)
 
-  const dstW = Math.max(1, Math.round(srcW * scale))
-  const dstH = Math.max(1, Math.round(srcH * scale))
-
-  const canvas = document.createElement('canvas')
-  canvas.width = dstW
-  canvas.height = dstH
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('canvas not supported')
-  ctx.drawImage(bmp, 0, 0, dstW, dstH)
-
-  // Try a few quality levels to stay under maxBytes
-  const qualities = [0.86, 0.82, 0.78, 0.72, 0.66, 0.6]
-  for (const q of qualities) {
-    const blob: Blob = await new Promise((resolve, reject) =>
-      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', q)
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', 0.88)
     )
-    if (blob.size <= maxBytes) return blob
-  }
 
-  // Last resort: return lowest quality blob
-  const finalBlob: Blob = await new Promise((resolve, reject) =>
-    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', 0.55)
-  )
-  return finalBlob
+    return blob || file
+  } finally {
+    URL.revokeObjectURL(imgUrl)
+  }
 }
 
 export default function GalleryClient({
   initialItems,
   galleryId,
   uploadEnabled,
-  eventId
 }: {
-  initialItems: any[]
+  initialItems: GalleryItem[]
   galleryId: string
-  uploadEnabled: boolean
-  eventId: string
+  uploadEnabled?: boolean
 }) {
-  const [items, setItems] = useState<Item[]>(
-    (initialItems || []).map((x: any) => ({
-      id: x.id,
-      url: x.url || x.media_url || x.public_url || '',
-      created_at: x.created_at,
-      editable_until: x.editable_until ?? null,
-      is_approved: x.is_approved ?? true,
-      crop_position: x.crop_position ?? null
-    }))
-  )
-  const [files, setFiles] = useState<File[]>([])
+  const [items, setItems] = useState<GalleryItem[]>(initialItems || [])
   const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string>('')
+  const [preview, setPreview] = useState<GalleryItem | null>(null)
+  const [countdownNow, setCountdownNow] = useState(Date.now())
+  const [reactionsByItem, setReactionsByItem] = useState<Record<string, ReactionSummary>>({})
+  const [myReactionsByItem, setMyReactionsByItem] = useState<Record<string, string[]>>({})
+  const [deviceId, setDeviceId] = useState('')
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
 
-  // Keep state in sync when navigating between galleries.
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const attachInputRef = useRef<HTMLInputElement | null>(null)
+
   useEffect(() => {
-    setItems(
-      (initialItems || []).map((x: any) => ({
-        id: x.id,
-        url: x.url || x.media_url || x.public_url || '',
-        created_at: x.created_at,
-        editable_until: x.editable_until ?? null,
-        is_approved: x.is_approved ?? true,
-        crop_position: x.crop_position ?? null
-      }))
-    )
-  }, [galleryId, initialItems])
+    setDeviceId(getOrCreateDeviceId())
+  }, [])
 
-  // Self-heal (once): client navigation can occasionally hydrate with stale/empty server props.
-  const healedRef = useRef<string | null>(null)
   useEffect(() => {
-    const key = `${eventId}__${galleryId}`
-    if (!eventId || !galleryId) return
-    if (healedRef.current === key) return
-    if ((initialItems || []).length > 0) return
-    if ((items || []).length > 0) return
+    const t = setInterval(() => setCountdownNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
-    healedRef.current = key
+  useEffect(() => {
+    setItems(initialItems || [])
+  }, [initialItems])
 
-    ;(async () => {
-      try {
-        const qs = new URLSearchParams({
-          event: String(eventId),
-          gallery_id: String(galleryId)
-        })
-        const res = await fetch(`/api/public/gallery-items?${qs.toString()}`, {
-          cache: 'no-store'
-        })
-        if (!res.ok) return
-        const j = await res.json()
-        const next = Array.isArray(j?.items) ? j.items : []
-        setItems(
-          next.map((x: any) => ({
-            id: x.id,
-            url: x.url || x.media_url || x.public_url || '',
-            created_at: x.created_at,
-            editable_until: x.editable_until ?? null,
-            is_approved: x.is_approved ?? true,
-            crop_position: x.crop_position ?? null
-          }))
-        )
-      } catch {
-        // ignore
-      }
-    })()
-  }, [eventId, galleryId, initialItems, items])
+  useEffect(() => {
+    if (!items.length) return
+    loadReactions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length])
 
-  // Select + ZIP (client-side)
-    const DIRECT_MAX = 8
-    const ZIP_MAX = 20
-  const [selectMode, setSelectMode] = useState(false)
-  const [selected, setSelected] = useState<Record<string, boolean>>({})
-  const [zipBusy, setZipBusy] = useState(false)
-
-  const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
-
-    const isIOSSafari = useMemo(() => {
-      if (typeof navigator === 'undefined') return false
-      const ua = navigator.userAgent || ''
-      const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
-      const safari = /^((?!chrome|android).)*safari/i.test(ua)
-      return iOS && safari
-    }, [])
-
-    const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
-
-
-  const clearSelected = () => {
-    setSelected({})
-  }
-
-  const toggleSelected = (id: string) => {
-    setErr(null)
-    setMsg(null)
-    setSelected(prev => {
-      const next = { ...prev }
-      if (next[id]) {
-        delete next[id]
-        return next
-      }
-      if (Object.keys(next).length >= ZIP_MAX) {
-        setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
-        return next
-      }
-      next[id] = true
-      return next
-    })
-  }
-
-  const onThumbClick = (it: Item) => {
-    if (selectMode) {
-      toggleSelected(it.id)
-      return
-    }
-    setLightbox(it.url)
-  }
-
-    const downloadSelectedDirect = async () => {
-      try {
-        setErr(null)
-        setMsg(null)
-        const ids = Object.keys(selected)
-        if (ids.length === 0) return
-
-        setZipBusy(true)
-
-        // Direct download (1-8): fetch each file and force a short filename: activebar_01.jpg ...
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i]
-          const it = items.find(x => x.id === id)
-          if (!it?.url) continue
-
-          const res = await fetch(it.url)
-          if (!res.ok) throw new Error('download failed')
-          const blob = await res.blob()
-          const ext = blob.type === 'image/png' ? 'png' : 'jpg'
-          const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
-
-          const href = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = href
-          a.download = name
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          URL.revokeObjectURL(href)
-
-          // small delay so browsers don't block multiple downloads aggressively
-          await new Promise(r => setTimeout(r, 250))
-        }
-
-        setMsg('✅ ההורדות התחילו')
-        clearSelected()
-        setSelectMode(false)
-      } catch (e: any) {
-        setErr(e?.message || 'שגיאה בהורדה')
-      } finally {
-        setZipBusy(false)
-      }
-    }
-
-    const downloadSelectedZip = async () => {
+  async function loadReactions() {
     try {
-      setErr(null)
-      setMsg(null)
-      const ids = Object.keys(selected)
-      if (ids.length === 0) return
+      const ids = items.map((x) => x.id).filter(Boolean)
+      if (!ids.length) return
 
-      setZipBusy(true)
-      const zip = new JSZip()
+      const qs = new URLSearchParams()
+      ids.forEach((id) => qs.append('media_item_id', id))
+      const res = await fetch(`/api/public/gallery-items?${qs.toString()}`, { cache: 'no-store' })
+      const json = await res.json().catch(() => ({}))
 
-      for (let i = 0; i < ids.length; i++) {
-        const id = ids[i]
-        const it = items.find(x => x.id === id)
-        if (!it?.url) continue
-        const res = await fetch(it.url)
-        const blob = await res.blob()
-        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
-        zip.file(`activebar_${String(i + 1).padStart(2, '0')}.${ext}`, blob)
+      if (!res.ok) return
+
+      if (json?.reactionsByItem) {
+        setReactionsByItem(json.reactionsByItem || {})
       }
-
-      const out = await zip.generateAsync({ type: 'blob' })
-      const href = URL.createObjectURL(out)
-      const a = document.createElement('a')
-      a.href = href
-      a.download = `activebar_${(galleryId || '').slice(0, 6)}.zip`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(href)
-
-      setMsg('הורדת ZIP התחילה')
-      clearSelected()
-      setSelectMode(false)
-    } catch (e: any) {
-      setErr(e?.message || 'שגיאה בהורדת ZIP')
-    } finally {
-      setZipBusy(false)
-    }
+      if (json?.myReactionsByItem) {
+        setMyReactionsByItem(json.myReactionsByItem || {})
+      }
+    } catch {}
   }
 
-
-  const pickerRef = useRef<HTMLInputElement | null>(null)
-
-  const feed = useMemo(() => (items || []).filter(i => i.url), [items])
-
-  async function shareItem(it: Item) {
-    const short = await ensureShortLinkForMedia(it.id)
-    await shareUrl(short || it.url)
+  function canEdit(item: GalleryItem) {
+    if (!item?.editable_until || !item?.uploader_device_id || !deviceId) return false
+    const sameUploader = String(item.uploader_device_id) === String(deviceId)
+    const until = new Date(String(item.editable_until)).getTime()
+    return sameUploader && until > countdownNow
   }
 
-  function addFiles(list: FileList | null) {
-    const arr = Array.from(list || []).filter(f => (f.type || '').startsWith('image/'))
-    if (arr.length === 0) return
-    setFiles(prev => [...prev, ...arr].slice(0, 50))
+  function remainingForItem(item: GalleryItem) {
+    if (!item?.editable_until) return '00:00'
+    const until = new Date(String(item.editable_until)).getTime()
+    return formatRemaining(until - countdownNow)
   }
 
-  async function upload() {
-    if (!uploadEnabled) {
-      setErr('העלאה סגורה כרגע ע״י מנהל')
-      return
-    }
-    if (files.length === 0) return
-    setErr(null)
-    setMsg(null)
+  async function refreshItems() {
+    try {
+      const res = await fetch(`/api/public/gallery-items?gallery_id=${encodeURIComponent(galleryId)}`, {
+        cache: 'no-store',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) return
+      setItems(Array.isArray(json?.items) ? json.items : [])
+    } catch {}
+  }
+
+  async function uploadFiles(files: FileList | File[] | null, source: 'upload' | 'camera' | 'attach') {
+    const list = Array.from(files || [])
+    if (!list.length) return
+
     setBusy(true)
+    setMsg(source === 'camera' ? 'מעלה צילום...' : 'מעלה קבצים...')
+
     try {
-            for (const f of files) {
-        const blob = await compressToJpeg2MP(f)
-        const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
-
+      for (const file of list) {
         const fd = new FormData()
-        fd.append('file', out)
-        fd.append('kind', 'gallery')
-        fd.append('gallery_id', galleryId)
 
-        const res = await fetch('/api/upload', { method: 'POST', body: fd })
-        const j = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(j?.error || 'upload failed')
-
-        if (j?.publicUrl) {
-          const created: Item = { id: j.path || crypto.randomUUID(), url: j.publicUrl, created_at: new Date().toISOString(), is_approved: !!j.is_approved }
-          if (j.is_approved) {
-            setItems(prev => [created, ...prev])
-          } else {
-            setMsg('✅ הועלה וממתין לאישור מנהל')
-          }
+        const isVideo = file.type.startsWith('video/')
+        if (isVideo) {
+          fd.set('file', file)
+        } else {
+          const compressed = await fileToCompressedBlob(file)
+          fd.set(
+            'file',
+            compressed instanceof File
+              ? compressed
+              : new File([compressed], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
+                  type: 'image/jpeg',
+                })
+          )
         }
+
+        fd.set('kind', 'gallery')
+        fd.set('gallery_id', galleryId)
+        fd.set('device_id', deviceId)
+
+        const up = await fetch('/api/upload', {
+          method: 'POST',
+          body: fd,
+        })
+        const upJson = await up.json().catch(() => ({}))
+        if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
       }
-      setFiles([])
+
+      setMsg('הקבצים הועלו בהצלחה')
+      await refreshItems()
+      await loadReactions()
     } catch (e: any) {
-      setErr(e?.message || 'שגיאה בהעלאה')
+      setMsg(e?.message || 'שגיאה בהעלאה')
     } finally {
       setBusy(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (cameraInputRef.current) cameraInputRef.current.value = ''
+      if (attachInputRef.current) attachInputRef.current.value = ''
     }
   }
 
+  async function replaceFile(item: GalleryItem, file: File) {
+    try {
+      setEditingItemId(item.id)
+      setMsg('מחליף קובץ...')
+
+      const fd = new FormData()
+      const isVideo = file.type.startsWith('video/')
+      if (isVideo) {
+        fd.set('file', file)
+      } else {
+        const compressed = await fileToCompressedBlob(file)
+        fd.set(
+          'file',
+          compressed instanceof File
+            ? compressed
+            : new File([compressed], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
+                type: 'image/jpeg',
+              })
+        )
+      }
+
+      fd.set('kind', 'gallery')
+      fd.set('gallery_id', galleryId)
+      fd.set('device_id', deviceId)
+
+      const up = await fetch('/api/upload', {
+        method: 'POST',
+        body: fd,
+      })
+      const upJson = await up.json().catch(() => ({}))
+      if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+
+      const res = await fetch('/api/public/gallery-items', {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({
+          id: item.id,
+          replacement_url: upJson?.publicUrl || null,
+          replacement_thumb_url: upJson?.thumbUrl || null,
+          replacement_storage_path: upJson?.path || null,
+          replacement_kind: upJson?.kind || null,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'שגיאה בהחלפת קובץ')
+
+      setMsg('הקובץ הוחלף בהצלחה')
+      await refreshItems()
+      setPreview(null)
+    } catch (e: any) {
+      setMsg(e?.message || 'שגיאה בהחלפת קובץ')
+    } finally {
+      setEditingItemId(null)
+    }
+  }
+
+  async function deleteItem(item: GalleryItem) {
+    if (!confirm('למחוק את התמונה או הסרטון?')) return
+
+    try {
+      setEditingItemId(item.id)
+      setMsg('מוחק קובץ...')
+
+      const res = await fetch('/api/public/gallery-items', {
+        method: 'DELETE',
+        headers: {
+          'content-type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({ id: item.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'שגיאה במחיקה')
+
+      setMsg('הקובץ נמחק')
+      await refreshItems()
+      setPreview(null)
+    } catch (e: any) {
+      setMsg(e?.message || 'שגיאה במחיקה')
+    } finally {
+      setEditingItemId(null)
+    }
+  }
+
+  async function toggleReaction(itemId: string, emoji: string) {
+    try {
+      const res = await fetch('/api/reactions/toggle', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({
+          media_item_id: itemId,
+          emoji,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'שגיאה בעדכון תגובה')
+
+      setReactionsByItem((prev) => {
+        const current = { ...(prev[itemId] || {}) }
+        current[emoji] = Number(json?.count || 0)
+        if (current[emoji] <= 0) delete current[emoji]
+        return { ...prev, [itemId]: current }
+      })
+
+      setMyReactionsByItem((prev) => {
+        const current = new Set(prev[itemId] || [])
+        if (json?.active) current.add(emoji)
+        else current.delete(emoji)
+        return { ...prev, [itemId]: Array.from(current) }
+      })
+    } catch (e: any) {
+      setMsg(e?.message || 'שגיאה בעדכון תגובה')
+    }
+  }
+
+  const sortedItems = useMemo(
+    () =>
+      [...items].sort((a, b) => {
+        const da = new Date(String(a.created_at || 0)).getTime()
+        const db = new Date(String(b.created_at || 0)).getTime()
+        return db - da
+      }),
+    [items]
+  )
+
   return (
-    <div dir="rtl" className="grid gap-4">
-      <Card>
-        <div className="flex flex-col gap-3 sm:flex-row-reverse sm:items-center sm:justify-between">
-          <div className="text-right">
-            <h3 className="text-lg font-semibold">תמונות בגלריה</h3>
-            <p className="text-sm text-zinc-600">העלאה פתוחה רק אם מנהל פתח אותה.</p>
-          </div>
+    <div className="space-y-5" dir="rtl">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <h2 className="text-2xl font-bold">תמונות בגלריה</h2>
+        <p className="mt-1 text-sm text-zinc-600">בחר תמונות לגלריה</p>
 
-          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
-            <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
-              {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
-            </Button>
-            <input
-              ref={pickerRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={e => addFiles(e.target.files)}
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
-              disabled={!uploadEnabled}
-            />
-          </div>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={!uploadEnabled || busy}
+            className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+          >
+            הצעת נישואין
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!uploadEnabled || busy}
+            className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+          >
+            חינה
+          </button>
+
+          <button
+            type="button"
+            onClick={() => attachInputRef.current?.click()}
+            disabled={!uploadEnabled || busy}
+            className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+          >
+            חופה
+          </button>
         </div>
 
-        {/* Select + ZIP */}
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
-          {!selectMode ? (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setErr(null)
-                setMsg(null)
-                clearSelected()
-                setSelectMode(true)
-              }}
-              disabled={zipBusy}
-            >
-              בחר תמונות
-            </Button>
-          ) : (
-            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
-              <Button onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip} disabled={zipBusy || selectedCount === 0}>
-                {zipBusy ? (useDirect ? 'מוריד…' : 'מכין ZIP…') : (selectedCount <= DIRECT_MAX ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})` : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setSelectMode(false)
-                  clearSelected()
-                  setErr(null)
-                  setMsg(null)
-                }}
-                disabled={zipBusy}
-              >
-                ביטול
-              </Button>
-            </div>
-          )}
-
-          {selectMode ? (
-            <p className="text-xs text-zinc-500 text-right">סמן עד {ZIP_MAX} תמונות. 1–{DIRECT_MAX} יורד ישיר, {DIRECT_MAX + 1}–{ZIP_MAX} יורד ZIP. אחרי הורדה אפשר לבחור שוב.</p>
-          ) : (
-            <span />
-          )}
-        </div>
-
-        {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
-        {msg && <p className="mt-2 text-sm text-zinc-700">{msg}</p>}
-        {!uploadEnabled && <p className="mt-2 text-xs text-zinc-500">העלאה סגורה כעת.</p>}
-      </Card>
-
-      {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
-          <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
-            <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => downloadUrl(lightbox)}
-                className="bg-white/90 text-black shadow hover:bg-white"
-                type="button"
-              >
-                הורד
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  const current = feed.find(x => x.url === lightbox)
-                  if (current) return shareItem(current)
-                  return shareUrl(lightbox)
-                }}
-                className="bg-white/90 text-black shadow hover:bg-white"
-                type="button"
-              >
-                שתף
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => setLightbox(null)}
-                className="bg-white/90 text-black shadow hover:bg-white"
-                type="button"
-              >
-                סגור
-              </Button>
-            </div>
-
-            <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {feed.map(it => (
-          <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
+        <div className="mt-4 rounded-2xl border border-zinc-200 p-4">
+          <div className="flex flex-wrap items-center gap-3">
             <button
-              className="relative block aspect-square w-full bg-zinc-50"
-              onClick={() => onThumbClick(it)}
               type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!uploadEnabled || busy}
+              className="rounded-xl bg-zinc-700 px-8 py-3 text-white disabled:opacity-50"
             >
-              <img src={it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
-
-              {selectMode ? (
-                <div className="absolute left-2 top-2">
-                  <div
-                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
-                    aria-hidden
-                  >
-                    {selected[it.id] ? '✓' : ''}
-                  </div>
-                </div>
-              ) : null}
+              {busy ? 'מעלה...' : 'העלה'}
             </button>
 
-            <div className="p-3 flex gap-2">
-              {!selectMode ? (
-                <>
-                  <Button variant="ghost" onClick={() => shareItem(it)} type="button">
-                    שתף
-                  </Button>
-                  <Button variant="ghost" onClick={() => downloadUrl(it.url)} type="button">
-                    הורד
-                  </Button>
-                </>
-              ) : (
-                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
-              )}
+            <div className="text-sm text-zinc-700">
+              {uploadEnabled ? 'אפשר להעלות תמונות או סרטונים' : 'העלאה סגורה כרגע'}
             </div>
           </div>
-        ))}
+
+          <div className="mt-4 text-sm font-medium">בחר תמונות</div>
+          {msg ? <div className="mt-2 text-sm text-zinc-600">{msg}</div> : null}
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(e) => uploadFiles(e.target.files, 'upload')}
+        />
+
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          onChange={(e) => uploadFiles(e.target.files, 'camera')}
+        />
+
+        <input
+          ref={attachInputRef}
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          hidden
+          onChange={(e) => uploadFiles(e.target.files, 'attach')}
+        />
       </div>
 
-      {feed.length === 0 && (
-        <Card>
-          <p className="text-sm text-zinc-600">אין עדיין תמונות מאושרות.</p>
-        </Card>
-      )}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {sortedItems.map((item) => {
+          const thumb = item.thumb_url || item.url
+          const video = isVideoUrl(item.url) || String(item.kind || '').toLowerCase().includes('video')
+          const reactions = reactionsByItem[item.id] || {}
+          const topReaction = Object.entries(reactions).sort((a, b) => b[1] - a[1])[0]
+          const editable = canEdit(item)
+
+          return (
+            <div
+              key={item.id}
+              className="overflow-hidden rounded-2xl border border-zinc-200 bg-white"
+            >
+              <button
+                type="button"
+                className="relative block aspect-square w-full bg-zinc-50"
+                onClick={() => setPreview(item)}
+              >
+                {video ? (
+                  <video
+                    src={item.url}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <img
+                    src={thumb}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                )}
+
+                {topReaction ? (
+                  <div className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
+                    {topReaction[0]} {topReaction[1]}
+                  </div>
+                ) : null}
+
+                {editable ? (
+                  <div className="absolute right-2 top-2 rounded-full bg-white/90 px-2 py-1 text-xs text-zinc-800 shadow">
+                    עריכה {remainingForItem(item)}
+                  </div>
+                ) : null}
+
+                {video ? (
+                  <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white">
+                    וידאו
+                  </div>
+                ) : null}
+              </button>
+
+              <div className="flex items-center justify-center gap-6 px-4 py-3 text-sm">
+                <button
+                  type="button"
+                  className="hover:underline"
+                  onClick={async () => {
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({ url: item.url })
+                        return
+                      } catch {}
+                    }
+                    await navigator.clipboard.writeText(item.url)
+                    setMsg('הקישור הועתק')
+                  }}
+                >
+                  שתף
+                </button>
+
+                <a
+                  href={item.url}
+                  download
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:underline"
+                >
+                  הורד
+                </a>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {preview ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl rounded-2xl bg-white p-4"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="text-sm text-zinc-500">
+                {canEdit(preview) ? `אפשר לערוך עוד ${remainingForItem(preview)}` : 'צפייה בלבד'}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+              >
+                סגור
+              </button>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl bg-zinc-100">
+              {isVideoUrl(preview.url) || String(preview.kind || '').toLowerCase().includes('video') ? (
+                <video
+                  src={preview.url}
+                  controls
+                  playsInline
+                  className="max-h-[70vh] w-full bg-black object-contain"
+                />
+              ) : (
+                <img
+                  src={preview.url}
+                  alt=""
+                  className="max-h-[70vh] w-full object-contain"
+                />
+              )}
+            </div>
+
+            <div className="mt-4">
+              <div className="mb-2 text-sm font-medium">תגובות</div>
+              <div className="flex flex-wrap gap-2">
+                {EMOJIS.map((emoji) => {
+                  const count = Number(reactionsByItem[preview.id]?.[emoji] || 0)
+                  const active = (myReactionsByItem[preview.id] || []).includes(emoji)
+
+                  return (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => toggleReaction(preview.id, emoji)}
+                      className={
+                        'rounded-full border px-3 py-2 text-sm ' +
+                        (active
+                          ? 'border-zinc-900 bg-zinc-900 text-white'
+                          : 'border-zinc-200 bg-white text-zinc-800')
+                      }
+                    >
+                      {emoji} {count > 0 ? count : ''}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {canEdit(preview) ? (
+              <div className="mt-5 flex flex-wrap gap-3">
+                <label className="cursor-pointer rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50">
+                  ערוך קובץ
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) replaceFile(preview, file)
+                    }}
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => deleteItem(preview)}
+                  disabled={editingItemId === preview.id}
+                  className="rounded-xl border border-red-200 bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {editingItemId === preview.id ? 'מוחק...' : 'מחק'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
