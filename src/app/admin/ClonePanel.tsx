@@ -4,15 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card, Button, Input, Textarea } from '@/components/ui'
 
 function addEventParam(url: string) {
-  // If admin is opened as /admin?event=ido, ensure every admin API call keeps the event context.
   if (typeof window === 'undefined') return url
   const e = new URLSearchParams(window.location.search).get('event')
   if (!e) return url
-  // don't double-append
   if (/[?&]event=/.test(url)) return url
   return url + (url.includes('?') ? '&' : '?') + 'event=' + encodeURIComponent(e)
 }
-
 
 async function jfetch(url: string, opts?: RequestInit) {
   const res = await fetch(addEventParam(url), {
@@ -31,6 +28,7 @@ type TemplateRow = {
   description?: string | null
   config_json?: any
   is_active: boolean
+  source_event_id?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -38,13 +36,9 @@ type TemplateRow = {
 function normalizeEventId(raw: string) {
   const original = raw || ''
   let s = original.trim().toLowerCase()
-  // common replacements
   s = s.replace(/[_\s]+/g, '-')
-  // keep only a-z, 0-9, '-'
   s = s.replace(/[^a-z0-9-]+/g, '-')
-  // collapse multiple '-'
   s = s.replace(/-+/g, '-')
-  // trim '-'
   s = s.replace(/^-+/, '').replace(/-+$/, '')
   return s
 }
@@ -93,19 +87,43 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
 
   const [confirmOpen, setConfirmOpen] = useState(false)
 
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmEventId, setDeleteConfirmEventId] = useState('')
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteChecked, setDeleteChecked] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+
   const selected = useMemo(() => templates.find((t) => t.id === templateId) || null, [templates, templateId])
 
   const targetEventId = useMemo(() => normalizeEventId(targetEventIdRaw), [targetEventIdRaw])
-  const idChangedByNormalize = useMemo(() => targetEventIdRaw.trim() !== '' && targetEventIdRaw.trim().toLowerCase() !== targetEventId, [targetEventIdRaw, targetEventId])
+  const idChangedByNormalize = useMemo(
+    () => targetEventIdRaw.trim() !== '' && targetEventIdRaw.trim().toLowerCase() !== targetEventId,
+    [targetEventIdRaw, targetEventId]
+  )
 
-  const idTooLong = targetEventId.length > 24
-  const idWarnLong = targetEventId.length > 20 && !idTooLong
+  const idWarnLong = targetEventId.length > 20 && targetEventId.length <= 24
   const idValid = isValidEventId(targetEventId)
 
   const nameValid = targetName.trim().length >= 2
   const templateValid = !!templateId
-
   const canSubmit = templateValid && idValid && nameValid && !busy
+
+  const blockingTemplates = useMemo(
+    () =>
+      templates.filter(
+        (t) =>
+          t.is_active &&
+          String(t.source_event_id || '').trim() === String(eventId || '').trim()
+      ),
+    [templates, eventId]
+  )
+
+  const canDelete =
+    deleteConfirmEventId.trim() === eventId &&
+    deletePassword.trim().length > 0 &&
+    deleteChecked &&
+    !deleteBusy &&
+    blockingTemplates.length === 0
 
   async function refresh() {
     setLoading(true)
@@ -123,7 +141,6 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
 
   useEffect(() => {
     refresh()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function createTemplateFromCurrent() {
@@ -191,6 +208,67 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
     }
   }
 
+  function resetDeleteForm() {
+    setDeleteConfirmEventId('')
+    setDeletePassword('')
+    setDeleteChecked(false)
+    setDeleteBusy(false)
+  }
+
+  function openDeleteDialog() {
+    setErr(null)
+    setOk(null)
+    resetDeleteForm()
+    setDeleteOpen(true)
+  }
+
+  async function runDelete() {
+    setErr(null)
+    setOk(null)
+
+    if (blockingTemplates.length > 0) {
+      setErr('לא ניתן למחוק אירוע שמשמש כתבנית פעילה')
+      return
+    }
+
+    if (deleteConfirmEventId.trim() !== eventId) {
+      setErr('יש להקליד את ה-event_id המדויק לאישור')
+      return
+    }
+
+    if (!deletePassword.trim()) {
+      setErr('יש להקליד סיסמת מחיקה')
+      return
+    }
+
+    if (!deleteChecked) {
+      setErr('יש לאשר שהמחיקה תמחק גם DB וגם Storage')
+      return
+    }
+
+    setDeleteBusy(true)
+    try {
+      const json = await jfetch('/api/admin/delete-event', {
+        method: 'POST',
+        body: JSON.stringify({
+          event_id: eventId,
+          confirm_event_id: deleteConfirmEventId.trim(),
+          delete_password: deletePassword.trim(),
+          confirm_checked: deleteChecked
+        })
+      })
+
+      setOk(json?.message || `האירוע "${eventId}" נמחק בהצלחה`)
+      setDeleteOpen(false)
+      resetDeleteForm()
+      await refresh()
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה במחיקת האירוע')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-4" dir="rtl">
       <Card>
@@ -201,13 +279,21 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
               תבנית היא סט של הגדרות, בלוקים, גלריות וחוקים שניתן לשכפל לאירועים נוספים.
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={refresh} disabled={loading || busy}>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="ghost" onClick={refresh} disabled={loading || busy || deleteBusy}>
               רענן
             </Button>
-            <Button type="button" onClick={createTemplateFromCurrent} disabled={busy}>
+            <Button type="button" onClick={createTemplateFromCurrent} disabled={busy || deleteBusy}>
               שמור כתבנית מהאירוע הנוכחי
             </Button>
+            <button
+              type="button"
+              onClick={openDeleteDialog}
+              disabled={busy || deleteBusy}
+              className="rounded-xl border border-red-200 bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              מחק אירוע
+            </button>
           </div>
         </div>
 
@@ -227,7 +313,7 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
               className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
-              disabled={busy || loading}
+              disabled={busy || deleteBusy || loading}
             >
               <option value="">בחר</option>
               {templates
@@ -334,6 +420,100 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
               <Button type="button" onClick={runClone} disabled={busy}>
                 {busy ? 'מבצע שכפול...' : 'אשר שכפול'}
               </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-xl rounded-2xl border border-red-200 bg-white p-4 shadow-lg" dir="rtl">
+            <div className="text-right">
+              <h4 className="font-semibold text-red-700">מחיקת אירוע</h4>
+              <p className="mt-1 text-sm text-zinc-600">
+                פעולה זו מוחקת את כל נתוני האירוע מה־DB ואת כל קבצי ה־Storage תחת
+                <span className="mx-1 font-mono" dir="ltr">
+                  uploads/{eventId}/
+                </span>
+              </p>
+            </div>
+
+            {blockingTemplates.length > 0 ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <div className="font-semibold">לא ניתן למחוק כרגע את האירוע</div>
+                <div className="mt-1">יש template פעיל שתלוי באירוע הזה:</div>
+                <ul className="mt-2 list-disc pr-5">
+                  {blockingTemplates.map((t) => (
+                    <li key={t.id}>
+                      {t.name} ({t.kind})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-xl bg-zinc-50 p-3 text-sm">
+                <div>
+                  event_id למחיקה:
+                  <span className="mr-2 font-mono" dir="ltr">
+                    {eventId}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-1">
+                <label className="text-xs text-zinc-500">הקלד את ה־event_id המדויק לאישור</label>
+                <Input
+                  value={deleteConfirmEventId}
+                  onChange={(e) => setDeleteConfirmEventId(e.target.value)}
+                  placeholder={eventId}
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="grid gap-1">
+                <label className="text-xs text-zinc-500">סיסמת מחיקה</label>
+                <Input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="DELETE_EVENT_PASSWORD"
+                  dir="ltr"
+                />
+              </div>
+
+              <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
+                <input
+                  type="checkbox"
+                  checked={deleteChecked}
+                  onChange={(e) => setDeleteChecked(e.target.checked)}
+                />
+                אני מבין שהמחיקה תמחק גם DB וגם Storage של האירוע
+              </label>
+            </div>
+
+            <div className="mt-5 flex justify-between gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setDeleteOpen(false)
+                  resetDeleteForm()
+                }}
+                disabled={deleteBusy}
+              >
+                ביטול
+              </Button>
+
+              <button
+                type="button"
+                onClick={runDelete}
+                disabled={!canDelete}
+                className="rounded-xl border border-red-200 bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deleteBusy ? 'מוחק...' : 'מחק אירוע'}
+              </button>
             </div>
           </div>
         </div>
