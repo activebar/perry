@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminFromRequest } from '@/lib/adminSession'
-import { supabaseServiceRole } from '@/lib/supabase'
+import { getPublicUploadUrl, supabaseServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
+
+const UPLOADS_BUCKET = 'uploads'
 
 function stripRow(row: any, overrides: Record<string, any> = {}) {
   const copy: any = { ...row }
@@ -27,6 +29,177 @@ function remapBlockConfig(config: any, galleryMap: Map<string, string>) {
   }
 
   return next
+}
+
+function replaceEventPrefix(value: string, sourceEventId: string, targetEventId: string) {
+  if (!value) return value
+
+  let next = value
+
+  if (next.startsWith(`${sourceEventId}/`)) {
+    next = `${targetEventId}/${next.slice(sourceEventId.length + 1)}`
+  }
+
+  next = next.replace(
+    `/storage/v1/object/public/${UPLOADS_BUCKET}/${sourceEventId}/`,
+    `/storage/v1/object/public/${UPLOADS_BUCKET}/${targetEventId}/`
+  )
+
+  next = next.replace(
+    `/storage/v1/object/sign/${UPLOADS_BUCKET}/${sourceEventId}/`,
+    `/storage/v1/object/sign/${UPLOADS_BUCKET}/${targetEventId}/`
+  )
+
+  next = next.replace(
+    `/${UPLOADS_BUCKET}/${sourceEventId}/`,
+    `/${UPLOADS_BUCKET}/${targetEventId}/`
+  )
+
+  return next
+}
+
+function deepReplaceEventRefs(input: any, sourceEventId: string, targetEventId: string): any {
+  if (typeof input === 'string') {
+    return replaceEventPrefix(input, sourceEventId, targetEventId)
+  }
+
+  if (Array.isArray(input)) {
+    return input.map((item) => deepReplaceEventRefs(item, sourceEventId, targetEventId))
+  }
+
+  if (input && typeof input === 'object') {
+    const out: Record<string, any> = {}
+    for (const [key, value] of Object.entries(input)) {
+      out[key] = deepReplaceEventRefs(value, sourceEventId, targetEventId)
+    }
+    return out
+  }
+
+  return input
+}
+
+function remapStorageFields(row: any, sourceEventId: string, targetEventId: string) {
+  const next = deepReplaceEventRefs(row, sourceEventId, targetEventId)
+
+  if (typeof next.storage_path === 'string' && next.storage_path) {
+    next.storage_path = replaceEventPrefix(next.storage_path, sourceEventId, targetEventId)
+  }
+
+  if (typeof next.url === 'string' && next.url) {
+    next.url = replaceEventPrefix(next.url, sourceEventId, targetEventId)
+  }
+
+  if (typeof next.public_url === 'string' && next.public_url) {
+    next.public_url = replaceEventPrefix(next.public_url, sourceEventId, targetEventId)
+  }
+
+  if (typeof next.thumb_url === 'string' && next.thumb_url) {
+    next.thumb_url = replaceEventPrefix(next.thumb_url, sourceEventId, targetEventId)
+  }
+
+  if (typeof next.storage_path === 'string' && next.storage_path) {
+    next.public_url = getPublicUploadUrl(next.storage_path)
+    if (!next.url || String(next.url).includes(`/storage/v1/object/public/${UPLOADS_BUCKET}/`)) {
+      next.url = next.public_url
+    }
+  }
+
+  return next
+}
+
+async function listAllStorageFiles(
+  sb: ReturnType<typeof supabaseServiceRole>,
+  prefix: string
+): Promise<string[]> {
+  const normalizedPrefix = prefix.replace(/^\/+|\/+$/g, '')
+  const found = new Set<string>()
+
+  async function walk(path: string) {
+    const { data, error } = await sb.storage.from(UPLOADS_BUCKET).list(path, {
+      limit: 1000,
+      sortBy: { column: 'name', order: 'asc' },
+    })
+
+    if (error) {
+      throw new Error(`Storage list failed for "${path}": ${error.message}`)
+    }
+
+    for (const item of data || []) {
+      const name = String((item as any)?.name || '').trim()
+      if (!name || name === '.' || name === '..') continue
+
+      const fullPath = path ? `${path}/${name}` : name
+      const isFolder =
+        ((item as any)?.id === null && !(item as any)?.metadata) ||
+        String((item as any)?.type || '').toLowerCase() === 'folder'
+
+      if (isFolder) {
+        await walk(fullPath)
+      } else {
+        found.add(fullPath)
+      }
+    }
+  }
+
+  await walk(normalizedPrefix)
+  return Array.from(found)
+}
+
+async function copyStorageFile(
+  sb: ReturnType<typeof supabaseServiceRole>,
+  fromPath: string,
+  toPath: string
+) {
+  const copyRes = await sb.storage.from(UPLOADS_BUCKET).copy(fromPath, toPath)
+
+  if (!copyRes.error) {
+    return
+  }
+
+  const downloadRes = await sb.storage.from(UPLOADS_BUCKET).download(fromPath)
+  if (downloadRes.error || !downloadRes.data) {
+    throw new Error(
+      `Storage copy failed for "${fromPath}" and download fallback also failed: ${
+        copyRes.error.message || downloadRes.error?.message || 'unknown error'
+      }`
+    )
+  }
+
+  const uploadRes = await sb.storage.from(UPLOADS_BUCKET).upload(toPath, downloadRes.data, {
+    upsert: true,
+    contentType: downloadRes.data.type || undefined,
+  })
+
+  if (uploadRes.error) {
+    throw new Error(
+      `Storage upload fallback failed for "${toPath}": ${uploadRes.error.message}`
+    )
+  }
+}
+
+async function cloneEventStorageTree(
+  sb: ReturnType<typeof supabaseServiceRole>,
+  sourceEventId: string,
+  targetEventId: string
+) {
+  const sourcePrefix = sourceEventId.replace(/^\/+|\/+$/g, '')
+  const targetPrefix = targetEventId.replace(/^\/+|\/+$/g, '')
+
+  const sourceFiles = await listAllStorageFiles(sb, sourcePrefix)
+
+  let copiedCount = 0
+  for (const fromPath of sourceFiles) {
+    const toPath = replaceEventPrefix(fromPath, sourceEventId, targetEventId)
+    if (!toPath || toPath === fromPath) continue
+    await copyStorageFile(sb, fromPath, toPath)
+    copiedCount += 1
+  }
+
+  return {
+    source_prefix: sourcePrefix,
+    target_prefix: targetPrefix,
+    files_copied: copiedCount,
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -122,6 +295,8 @@ export async function POST(req: NextRequest) {
     const mediaItems = mediaRes.data || []
     const blessingPosts = postsRes.data || []
 
+    const storageCloneStats = await cloneEventStorageTree(sb, sourceEventId, targetEventId)
+
     // 1) event_settings
     const settingsRows = settings.map((row: any) => {
       const next = stripRow(row, { event_id: targetEventId })
@@ -138,7 +313,7 @@ export async function POST(req: NextRequest) {
         next.event_name = targetEventName
       }
 
-      return next
+      return deepReplaceEventRefs(next, sourceEventId, targetEventId)
     })
 
     if (settingsRows.length) {
@@ -156,7 +331,11 @@ export async function POST(req: NextRequest) {
 
     for (const row of sortedGalleries) {
       const oldId = String(row?.id || '').trim()
-      const payload = stripRow(row, { event_id: targetEventId })
+      const payload = deepReplaceEventRefs(
+        stripRow(row, { event_id: targetEventId }),
+        sourceEventId,
+        targetEventId
+      )
 
       const ins = await sb.from('galleries').insert(payload).select('*').single()
       if (ins.error) {
@@ -182,7 +361,11 @@ export async function POST(req: NextRequest) {
       .slice()
       .sort((a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0))
       .map((row: any) => {
-        const next = stripRow(row, { event_id: targetEventId })
+        const next = deepReplaceEventRefs(
+          stripRow(row, { event_id: targetEventId }),
+          sourceEventId,
+          targetEventId
+        )
         next.config = remapBlockConfig(next.config, galleryMap)
         return next
       })
@@ -208,7 +391,7 @@ export async function POST(req: NextRequest) {
 
     // 4) content rules
     const rulesRows = rules.map((row: any) =>
-      stripRow(row, { event_id: targetEventId })
+      deepReplaceEventRefs(stripRow(row, { event_id: targetEventId }), sourceEventId, targetEventId)
     )
 
     if (rulesRows.length) {
@@ -218,9 +401,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5) media_items with gallery remap
+    // 5) media_items with gallery remap + storage path/url remap
     const mediaRows = mediaItems.map((row: any) => {
-      const next = stripRow(row, { event_id: targetEventId })
+      const next = remapStorageFields(
+        stripRow(row, { event_id: targetEventId }),
+        sourceEventId,
+        targetEventId
+      )
+
       const oldGalleryId = String(next.gallery_id || '').trim()
 
       if (oldGalleryId && galleryMap.has(oldGalleryId)) {
@@ -241,7 +429,7 @@ export async function POST(req: NextRequest) {
 
     // 6) default blessings
     const blessingRows = blessingPosts.map((row: any) =>
-      stripRow(row, { event_id: targetEventId })
+      deepReplaceEventRefs(stripRow(row, { event_id: targetEventId }), sourceEventId, targetEventId)
     )
 
     if (blessingRows.length) {
@@ -263,6 +451,9 @@ export async function POST(req: NextRequest) {
         content_rules: rulesRows.length,
         media_items: mediaRows.length,
         blessing_posts: blessingRows.length,
+        storage_files_copied: storageCloneStats.files_copied,
+        storage_source_prefix: storageCloneStats.source_prefix,
+        storage_target_prefix: storageCloneStats.target_prefix,
         skipped_legacy_gallery_blocks: hasNewGalleryBlocks
           ? blocks.filter((b: any) => String(b?.type || '') === 'gallery').length
           : 0,
@@ -272,4 +463,4 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 })
   }
-                                                                }
+}
