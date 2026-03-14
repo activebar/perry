@@ -45,6 +45,13 @@ type ResultState = {
   details?: string[]
 }
 
+type ProgressState = {
+  open: boolean
+  title: string
+  message: string
+  startedAt: number | null
+}
+
 function normalizeEventId(raw: string) {
   const original = raw || ''
   let s = original.trim().toLowerCase()
@@ -59,6 +66,36 @@ function isValidEventId(id: string) {
   if (!id) return false
   if (id.length > 24) return false
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)
+}
+
+function toHebrewError(msg: string) {
+  const m = String(msg || '').trim().toLowerCase()
+
+  if (!m) return 'אירעה שגיאה לא ידועה'
+
+  if (m.includes('target event_id already exists')) return 'כבר קיים אירוע עם ה־event id הזה'
+  if (m.includes('missing target_event_id')) return 'חסר target_event_id'
+  if (m.includes('missing source_event_id')) return 'חסר source_event_id'
+  if (m.includes('missing event_id')) return 'חסר event_id'
+  if (m.includes('missing event id')) return 'חסר event_id'
+  if (m.includes('missing template_id')) return 'חסר template_id'
+  if (m.includes('missing confirm')) return 'חסרים נתוני אישור למחיקה'
+  if (m.includes('unauthorized')) return 'אין הרשאה לבצע פעולה זו'
+  if (m.includes('forbidden')) return 'הפעולה חסומה'
+  if (m.includes('delete_event_password is not configured')) return 'סיסמת המחיקה לא הוגדרה במערכת'
+  if (m.includes('סיסמת המחיקה')) return msg
+  if (m.includes('לא ניתן למחוק אירוע')) return msg
+  if (m.includes('storage list failed')) return 'שגיאה בקריאת קבצי ה־Storage'
+  if (m.includes('storage remove failed')) return 'שגיאה במחיקת קבצים מה־Storage'
+  if (m.includes('request failed')) return 'הבקשה נכשלה'
+  if (m.includes('http 400')) return 'הבקשה לא תקינה'
+  if (m.includes('http 401')) return 'אין הרשאה'
+  if (m.includes('http 403')) return 'הפעולה חסומה'
+  if (m.includes('http 404')) return 'הנתיב לא נמצא'
+  if (m.includes('http 409')) return 'קיימת התנגשות בנתונים'
+  if (m.includes('http 500')) return 'שגיאת שרת פנימית'
+
+  return msg
 }
 
 function HelpTip({ text }: { text: string }) {
@@ -98,7 +135,7 @@ function ResultDialog({
   const isSuccess = state.kind === 'success'
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
       <div
         className={
           'w-full max-w-lg rounded-2xl border bg-white p-4 shadow-lg ' +
@@ -134,6 +171,62 @@ function ResultDialog({
   )
 }
 
+function ProgressDialog({
+  state
+}: {
+  state: ProgressState
+}) {
+  const [seconds, setSeconds] = useState(0)
+
+  useEffect(() => {
+    if (!state.open || !state.startedAt) {
+      setSeconds(0)
+      return
+    }
+
+    const tick = () => {
+      const diff = Math.max(0, Math.floor((Date.now() - state.startedAt!) / 1000))
+      setSeconds(diff)
+    }
+
+    tick()
+    const t = setInterval(tick, 1000)
+    return () => clearInterval(t)
+  }, [state.open, state.startedAt])
+
+  if (!state.open) return null
+
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0')
+  const ss = String(seconds % 60).padStart(2, '0')
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl" dir="rtl">
+        <div className="flex flex-col items-center justify-center text-center">
+          <div className="mb-3 text-5xl" aria-hidden>
+            ⏳
+          </div>
+
+          <h4 className="text-lg font-semibold text-zinc-900">{state.title}</h4>
+          <p className="mt-2 text-sm text-zinc-600">{state.message}</p>
+
+          <div className="mt-4 rounded-xl bg-zinc-100 px-4 py-2 font-mono text-sm text-zinc-800">
+            זמן שעבר: {mm}:{ss}
+          </div>
+
+          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-zinc-800" />
+          </div>
+
+          <p className="mt-3 text-xs text-zinc-500">
+            נא להמתין, לא לסגור את החלון ולא לרענן את הדף.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ClonePanel({ eventId }: { eventId: string }) {
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [templateId, setTemplateId] = useState('')
@@ -159,6 +252,13 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
     title: '',
     message: '',
     details: []
+  })
+
+  const [progressState, setProgressState] = useState<ProgressState>({
+    open: false,
+    title: '',
+    message: '',
+    startedAt: null
   })
 
   const selected = useMemo(() => templates.find((t) => t.id === templateId) || null, [templates, templateId])
@@ -201,7 +301,7 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
       const json = await jfetch('/api/admin/site-templates')
       setTemplates(Array.isArray(json?.templates) ? json.templates : [])
     } catch (e: any) {
-      setErr(e?.message || 'שגיאה בטעינת תבניות')
+      setErr(toHebrewError(e?.message || 'שגיאה בטעינת תבניות'))
     } finally {
       setLoading(false)
     }
@@ -230,7 +330,7 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
       setOk(json?.message || 'התבנית נשמרה בהצלחה')
       await refresh()
     } catch (e: any) {
-      setErr(e?.message || 'שגיאה בשמירה כתבנית')
+      setErr(toHebrewError(e?.message || 'שגיאה בשמירה כתבנית'))
     } finally {
       setBusy(false)
     }
@@ -252,14 +352,22 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
     setErr(null)
     setOk(null)
     setBusy(true)
+    setProgressState({
+      open: true,
+      title: 'השכפול בתהליך',
+      message: 'מעתיק נתונים, גלריות וקבצים. זה עשוי לקחת מעט זמן.',
+      startedAt: Date.now()
+    })
+
     try {
+      const finalTargetName = targetName.trim()
       const json = await jfetch('/api/admin/clone-event', {
         method: 'POST',
         body: JSON.stringify({
           source_event_id: eventId,
           template_id: templateId,
           target_event_id: targetEventId,
-          target_event_name: targetName.trim(),
+          target_event_name: finalTargetName,
           notes: notes.trim() || null
         })
       })
@@ -278,20 +386,30 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
         details: [
           `אירוע מקור: ${eventId}`,
           `אירוע חדש: ${targetEventId}`,
-          `שם תצוגה: ${targetName.trim()}`
+          `שם תצוגה: ${finalTargetName}`
         ]
       })
     } catch (e: any) {
       const payload = e?.payload || {}
+      const details: string[] = []
+
+      if (payload?.details) details.push(String(payload.details))
+
       setResultState({
         open: true,
         kind: 'error',
         title: 'השכפול נכשל',
-        message: e?.message || 'שגיאה בשכפול',
-        details: payload?.details ? [String(payload.details)] : []
+        message: toHebrewError(e?.message || 'שגיאה בשכפול'),
+        details
       })
     } finally {
       setBusy(false)
+      setProgressState({
+        open: false,
+        title: '',
+        message: '',
+        startedAt: null
+      })
     }
   }
 
@@ -355,6 +473,13 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
     }
 
     setDeleteBusy(true)
+    setProgressState({
+      open: true,
+      title: 'המחיקה בתהליך',
+      message: 'מוחק נתוני DB וקבצי Storage של האירוע. זה עשוי לקחת מעט זמן.',
+      startedAt: Date.now()
+    })
+
     try {
       const json = await jfetch('/api/admin/delete-event', {
         method: 'POST',
@@ -401,16 +526,24 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
         open: true,
         kind: 'error',
         title: 'מחיקת האירוע נכשלה',
-        message: e?.message || 'שגיאה במחיקת האירוע',
+        message: toHebrewError(e?.message || 'שגיאה במחיקת האירוע'),
         details
       })
     } finally {
       setDeleteBusy(false)
+      setProgressState({
+        open: false,
+        title: '',
+        message: '',
+        startedAt: null
+      })
     }
   }
 
   return (
     <div className="space-y-4" dir="rtl">
+      <ProgressDialog state={progressState} />
+
       <ResultDialog
         state={resultState}
         onClose={() =>
