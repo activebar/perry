@@ -259,7 +259,7 @@ export async function POST(req: NextRequest) {
     }
 
     if ((existsRes.data || []).length > 0) {
-      return NextResponse.json({ error: 'Target event_id already exists' }, { status: 400 })
+      return NextResponse.json(   { error: 'כבר קיים אירוע עם event_id הזה' },   { status: 400 } )
     }
 
     const [settingsRes, galleriesRes, blocksRes, rulesRes, mediaRes, postsRes] =
