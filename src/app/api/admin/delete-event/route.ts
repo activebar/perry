@@ -28,7 +28,7 @@ async function listAllStoragePaths(
     })
 
     if (error) {
-      throw new Error(`Storage list failed at "${path}": ${error.message}`)
+      throw new Error(`שגיאה בקריאת קבצי Storage: ${error.message}`)
     }
 
     for (const item of data || []) {
@@ -70,7 +70,7 @@ async function removeStorageTree(
     const chunk = files.slice(i, i + chunkSize)
     const { error } = await sb.storage.from(bucket).remove(chunk)
     if (error) {
-      throw new Error(`Storage remove failed: ${error.message}`)
+      throw new Error(`שגיאה במחיקת קבצי Storage: ${error.message}`)
     }
   }
 
