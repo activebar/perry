@@ -2600,7 +2600,7 @@ export default function AdminApp({
                           <input
                             type="number"
                             min={1}
-                            max={9999999}
+                            max={9999}
                             value={hoursToOpen}
                             onChange={e => setHoursToOpen(Number(e.target.value || 8))}
                             className="w-24 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
