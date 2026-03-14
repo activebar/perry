@@ -311,7 +311,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
   const blessings = `${baseUrl}/blessings`
   if (postId && shareUsePermalink) {
     const code = String(postId).split('-')[0]
-    return `${baseUrl}/bl/${code}`
+    return `/bl/${code}`
   }
   return blessings
 }
