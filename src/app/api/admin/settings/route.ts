@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest, requireAnyPermission, requirePermission } from '@/lib/adminSession'
+import { getAdminFromRequest, requireAnyPermission } from '@/lib/adminSession'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
-import { getEventIdFromRequest } from '@/lib/event-id'
 
 /**
  * NOTE:
@@ -34,6 +33,11 @@ function resolveEventId(req: NextRequest, admin?: any) {
   return getServerEnv().EVENT_SLUG
 }
 
+function addHoursToIso(iso: string, hours: number) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return new Date(d.getTime() + hours * 60 * 60 * 1000).toISOString()
+}
 
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
@@ -46,13 +50,21 @@ export async function GET(req: NextRequest) {
 
     const lockDays = Number((row as any).approval_lock_after_days ?? 7)
     const startAt = new Date((row as any).start_at)
-    const lockAt = Number.isFinite(lockDays) && lockDays > 0 ? new Date(startAt.getTime() + lockDays * 24 * 60 * 60 * 1000) : null
+    const lockAt =
+      Number.isFinite(lockDays) && lockDays > 0
+        ? new Date(startAt.getTime() + lockDays * 24 * 60 * 60 * 1000)
+        : null
     const isLocked = lockAt ? new Date() >= lockAt : false
 
     if (isLocked && (row as any).require_approval === false) {
-      await supabaseServiceRole().from('event_settings').update({ require_approval: true }).eq('id', (row as any).id)
+      await supabaseServiceRole()
+        .from('event_settings')
+        .update({ require_approval: true })
+        .eq('id', (row as any).id)
+
       row = await getLatestSettingsRow(eventId)
     }
+
     return NextResponse.json({ ok: true, settings: row })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
@@ -91,16 +103,27 @@ export async function PUT(req: NextRequest) {
         'ai_daily_limit',
         'blessings_ai_closeness_options',
         'blessings_ai_style_options',
-        'blessings_ai_writer_suggestions'
+        'blessings_ai_writer_suggestions',
       ]
+
       const SHARE_KEYS = [
         'show_qr_admin',
         'show_qr_public',
         'enable_whatsapp_share',
         'enable_web_share',
-        'enable_permalink_share'
+        'enable_permalink_share',
       ]
-      const OG_KEYS = ['og_title', 'og_description', 'og_image', 'og_site_name', 'share_image_style', 'share_logo_url', 'share_logo_enabled', 'share_title_enabled']
+
+      const OG_KEYS = [
+        'og_title',
+        'og_description',
+        'og_image',
+        'og_site_name',
+        'share_image_style',
+        'share_logo_url',
+        'share_logo_enabled',
+        'share_title_enabled',
+      ]
 
       const needBless = hasAny(BLESS_KEYS)
       const needShare = hasAny(SHARE_KEYS)
@@ -127,11 +150,32 @@ export async function PUT(req: NextRequest) {
       .select('*')
       .single()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // אפשרות א':
+    // בכל עדכון של start_at דורסים מחדש את auto_approve_until
+    // לכל הגלריות של אותו event ל-48 שעות אחרי start_at
+    if (Object.prototype.hasOwnProperty.call(patch, 'start_at')) {
+      const nextStartAt = String((data as any)?.start_at || patch?.start_at || '').trim()
+      const autoApproveUntil = nextStartAt ? addHoursToIso(nextStartAt, 48) : null
+
+      if (autoApproveUntil) {
+        const { error: galleriesError } = await srv
+          .from('galleries')
+          .update({ auto_approve_until: autoApproveUntil })
+          .eq('event_id', eventId)
+
+        if (galleriesError) {
+          return NextResponse.json({ error: galleriesError.message }, { status: 500 })
+        }
+      }
+    }
+
     return NextResponse.json({ ok: true, settings: data })
   } catch (e: any) {
     const status = e?.status || 500
     return NextResponse.json({ error: e?.message || 'error' }, { status })
   }
 }
-
