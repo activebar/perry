@@ -1,50 +1,183 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseServiceRole, getPublicUploadUrl } from '@/lib/supabase'
+import { supabaseServiceRole } from '@/lib/supabase'
 
-export const dynamic = 'force-dynamic'
+function jsonError(msg: string, status = 400) {
+  return NextResponse.json({ error: msg }, { status })
+}
+
+function getDeviceId(req: NextRequest) {
+  return String(
+    req.headers.get('x-device-id') ||
+      req.cookies.get('device_id')?.value ||
+      ''
+  ).trim()
+}
+
+function canStillEdit(editableUntil?: string | null) {
+  if (!editableUntil) return false
+  const t = new Date(String(editableUntil)).getTime()
+  return Number.isFinite(t) && t > Date.now()
+}
 
 export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url)
-    const event = searchParams.get('event') || ''
-    const gallery_id = searchParams.get('gallery_id') || ''
-    if (!event || !gallery_id) {
-      return NextResponse.json({ error: 'Missing event or gallery_id' }, { status: 400 })
-    }
+  const galleryId = String(req.nextUrl.searchParams.get('gallery_id') || '').trim()
+  const mediaItemIds = req.nextUrl.searchParams.getAll('media_item_id').map(String).filter(Boolean)
+  const deviceId = getDeviceId(req)
 
-    const sb = supabaseServiceRole()
-    const { data, error } = await sb
-      .from('media_items')
-      .select('id,event_id,kind,gallery_id,storage_path,public_url,thumb_url,created_at,editable_until,is_approved,crop_position,uploader_device_id')
-      .eq('event_id', event)
-      .eq('kind', 'gallery')
-      .eq('gallery_id', gallery_id)
-      .eq('is_approved', true)
-      .order('created_at', { ascending: false })
+  const sb = supabaseServiceRole()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (mediaItemIds.length > 0) {
+    const { data: rows, error: rowsError } = await sb
+      .from('reactions')
+      .select('media_item_id, emoji, device_id')
+      .in('media_item_id', mediaItemIds)
 
-    const items = (data || []).map((x: any) => {
-      const public_url = x.public_url || (x.storage_path ? getPublicUploadUrl(x.storage_path) : '')
-      const thumb_url = x.thumb_url || (x.storage_path ? getPublicUploadUrl(`${x.storage_path}.thumb.webp`) : public_url)
-      return {
-        ...x,
-        public_url,
-        thumb_url,
-        url: public_url
-      }
-    })
+    if (rowsError) return jsonError(rowsError.message, 500)
 
-    return NextResponse.json(
-      { items },
-      {
-        // Prevent any edge/proxy caching – this endpoint is used as a "self-heal" source of truth.
-        headers: {
-          'Cache-Control': 'no-store, max-age=0'
+    const reactionsByItem: Record<string, Record<string, number>> = {}
+    const myReactionsByItem: Record<string, string[]> = {}
+
+    for (const row of rows || []) {
+      const itemId = String((row as any).media_item_id || '').trim()
+      const emoji = String((row as any).emoji || '').trim()
+      const rowDevice = String((row as any).device_id || '').trim()
+      if (!itemId || !emoji) continue
+
+      reactionsByItem[itemId] ||= {}
+      reactionsByItem[itemId][emoji] = Number(reactionsByItem[itemId][emoji] || 0) + 1
+
+      if (deviceId && rowDevice === deviceId) {
+        myReactionsByItem[itemId] ||= []
+        if (!myReactionsByItem[itemId].includes(emoji)) {
+          myReactionsByItem[itemId].push(emoji)
         }
       }
-    )
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      ok: true,
+      reactionsByItem,
+      myReactionsByItem,
+    })
   }
+
+  if (!galleryId) return jsonError('missing gallery_id', 400)
+
+  const { data, error } = await sb
+    .from('media_items')
+    .select('id, url, thumb_url, kind, created_at, editable_until, uploader_device_id')
+    .eq('gallery_id', galleryId)
+    .eq('is_approved', true)
+    .in('kind', ['gallery', 'galleries'])
+    .order('created_at', { ascending: false })
+
+  if (error) return jsonError(error.message, 500)
+
+  return NextResponse.json({ ok: true, items: data || [] })
+}
+
+export async function PUT(req: NextRequest) {
+  const deviceId = getDeviceId(req)
+  if (!deviceId) return jsonError('missing device id', 400)
+
+  const body = await req.json().catch(() => ({}))
+  const id = String(body?.id || '').trim()
+  if (!id) return jsonError('missing id', 400)
+
+  const sb = supabaseServiceRole()
+
+  const rowRes = await sb
+    .from('media_items')
+    .select('id, editable_until, uploader_device_id')
+    .eq('id', id)
+    .single()
+
+  if (rowRes.error) return jsonError(rowRes.error.message, 500)
+
+  const row: any = rowRes.data
+  if (!row) return jsonError('item not found', 404)
+  if (String(row.uploader_device_id || '') !== deviceId) return jsonError('forbidden', 403)
+  if (!canStillEdit(row.editable_until)) return jsonError('זמן העריכה הסתיים', 403)
+
+  const patch: Record<string, any> = {}
+
+  if (body?.replacement_url) patch.url = body.replacement_url
+  if ('replacement_thumb_url' in body) patch.thumb_url = body.replacement_thumb_url || null
+  if (body?.replacement_storage_path) patch.storage_path = body.replacement_storage_path
+  if (body?.replacement_kind) patch.kind = body.replacement_kind
+
+  const { data, error } = await sb
+    .from('media_items')
+    .update(patch)
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) return jsonError(error.message, 500)
+
+  return NextResponse.json({ ok: true, item: data })
+}
+
+export async function DELETE(req: NextRequest) {
+  const deviceId = getDeviceId(req)
+  if (!deviceId) return jsonError('missing device id', 400)
+
+  const body = await req.json().catch(() => ({}))
+  const id = String(body?.id || '').trim()
+  if (!id) return jsonError('missing id', 400)
+
+  const sb = supabaseServiceRole()
+
+  const rowRes = await sb
+    .from('media_items')
+    .select('id, editable_until, uploader_device_id, storage_path, url, thumb_url')
+    .eq('id', id)
+    .single()
+
+  if (rowRes.error) return jsonError(rowRes.error.message, 500)
+
+  const row: any = rowRes.data
+  if (!row) return jsonError('item not found', 404)
+  if (String(row.uploader_device_id || '') !== deviceId) return jsonError('forbidden', 403)
+  if (!canStillEdit(row.editable_until)) return jsonError('זמן העריכה הסתיים', 403)
+
+  const derivePath = (u: any): string | null => {
+    if (typeof u !== 'string') return null
+    const m = u.match(/\/storage\/v1\/object\/public\/uploads\/(.+)$/)
+    return m?.[1] ? String(m[1]) : null
+  }
+
+  const thumbCandidates = (basePath: string): string[] => {
+    const out = new Set<string>()
+    out.add(`${basePath}.thumb.webp`)
+    const stripped = basePath.replace(/\.[^./]+$/, '')
+    if (stripped && stripped !== basePath) out.add(`${stripped}.thumb.webp`)
+    return Array.from(out)
+  }
+
+  const base =
+    (typeof row.storage_path === 'string' && row.storage_path.trim())
+      ? row.storage_path.trim()
+      : (derivePath(row.url) || derivePath(row.thumb_url))
+
+  if (base) {
+    const paths: string[] = [base]
+    if (!base.endsWith('.thumb.webp')) {
+      paths.push(...thumbCandidates(base))
+    } else {
+      paths.push(base.replace(/\.thumb\.webp$/, ''))
+    }
+    await sb.storage.from('uploads').remove(Array.from(new Set(paths))).catch(() => null as any)
+  }
+
+  await sb.from('reactions').delete().eq('media_item_id', id)
+
+  const { error } = await sb
+    .from('media_items')
+    .delete()
+    .eq('id', id)
+
+  if (error) return jsonError(error.message, 500)
+
+  return NextResponse.json({ ok: true })
 }
