@@ -17,7 +17,11 @@ async function jfetch(url: string, opts?: RequestInit) {
     headers: { 'content-type': 'application/json', ...(opts?.headers || {}) }
   })
   const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`)
+  if (!res.ok) {
+    const err = new Error(json?.error || `HTTP ${res.status}`) as Error & { payload?: any }
+    ;(err as any).payload = json
+    throw err
+  }
   return json
 }
 
@@ -31,6 +35,14 @@ type TemplateRow = {
   source_event_id?: string | null
   created_at?: string
   updated_at?: string
+}
+
+type ResultState = {
+  open: boolean
+  kind: 'success' | 'error'
+  title: string
+  message: string
+  details?: string[]
 }
 
 function normalizeEventId(raw: string) {
@@ -74,6 +86,54 @@ function HelpTip({ text }: { text: string }) {
   )
 }
 
+function ResultDialog({
+  state,
+  onClose
+}: {
+  state: ResultState
+  onClose: () => void
+}) {
+  if (!state.open) return null
+
+  const isSuccess = state.kind === 'success'
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+      <div
+        className={
+          'w-full max-w-lg rounded-2xl border bg-white p-4 shadow-lg ' +
+          (isSuccess ? 'border-emerald-200' : 'border-red-200')
+        }
+        dir="rtl"
+      >
+        <div className="text-right">
+          <h4 className={'font-semibold ' + (isSuccess ? 'text-emerald-700' : 'text-red-700')}>
+            {state.title}
+          </h4>
+          <p className="mt-2 text-sm text-zinc-700 whitespace-pre-wrap">{state.message}</p>
+        </div>
+
+        {state.details && state.details.length > 0 ? (
+          <div className="mt-4 rounded-xl bg-zinc-50 p-3">
+            <div className="mb-2 text-sm font-medium text-zinc-800">פירוט</div>
+            <ul className="space-y-1 text-sm text-zinc-700">
+              {state.details.map((line, i) => (
+                <li key={`${line}-${i}`}>• {line}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <div className="mt-5 flex justify-end">
+          <Button type="button" onClick={onClose}>
+            סגור
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ClonePanel({ eventId }: { eventId: string }) {
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [templateId, setTemplateId] = useState('')
@@ -92,6 +152,14 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteChecked, setDeleteChecked] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
+
+  const [resultState, setResultState] = useState<ResultState>({
+    open: false,
+    kind: 'success',
+    title: '',
+    message: '',
+    details: []
+  })
 
   const selected = useMemo(() => templates.find((t) => t.id === templateId) || null, [templates, templateId])
 
@@ -195,14 +263,33 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
           notes: notes.trim() || null
         })
       })
-      setOk(json?.message || 'בוצע')
+
       setConfirmOpen(false)
       setTargetEventIdRaw('')
       setTargetName('')
       setNotes('')
       await refresh()
+
+      setResultState({
+        open: true,
+        kind: 'success',
+        title: 'השכפול הושלם בהצלחה',
+        message: json?.message || `האירוע "${targetEventId}" נוצר בהצלחה`,
+        details: [
+          `אירוע מקור: ${eventId}`,
+          `אירוע חדש: ${targetEventId}`,
+          `שם תצוגה: ${targetName.trim()}`
+        ]
+      })
     } catch (e: any) {
-      setErr(e?.message || 'שגיאה בשכפול')
+      const payload = e?.payload || {}
+      setResultState({
+        open: true,
+        kind: 'error',
+        title: 'השכפול נכשל',
+        message: e?.message || 'שגיאה בשכפול',
+        details: payload?.details ? [String(payload.details)] : []
+      })
     } finally {
       setBusy(false)
     }
@@ -227,22 +314,43 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
     setOk(null)
 
     if (blockingTemplates.length > 0) {
-      setErr('לא ניתן למחוק אירוע שמשמש כתבנית פעילה')
+      setResultState({
+        open: true,
+        kind: 'error',
+        title: 'לא ניתן למחוק את האירוע',
+        message: 'האירוע משמש כתבנית פעילה ולכן המחיקה נחסמה.',
+        details: blockingTemplates.map((t) => `${t.name} (${t.kind})`)
+      })
       return
     }
 
     if (deleteConfirmEventId.trim() !== eventId) {
-      setErr('יש להקליד את ה-event_id המדויק לאישור')
+      setResultState({
+        open: true,
+        kind: 'error',
+        title: 'מחיקת האירוע נכשלה',
+        message: 'יש להקליד את ה-event_id המדויק לאישור.'
+      })
       return
     }
 
     if (!deletePassword.trim()) {
-      setErr('יש להקליד סיסמת מחיקה')
+      setResultState({
+        open: true,
+        kind: 'error',
+        title: 'מחיקת האירוע נכשלה',
+        message: 'יש להקליד סיסמת מחיקה.'
+      })
       return
     }
 
     if (!deleteChecked) {
-      setErr('יש לאשר שהמחיקה תמחק גם DB וגם Storage')
+      setResultState({
+        open: true,
+        kind: 'error',
+        title: 'מחיקת האירוע נכשלה',
+        message: 'יש לאשר שהמחיקה תמחק גם DB וגם Storage.'
+      })
       return
     }
 
@@ -258,12 +366,44 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
         })
       })
 
-      setOk(json?.message || `האירוע "${eventId}" נמחק בהצלחה`)
+      const dbDeleted = json?.db_deleted || {}
+      const details: string[] = [
+        `event_id: ${json?.deleted_event_id || eventId}`,
+        `נמחקו מה-Storage: ${Number(json?.storage_deleted_count || 0)} קבצים`
+      ]
+
+      Object.entries(dbDeleted).forEach(([table, count]) => {
+        details.push(`${table}: ${Number(count || 0)} רשומות`)
+      })
+
       setDeleteOpen(false)
       resetDeleteForm()
       await refresh()
+
+      setResultState({
+        open: true,
+        kind: 'success',
+        title: 'האירוע נמחק בהצלחה',
+        message: json?.message || `האירוע "${eventId}" נמחק בהצלחה`,
+        details
+      })
     } catch (e: any) {
-      setErr(e?.message || 'שגיאה במחיקת האירוע')
+      const payload = e?.payload || {}
+      const details: string[] = []
+
+      if (Array.isArray(payload?.templates) && payload.templates.length > 0) {
+        for (const t of payload.templates) {
+          details.push(`${t.name || t.id} (${t.kind || 'template'})`)
+        }
+      }
+
+      setResultState({
+        open: true,
+        kind: 'error',
+        title: 'מחיקת האירוע נכשלה',
+        message: e?.message || 'שגיאה במחיקת האירוע',
+        details
+      })
     } finally {
       setDeleteBusy(false)
     }
@@ -271,6 +411,19 @@ export default function ClonePanel({ eventId }: { eventId: string }) {
 
   return (
     <div className="space-y-4" dir="rtl">
+      <ResultDialog
+        state={resultState}
+        onClose={() =>
+          setResultState({
+            open: false,
+            kind: 'success',
+            title: '',
+            message: '',
+            details: []
+          })
+        }
+      />
+
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-right">
