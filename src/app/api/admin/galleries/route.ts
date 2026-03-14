@@ -358,7 +358,12 @@ export async function POST(req: NextRequest) {
     for (const row of duplicateLegacyBlocks) {
       await sb.from('blocks').delete().eq('id', row.id).eq('event_id', eventId)
     }
-
+await sb
+  .from('blocks')
+  .delete()
+  .eq('event_id', targetEventId)
+  .eq('type', 'gallery')
+    
     return NextResponse.json({
       ok: true,
       gallery: gal,
