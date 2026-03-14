@@ -86,7 +86,7 @@ function EventPreviewCard({ event }: { event: EventCard }) {
             <span className="no-underline" style={{ textDecoration: 'none' }}>
               ניהול
               <br />
-              האירוע
+              האתר
             </span>
           </button>
         </Link>
@@ -114,7 +114,7 @@ function EventPreviewCard({ event }: { event: EventCard }) {
             <span className="no-underline" style={{ textDecoration: 'none' }}>
               ניהול
               <br />
-              האתר
+              הארוע
             </span>
           </button>
         </Link>
