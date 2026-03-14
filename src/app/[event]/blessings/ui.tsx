@@ -447,7 +447,7 @@ async function saveEdit() {
     const blessings = `${base}/blessings`
     if (postId && shareUsePermalink) {
       const code = String(postId).split('-')[0]
-      return `${base}/bl/${code}`
+      return `/bl/${code}`
     }
     return blessings
   }
