@@ -1,63 +1,81 @@
-import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServiceRole } from '@/lib/supabase'
 
-const EMOJIS = new Set(['👍', '😍', '🔥', '🙏'])
+function jsonError(msg: string, status = 400) {
+  return NextResponse.json({ error: msg }, { status })
+}
 
-/**
- * Single reaction per device per post:
- * - clicking the same emoji again removes it
- * - clicking a different emoji replaces the previous one
- */
-export async function POST(req: Request) {
+function getDeviceId(req: NextRequest) {
+  const bodyDevice = req.headers.get('x-device-id') || ''
+  const cookieDevice = req.cookies.get('device_id')?.value || ''
+  return String(bodyDevice || cookieDevice || '').trim()
+}
+
+export async function POST(req: NextRequest) {
   try {
-    const { post_id, emoji } = await req.json()
-    if (!post_id || !emoji || !EMOJIS.has(emoji)) {
-      return NextResponse.json({ error: 'בקשה לא תקינה' }, { status: 400 })
+    const body = await req.json().catch(() => ({}))
+    const postId = String(body?.post_id || '').trim()
+    const mediaItemId = String(body?.media_item_id || '').trim()
+    const emoji = String(body?.emoji || '').trim()
+    const deviceId = getDeviceId(req)
+
+    if (!emoji) return jsonError('missing emoji', 400)
+    if (!deviceId) return jsonError('missing device id', 400)
+    if (!postId && !mediaItemId) {
+      return jsonError('missing target id', 400)
+    }
+    if (postId && mediaItemId) {
+      return jsonError('only one target is allowed', 400)
     }
 
-    const device_id = cookies().get('device_id')?.value
-    if (!device_id) return NextResponse.json({ error: 'missing device_id' }, { status: 400 })
+    const sb = supabaseServiceRole()
 
-    const srv = supabaseServiceRole()
-
-    // do I already have THIS emoji?
-    const { data: existingSame } = await srv
+    let query = sb
       .from('reactions')
       .select('id')
-      .eq('post_id', post_id)
-      .eq('device_id', device_id)
+      .eq('device_id', deviceId)
       .eq('emoji', emoji)
-      .limit(1)
 
-    if (existingSame && existingSame.length) {
-      // toggle off
-      await srv.from('reactions').delete().eq('id', existingSame[0].id)
-    } else {
-      // replace: delete any existing reaction for this device/post, then add the new one
-      await srv.from('reactions').delete().eq('post_id', post_id).eq('device_id', device_id)
-      await srv.from('reactions').insert({ post_id, device_id, emoji })
+    if (postId) query = query.eq('post_id', postId).is('media_item_id', null)
+    if (mediaItemId) query = query.eq('media_item_id', mediaItemId).is('post_id', null)
+
+    const existingRes = await query.maybeSingle()
+
+    if (existingRes.error) {
+      return jsonError(existingRes.error.message, 500)
     }
 
-    // recompute counts
-    const { data: rows, error } = await srv.from('reactions').select('emoji').eq('post_id', post_id)
-    if (error) throw error
+    if (existingRes.data?.id) {
+      const del = await sb.from('reactions').delete().eq('id', existingRes.data.id)
+      if (del.error) return jsonError(del.error.message, 500)
+    } else {
+      const ins = await sb.from('reactions').insert({
+        post_id: postId || null,
+        media_item_id: mediaItemId || null,
+        device_id: deviceId,
+        emoji,
+      })
+      if (ins.error) return jsonError(ins.error.message, 500)
+    }
 
-    const counts: Record<string, number> = { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }
-    for (const r of rows || []) counts[(r as any).emoji] = (counts[(r as any).emoji] || 0) + 1
-
-    // my current reaction (single)
-    const { data: myRow } = await srv
+    let countQuery = sb
       .from('reactions')
-      .select('emoji')
-      .eq('post_id', post_id)
-      .eq('device_id', device_id)
-      .limit(1)
+      .select('id', { count: 'exact', head: true })
+      .eq('emoji', emoji)
 
-    const my = (myRow && myRow.length) ? [myRow[0].emoji] : []
+    if (postId) countQuery = countQuery.eq('post_id', postId).is('media_item_id', null)
+    if (mediaItemId) countQuery = countQuery.eq('media_item_id', mediaItemId).is('post_id', null)
 
-    return NextResponse.json({ ok: true, counts, my })
+    const countRes = await countQuery
+    if (countRes.error) return jsonError(countRes.error.message, 500)
+
+    return NextResponse.json({
+      ok: true,
+      emoji,
+      count: Number(countRes.count || 0),
+      active: !existingRes.data?.id,
+    })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
+    return jsonError(e?.message || 'server error', 500)
   }
 }
