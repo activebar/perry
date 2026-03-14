@@ -16,18 +16,25 @@ function stripRow(row: any, overrides: Record<string, any> = {}) {
 }
 
 function remapBlockConfig(config: any, galleryMap: Map<string, string>) {
-  const next = config && typeof config === 'object' && !Array.isArray(config) ? { ...config } : {}
+  const next =
+    config && typeof config === 'object' && !Array.isArray(config)
+      ? { ...config }
+      : {}
+
   const oldGalleryId = String(next.gallery_id || '').trim()
   if (oldGalleryId && galleryMap.has(oldGalleryId)) {
     next.gallery_id = galleryMap.get(oldGalleryId)
   }
+
   return next
 }
 
 export async function POST(req: NextRequest) {
   try {
     const admin = await getAdminFromRequest(req)
-    if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     const body = await req.json().catch(() => ({}))
     const targetEventId = String(body?.target_event_id || '').trim()
@@ -55,6 +62,7 @@ export async function POST(req: NextRequest) {
       }
 
       sourceEventId = String((tplRes.data as any)?.source_event_id || '').trim()
+
       if (!sourceEventId) {
         return NextResponse.json(
           { error: 'Missing source_event_id in site_templates. Add source_event_id to the template first.' },
@@ -67,20 +75,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing source_event_id' }, { status: 400 })
     }
 
-    const existsRes = await sb.from('event_settings').select('event_id').eq('event_id', targetEventId).limit(1)
-    if (existsRes.error) return NextResponse.json({ error: existsRes.error.message }, { status: 400 })
+    const existsRes = await sb
+      .from('event_settings')
+      .select('event_id')
+      .eq('event_id', targetEventId)
+      .limit(1)
+
+    if (existsRes.error) {
+      return NextResponse.json({ error: existsRes.error.message }, { status: 400 })
+    }
+
     if ((existsRes.data || []).length > 0) {
       return NextResponse.json({ error: 'Target event_id already exists' }, { status: 400 })
     }
 
-    const [settingsRes, galleriesRes, blocksRes, rulesRes, mediaRes, postsRes] = await Promise.all([
-      sb.from('event_settings').select('*').eq('event_id', sourceEventId),
-      sb.from('galleries').select('*').eq('event_id', sourceEventId),
-      sb.from('blocks').select('*').eq('event_id', sourceEventId),
-      sb.from('content_rules').select('*').eq('event_id', sourceEventId),
-      sb.from('media_items').select('*').eq('event_id', sourceEventId),
-      sb.from('posts').select('*').eq('event_id', sourceEventId).eq('kind', 'blessing').eq('status', 'approved'),
-    ])
+    const [settingsRes, galleriesRes, blocksRes, rulesRes, mediaRes, postsRes] =
+      await Promise.all([
+        sb.from('event_settings').select('*').eq('event_id', sourceEventId),
+        sb.from('galleries').select('*').eq('event_id', sourceEventId),
+        sb.from('blocks').select('*').eq('event_id', sourceEventId),
+        sb.from('content_rules').select('*').eq('event_id', sourceEventId),
+        sb.from('media_items').select('*').eq('event_id', sourceEventId),
+        sb.from('posts')
+          .select('*')
+          .eq('event_id', sourceEventId)
+          .eq('kind', 'blessing')
+          .eq('status', 'approved'),
+      ])
 
     const firstErr =
       settingsRes.error ||
@@ -122,7 +143,9 @@ export async function POST(req: NextRequest) {
 
     if (settingsRows.length) {
       const ins = await sb.from('event_settings').insert(settingsRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      if (ins.error) {
+        return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      }
     }
 
     // 2) galleries first + build gallery map
@@ -136,16 +159,21 @@ export async function POST(req: NextRequest) {
       const payload = stripRow(row, { event_id: targetEventId })
 
       const ins = await sb.from('galleries').insert(payload).select('*').single()
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      if (ins.error) {
+        return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      }
 
       const newId = String((ins.data as any)?.id || '').trim()
-      if (oldId && newId) galleryMap.set(oldId, newId)
+      if (oldId && newId) {
+        galleryMap.set(oldId, newId)
+      }
     }
 
     // 3) blocks after galleries, with gallery_id remap
-    // If source already has gallery_1/gallery_2/... blocks,
-    // skip legacy "gallery" blocks to avoid duplicates.
-    const hasNewGalleryBlocks = blocks.some((b: any) => String(b?.type || '').startsWith('gallery_'))
+    const hasNewGalleryBlocks = blocks.some((b: any) =>
+      String(b?.type || '').startsWith('gallery_')
+    )
+
     const filteredBlocks = hasNewGalleryBlocks
       ? blocks.filter((b: any) => String(b?.type || '') !== 'gallery')
       : blocks
@@ -161,38 +189,66 @@ export async function POST(req: NextRequest) {
 
     if (blocksRows.length) {
       const ins = await sb.from('blocks').insert(blocksRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      if (ins.error) {
+        return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      }
+    }
+
+    // HARD CLEANUP:
+    // remove legacy gallery blocks only
+    const cleanupLegacyRes = await sb
+      .from('blocks')
+      .delete()
+      .eq('event_id', targetEventId)
+      .eq('type', 'gallery')
+
+    if (cleanupLegacyRes.error) {
+      return NextResponse.json({ error: cleanupLegacyRes.error.message }, { status: 400 })
     }
 
     // 4) content rules
-    const rulesRows = rules.map((row: any) => stripRow(row, { event_id: targetEventId }))
+    const rulesRows = rules.map((row: any) =>
+      stripRow(row, { event_id: targetEventId })
+    )
+
     if (rulesRows.length) {
       const ins = await sb.from('content_rules').insert(rulesRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      if (ins.error) {
+        return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      }
     }
 
     // 5) media_items with gallery remap
     const mediaRows = mediaItems.map((row: any) => {
       const next = stripRow(row, { event_id: targetEventId })
       const oldGalleryId = String(next.gallery_id || '').trim()
+
       if (oldGalleryId && galleryMap.has(oldGalleryId)) {
         next.gallery_id = galleryMap.get(oldGalleryId)
       } else if (oldGalleryId && !galleryMap.has(oldGalleryId)) {
         next.gallery_id = null
       }
+
       return next
     })
 
     if (mediaRows.length) {
       const ins = await sb.from('media_items').insert(mediaRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      if (ins.error) {
+        return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      }
     }
 
     // 6) default blessings
-    const blessingRows = blessingPosts.map((row: any) => stripRow(row, { event_id: targetEventId }))
+    const blessingRows = blessingPosts.map((row: any) =>
+      stripRow(row, { event_id: targetEventId })
+    )
+
     if (blessingRows.length) {
       const ins = await sb.from('posts').insert(blessingRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      if (ins.error) {
+        return NextResponse.json({ error: ins.error.message }, { status: 400 })
+      }
     }
 
     return NextResponse.json({
@@ -210,9 +266,10 @@ export async function POST(req: NextRequest) {
         skipped_legacy_gallery_blocks: hasNewGalleryBlocks
           ? blocks.filter((b: any) => String(b?.type || '') === 'gallery').length
           : 0,
+        cleanup_deleted_gallery_blocks: 'legacy type=gallery removed',
       },
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 })
   }
-}
+      }
