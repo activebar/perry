@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     .select('id, url, thumb_url, kind, crop_position, crop_focus_x, crop_focus_y, created_at, editable_until, uploader_device_id')
     .eq('gallery_id', galleryId)
     .eq('is_approved', true)
-    .in('kind', ['gallery', 'galleries'])
+    .in('kind', ['gallery', 'galleries', 'gallery_video'])
     .order('created_at', { ascending: false })
 
   if (error) return jsonError(error.message, 500)
@@ -109,7 +109,17 @@ export async function PUT(req: NextRequest) {
   const row: any = rowRes.data
   if (!row) return jsonError('item not found', 404)
   if (String(row.uploader_device_id || '') !== deviceId) return jsonError('forbidden', 403)
-  if (!canStillEdit(row.editable_until)) return jsonError('זמן העריכה הסתיים', 403)
+
+  const cropOnly =
+    !body?.replacement_url &&
+    !('replacement_thumb_url' in body) &&
+    !body?.replacement_storage_path &&
+    !body?.replacement_kind &&
+    ('crop_position' in body || 'crop_focus_x' in body || 'crop_focus_y' in body)
+
+  if (!cropOnly && !canStillEdit(row.editable_until)) {
+    return jsonError('זמן העריכה הסתיים', 403)
+  }
 
   const patch: Record<string, any> = {}
 

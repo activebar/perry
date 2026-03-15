@@ -15,6 +15,7 @@ function jsonError(msg: string, status = 400) {
 function isImageFile(file: File) {
   return (file.type || '').startsWith('image/')
 }
+
 function isVideoFile(file: File) {
   return (file.type || '').startsWith('video/')
 }
@@ -64,7 +65,9 @@ export async function POST(req: NextRequest) {
       const u = new URL(referer)
       const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
       if (/^[a-z0-9_-]{2,32}$/.test(seg) && seg !== 'admin') eventFromReferer = seg
-    } catch {}
+    } catch {
+      // ignore
+    }
 
     let event_id = (providedEventId || legacyEvent || eventFromQuery || eventFromReferer || (srv.EVENT_SLUG || 'ido'))
       .trim()
@@ -74,7 +77,7 @@ export async function POST(req: NextRequest) {
 
     let is_approved = true
     let autoApproveUntil: string | null = null
-    let requireApproval: boolean = true
+    let requireApproval = true
 
     if (kind === 'gallery') {
       if (!gallery_id) return jsonError('missing gallery_id', 400)
@@ -127,14 +130,16 @@ export async function POST(req: NextRequest) {
         height = typeof meta.height === 'number' ? meta.height : null
         if (width && height && width < height) {
           crop_position = 'top'
-          crop_focus_y = 0.08
           crop_focus_x = 0.5
+          crop_focus_y = 0.05
         } else {
           crop_position = 'center'
-          crop_focus_y = 0.5
           crop_focus_x = 0.5
+          crop_focus_y = 0.5
         }
-      } catch {}
+      } catch {
+        // ignore
+      }
     } else {
       crop_position = 'center'
       crop_focus_x = 0.5
@@ -154,14 +159,16 @@ export async function POST(req: NextRequest) {
     crop_position = deriveCropPositionFromFocusY(crop_focus_y, crop_position)
 
     const kindFolder = kind === 'blessing' ? 'blessings' : kind
-
     const folder =
       kind === 'gallery'
         ? `${event_id}/gallery/${gallery_id}`
         : `${event_id}/${kindFolder}`
 
     const baseName = `${Date.now()}_${randomUUID()}`
-    const path = isImage ? `${folder}/${baseName}.jpg` : `${folder}/${baseName}`
+    const originalName = String(file.name || '').trim()
+    const extMatch = originalName.match(/\.([a-zA-Z0-9]+)$/)
+    const safeExt = extMatch ? `.${extMatch[1].toLowerCase()}` : (isVideo ? '.mp4' : '')
+    const path = isImage ? `${folder}/${baseName}.jpg` : `${folder}/${baseName}${safeExt}`
 
     let uploadBuf: Uint8Array | Buffer = bytes
     let contentType = file.type || 'application/octet-stream'
@@ -195,18 +202,14 @@ export async function POST(req: NextRequest) {
     }
 
     const publicUrl = getPublicUploadUrl(path)
-
-    const device_id =
-      cookies().get('device_id')?.value ||
-      String(fd.get('device_id') || '').trim() ||
-      null
-
+    const device_id = cookies().get('device_id')?.value || String(fd.get('device_id') || '').trim() || null
     const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    const dbKind = isVideo && kind === 'gallery' ? 'gallery_video' : kind
 
     const { data: inserted, error: ierr } = await sb
       .from('media_items')
       .insert({
-        kind,
+        kind: dbKind,
         event_id,
         gallery_id,
         url: publicUrl,

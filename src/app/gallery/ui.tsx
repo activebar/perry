@@ -25,6 +25,7 @@ type PendingAsset = {
   crop_focus_x: number | null
   crop_focus_y: number | null
   existingItemId?: string
+  source: 'upload' | 'camera'
 }
 
 const EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '😮']
@@ -75,7 +76,7 @@ function objectPositionFromCrop(item: {
   const x = clamp01(item.crop_focus_x)
   const y = clamp01(item.crop_focus_y)
   if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
-  if (item.crop_position === 'top') return '50% 18%'
+  if (item.crop_position === 'top') return '50% 12%'
   if (item.crop_position === 'bottom') return '50% 82%'
   return '50% 50%'
 }
@@ -192,7 +193,9 @@ async function detectAutoFocus(file: File): Promise<{
         }
       }
     }
-  } catch {}
+  } catch {
+    // ignore and fallback
+  }
 
   const imgUrl = URL.createObjectURL(file)
   try {
@@ -204,7 +207,7 @@ async function detectAutoFocus(file: File): Promise<{
     })
 
     if (img.naturalWidth < img.naturalHeight) {
-      return { crop_position: 'top', crop_focus_x: 0.5, crop_focus_y: 0.08 }
+      return { crop_position: 'top', crop_focus_x: 0.5, crop_focus_y: 0.18 }
     }
     return { crop_position: 'center', crop_focus_x: 0.5, crop_focus_y: 0.5 }
   } finally {
@@ -411,7 +414,9 @@ export default function GalleryClient({
       if (json?.myReactionsByItem) {
         setMyReactionsByItem(json.myReactionsByItem || {})
       }
-    } catch {}
+    } catch {
+      // ignore
+    }
   }
 
   function canEdit(item: GalleryItem) {
@@ -419,6 +424,11 @@ export default function GalleryClient({
     const sameUploader = String(item.uploader_device_id) === String(deviceId)
     const until = new Date(String(item.editable_until)).getTime()
     return sameUploader && until > countdownNow
+  }
+
+  function canReposition(item: GalleryItem) {
+    if (!item?.uploader_device_id || !deviceId) return false
+    return String(item.uploader_device_id) === String(deviceId)
   }
 
   function remainingForItem(item: GalleryItem) {
@@ -435,10 +445,12 @@ export default function GalleryClient({
       const json = await res.json().catch(() => ({}))
       if (!res.ok) return
       setItems(Array.isArray(json?.items) ? json.items : [])
-    } catch {}
+    } catch {
+      // ignore
+    }
   }
 
-  async function uploadSingleAsset(asset: PendingAsset, source: 'upload' | 'camera') {
+  async function uploadSingleAsset(asset: PendingAsset) {
     if (!asset.file) return
 
     const fd = new FormData()
@@ -472,50 +484,88 @@ export default function GalleryClient({
 
     const upJson = await up.json().catch(() => ({}))
     if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
-
     return upJson
+  }
+
+  async function uploadBatch(list: File[], source: 'upload' | 'camera') {
+    setBusy(true)
+    setUploadProgress(0)
+    setUploadLabel(source === 'camera' ? 'מעלה צילום...' : 'מעלה קבצים...')
+    setMsg('')
+
+    try {
+      let pendingCount = 0
+      let approvedCount = 0
+
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i]
+        const isVideo = file.type.startsWith('video/')
+        const auto = isVideo
+          ? { crop_position: 'center' as const, crop_focus_x: 0.5, crop_focus_y: 0.5 }
+          : await detectAutoFocus(file)
+
+        const upJson = await uploadSingleAsset({
+          file,
+          previewUrl: '',
+          isVideo,
+          source,
+          crop_position: auto.crop_position,
+          crop_focus_x: auto.crop_focus_x,
+          crop_focus_y: auto.crop_focus_y,
+        })
+
+        if (upJson?.is_approved === false) pendingCount += 1
+        else approvedCount += 1
+
+        const pct = Math.round(((i + 1) / list.length) * 100)
+        setUploadProgress(pct)
+        setUploadLabel(`${source === 'camera' ? 'מעלה צילום...' : 'מעלה קבצים...'} ${i + 1}/${list.length}`)
+      }
+
+      await refreshItems()
+      await loadReactions()
+
+      if (pendingCount > 0 && approvedCount > 0) {
+        setMsg(`הועלו ${approvedCount} קבצים בהצלחה, ו-${pendingCount} ממתינים לאישור מנהל`)
+      } else if (pendingCount > 0) {
+        setMsg(
+          pendingCount === 1
+            ? 'הקובץ הועלה וממתין לאישור מנהל'
+            : `${pendingCount} קבצים הועלו וממתינים לאישור מנהל`
+        )
+      } else {
+        setMsg(list.length === 1 ? 'הקובץ הועלה בהצלחה' : `${list.length} קבצים הועלו בהצלחה`)
+      }
+    } catch (e: any) {
+      setMsg(e?.message || 'שגיאה בהעלאה')
+    } finally {
+      setBusy(false)
+      setUploadProgress(0)
+      setUploadLabel('')
+      if (uploadInputRef.current) uploadInputRef.current.value = ''
+      if (cameraPhotoRef.current) cameraPhotoRef.current.value = ''
+      if (cameraVideoRef.current) cameraVideoRef.current.value = ''
+    }
   }
 
   async function openCropForFiles(files: FileList | File[] | null, source: 'upload' | 'camera') {
     const list = Array.from(files || [])
     if (!list.length) return
 
-    const first = list[0]
-    const isVideo = first.type.startsWith('video/')
-    const previewUrl = URL.createObjectURL(first)
-
-    if (isVideo) {
-      setBusy(true)
-      setUploadProgress(30)
-      setUploadLabel(source === 'camera' ? 'מעלה צילום וידאו...' : 'מעלה וידאו...')
-      setMsg('')
-      try {
-        const asset: PendingAsset = {
-          file: first,
-          previewUrl,
-          isVideo: true,
-          crop_position: 'center',
-          crop_focus_x: 0.5,
-          crop_focus_y: 0.5,
-        }
-        const upJson = await uploadSingleAsset(asset, source)
-        await refreshItems()
-        await loadReactions()
-        setMsg(upJson?.is_approved === false ? 'הווידאו הועלה וממתין לאישור מנהל' : 'הווידאו הועלה בהצלחה')
-      } catch (e: any) {
-        setMsg(e?.message || 'שגיאה בהעלאת וידאו')
-      } finally {
-        setBusy(false)
-        setUploadProgress(0)
-        setUploadLabel('')
-        URL.revokeObjectURL(previewUrl)
-        if (uploadInputRef.current) uploadInputRef.current.value = ''
-        if (cameraPhotoRef.current) cameraPhotoRef.current.value = ''
-        if (cameraVideoRef.current) cameraVideoRef.current.value = ''
-      }
+    if (list.length > 1) {
+      await uploadBatch(list, source)
       return
     }
 
+    const first = list[0]
+    const isVideo = first.type.startsWith('video/')
+
+    if (isVideo) {
+      await uploadBatch([first], source)
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(first)
     const auto = await detectAutoFocus(first)
     setCropAsset({
       file: first,
@@ -524,21 +574,21 @@ export default function GalleryClient({
       crop_position: auto.crop_position,
       crop_focus_x: auto.crop_focus_x,
       crop_focus_y: auto.crop_focus_y,
+      source,
     })
   }
 
-  async function confirmCropAndUpload(source: 'upload' | 'camera' = 'upload') {
+  async function confirmCropAndUpload() {
     if (!cropAsset) return
     setBusy(true)
     setUploadProgress(35)
-    setUploadLabel('מעלה קובץ...')
+    setUploadLabel(cropAsset.source === 'camera' ? 'מעלה צילום...' : 'מעלה קובץ...')
     setMsg('')
 
     try {
-      const upJson = await uploadSingleAsset(cropAsset, source)
+      const upJson = await uploadSingleAsset(cropAsset)
       await refreshItems()
       await loadReactions()
-
       setMsg(upJson?.is_approved === false ? 'הקובץ הועלה וממתין לאישור מנהל' : 'הקובץ הועלה בהצלחה')
       URL.revokeObjectURL(cropAsset.previewUrl)
       setCropAsset(null)
@@ -601,6 +651,7 @@ export default function GalleryClient({
       crop_position: (item.crop_position as any) || 'center',
       crop_focus_x: item.crop_focus_x ?? 0.5,
       crop_focus_y: item.crop_focus_y ?? 0.5,
+      source: 'upload',
     })
   }
 
@@ -859,7 +910,7 @@ export default function GalleryClient({
             if (cropAsset.existingItemId) {
               saveCropForExisting(cropAsset.existingItemId, cropAsset)
             } else {
-              confirmCropAndUpload('upload')
+              confirmCropAndUpload()
             }
           }}
         />
@@ -1133,26 +1184,26 @@ export default function GalleryClient({
             </div>
 
             <div className="overflow-hidden rounded-2xl bg-zinc-100">
-  <div className="mx-auto aspect-square w-full max-w-[420px] overflow-hidden rounded-2xl bg-zinc-100">
-    {isVideoItem(preview) ? (
-      <video
-        src={preview.url}
-        controls
-        playsInline
-        preload="metadata"
-        className="h-full w-full bg-black object-cover"
-        style={{ objectPosition: objectPositionFromCrop(preview) }}
-      />
-    ) : (
-      <img
-        src={preview.url}
-        alt=""
-        className="h-full w-full object-cover"
-        style={{ objectPosition: objectPositionFromCrop(preview) }}
-      />
-    )}
-  </div>
-</div>
+              <div className="mx-auto aspect-square w-full max-w-[420px] overflow-hidden rounded-2xl bg-zinc-100">
+                {isVideoItem(preview) ? (
+                  <video
+                    src={preview.url}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="h-full w-full bg-black object-cover"
+                    style={{ objectPosition: objectPositionFromCrop(preview) }}
+                  />
+                ) : (
+                  <img
+                    src={preview.url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    style={{ objectPosition: objectPositionFromCrop(preview) }}
+                  />
+                )}
+              </div>
+            </div>
 
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -1170,16 +1221,6 @@ export default function GalleryClient({
               >
                 💾 הורדה
               </button>
-
-              {canEdit(preview) && !isVideoItem(preview) ? (
-                <button
-                  type="button"
-                  onClick={() => openCropEditorForExisting(preview)}
-                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
-                >
-                  🎯 מיקום
-                </button>
-              ) : null}
             </div>
 
             <div className="mt-4">
@@ -1208,31 +1249,43 @@ export default function GalleryClient({
               </div>
             </div>
 
-            {canEdit(preview) ? (
-              <div className="mt-5 flex flex-wrap gap-3">
-                <label className="cursor-pointer rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50">
-                  ערוך קובץ
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    hidden
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) replaceFile(preview, file)
-                    }}
-                  />
-                </label>
-
+            <div className="mt-5 flex flex-wrap gap-3">
+              {canReposition(preview) && !isVideoItem(preview) ? (
                 <button
                   type="button"
-                  onClick={() => deleteItem(preview)}
-                  disabled={editingItemId === preview.id}
-                  className="rounded-xl border border-red-200 bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                  onClick={() => openCropEditorForExisting(preview)}
+                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
                 >
-                  {editingItemId === preview.id ? 'מוחק...' : 'מחק'}
+                  🎯 מיקום
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+
+              {canEdit(preview) ? (
+                <>
+                  <label className="cursor-pointer rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50">
+                    ערוך קובץ
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      hidden
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) replaceFile(preview, file)
+                      }}
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => deleteItem(preview)}
+                    disabled={editingItemId === preview.id}
+                    className="rounded-xl border border-red-200 bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {editingItemId === preview.id ? 'מוחק...' : 'מחק'}
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

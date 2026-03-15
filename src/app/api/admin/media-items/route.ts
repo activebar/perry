@@ -10,7 +10,6 @@ function jsonError(msg: string, status = 400) {
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return jsonError('unauthorized', 401)
-  // NOTE: requireAnyPermission() throws on forbidden (returns void), so we use a boolean check here.
   const canRead =
     admin.role === 'master' ||
     ['galleries.read', 'galleries.manage', 'site.manage'].some((p) => !!(admin as any).permissions?.[p])
@@ -23,13 +22,12 @@ export async function GET(req: NextRequest) {
   const sb = supabaseServiceRole()
   let q = sb
     .from('media_items')
-    .select('id, url, thumb_url, kind, gallery_id, is_approved, editable_until, storage_path, created_at, uploader_device_id')
+    .select('id, url, thumb_url, kind, gallery_id, is_approved, editable_until, storage_path, created_at, uploader_device_id, crop_position, crop_focus_x, crop_focus_y')
     .eq('event_id', (admin as any).event_id || getEventIdFromRequest(req))
-    .in('kind', ['gallery', 'galleries'])
+    .in('kind', ['gallery', 'galleries', 'gallery_video'])
     .order('created_at', { ascending: false })
 
   if (gallery_id) q = q.eq('gallery_id', gallery_id)
-
   if (status === 'pending') q = q.eq('is_approved', false)
   if (status === 'approved') q = q.eq('is_approved', true)
 
@@ -48,14 +46,18 @@ export async function PUT(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
   const id = String(body.id || '').trim()
-  const is_approved = body.is_approved === true
-
   if (!id) return jsonError('missing id', 400)
+
+  const patch: Record<string, any> = {}
+  if ('is_approved' in body) patch.is_approved = body.is_approved === true
+  if ('crop_position' in body) patch.crop_position = body.crop_position
+  if ('crop_focus_x' in body) patch.crop_focus_x = body.crop_focus_x
+  if ('crop_focus_y' in body) patch.crop_focus_y = body.crop_focus_y
 
   const sb = supabaseServiceRole()
   const { data, error } = await sb
     .from('media_items')
-    .update({ is_approved })
+    .update(patch)
     .eq('event_id', (admin as any).event_id || getEventIdFromRequest(req))
     .eq('id', id)
     .select('*')
@@ -85,7 +87,6 @@ export async function DELETE(req: NextRequest) {
     .single()
   if (rerr) return jsonError(rerr.message, 500)
 
-  // delete storage file first (best-effort) + delete thumb if present
   const path = (row as any)?.storage_path
   const url = (row as any)?.url
   const thumbUrl = (row as any)?.thumb_url
@@ -98,9 +99,7 @@ export async function DELETE(req: NextRequest) {
 
   const thumbCandidates = (basePath: string): string[] => {
     const out = new Set<string>()
-    // Current convention: original.ext.thumb.webp
     out.add(`${basePath}.thumb.webp`)
-    // Fallback convention: original.thumb.webp (strip extension)
     const stripped = basePath.replace(/\.[^./]+$/, '')
     if (stripped && stripped !== basePath) out.add(`${stripped}.thumb.webp`)
     return Array.from(out)
@@ -109,11 +108,9 @@ export async function DELETE(req: NextRequest) {
   const base = (typeof path === 'string' && path.trim()) ? path.trim() : (derivePath(url) || derivePath(thumbUrl))
   if (base) {
     const paths: string[] = [base]
-    // Thumb variants (best-effort)
     if (!base.endsWith('.thumb.webp')) {
       paths.push(...thumbCandidates(base))
     } else {
-      // If caller passed thumb as base, also attempt original (best-effort)
       paths.push(base.replace(/\.thumb\.webp$/, ''))
     }
     await sb.storage.from('uploads').remove(Array.from(new Set(paths))).catch(() => null as any)
