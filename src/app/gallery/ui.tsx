@@ -375,60 +375,61 @@ export default function GalleryClient({
     }
   }
 
-  async function toggleReaction(itemId: string, emoji: string) {
-    const currentMine = new Set(myReactionsByItem[itemId] || [])
-    const wasActive = currentMine.has(emoji)
+async function toggleReaction(itemId: string, emoji: string) {
+  const currentSelected = (myReactionsByItem[itemId] || [])[0] || null
+  const isSame = currentSelected === emoji
 
-    setMyReactionsByItem((prev) => {
-      const next = new Set(prev[itemId] || [])
-      if (wasActive) next.delete(emoji)
-      else next.add(emoji)
-      return { ...prev, [itemId]: Array.from(next) }
-    })
+  // optimistic update - תמיד אימוג'י אחד בלבד
+  setMyReactionsByItem((prev) => ({
+    ...prev,
+    [itemId]: isSame ? [] : [emoji],
+  }))
 
-    setReactionsByItem((prev) => {
-      const current = { ...(prev[itemId] || {}) }
-      const before = Number(current[emoji] || 0)
-      const after = wasActive ? Math.max(0, before - 1) : before + 1
-      if (after <= 0) delete current[emoji]
-      else current[emoji] = after
-      return { ...prev, [itemId]: current }
-    })
+  setReactionsByItem((prev) => {
+    const next = { ...(prev[itemId] || {}) }
 
-    try {
-      const res = await fetch('/api/reactions/toggle', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-device-id': deviceId,
-        },
-        body: JSON.stringify({
-          media_item_id: itemId,
-          emoji,
-        }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json?.error || 'שגיאה בעדכון תגובה')
-
-      setReactionsByItem((prev) => {
-        const current = { ...(prev[itemId] || {}) }
-        const count = Number(json?.count || 0)
-        if (count <= 0) delete current[emoji]
-        else current[emoji] = count
-        return { ...prev, [itemId]: current }
-      })
-
-      setMyReactionsByItem((prev) => {
-        const current = new Set(prev[itemId] || [])
-        if (json?.active) current.add(emoji)
-        else current.delete(emoji)
-        return { ...prev, [itemId]: Array.from(current) }
-      })
-    } catch (e: any) {
-      setMsg(e?.message || 'שגיאה בעדכון תגובה')
-      await loadReactions()
+    if (currentSelected && next[currentSelected]) {
+      next[currentSelected] = Math.max(0, next[currentSelected] - 1)
+      if (next[currentSelected] <= 0) delete next[currentSelected]
     }
+
+    if (!isSame) {
+      next[emoji] = Number(next[emoji] || 0) + 1
+    }
+
+    return { ...prev, [itemId]: next }
+  })
+
+  try {
+    const res = await fetch('/api/reactions/toggle', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-device-id': deviceId,
+      },
+      body: JSON.stringify({
+        media_item_id: itemId,
+        emoji,
+      }),
+    })
+
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(json?.error || 'שגיאה בעדכון תגובה')
+
+    setReactionsByItem((prev) => ({
+      ...prev,
+      [itemId]: json?.counts || {},
+    }))
+
+    setMyReactionsByItem((prev) => ({
+      ...prev,
+      [itemId]: json?.selected_emoji ? [json.selected_emoji] : [],
+    }))
+  } catch (e: any) {
+    setMsg(e?.message || 'שגיאה בעדכון תגובה')
+    await loadReactions()
   }
+}
 
   async function shareItem(item: GalleryItem) {
     try {
