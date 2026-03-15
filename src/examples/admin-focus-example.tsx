@@ -9,7 +9,7 @@ function FocusButton({item}){
 
   return (
     <>
-      <button onClick={()=>setOpen(true)}>🎯 מיקום</button>
+      <button onClick={()=>setOpen(true)}>🎯 מיקוד</button>
 
       {open && (
         <CropEditor
