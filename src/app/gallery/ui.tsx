@@ -7,12 +7,25 @@ type GalleryItem = {
   url: string
   thumb_url?: string | null
   kind?: string | null
+  crop_position?: 'top' | 'center' | 'bottom' | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
   created_at?: string | null
   editable_until?: string | null
   uploader_device_id?: string | null
 }
 
 type ReactionSummary = Record<string, number>
+
+type PendingAsset = {
+  file?: File
+  previewUrl: string
+  isVideo: boolean
+  crop_position: 'top' | 'center' | 'bottom'
+  crop_focus_x: number | null
+  crop_focus_y: number | null
+  existingItemId?: string
+}
 
 const EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '😮']
 const DIRECT_DOWNLOAD_LIMIT = 8
@@ -31,6 +44,12 @@ function getOrCreateDeviceId() {
   return next
 }
 
+function clamp01(v: unknown): number | null {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, Math.min(1, n))
+}
+
 function isVideoUrl(url?: string | null) {
   return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
 }
@@ -46,6 +65,19 @@ function formatRemaining(ms: number) {
   const mm = String(Math.floor(total / 60)).padStart(2, '0')
   const ss = String(total % 60).padStart(2, '0')
   return `${mm}:${ss}`
+}
+
+function objectPositionFromCrop(item: {
+  crop_position?: string | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
+}) {
+  const x = clamp01(item.crop_focus_x)
+  const y = clamp01(item.crop_focus_y)
+  if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
+  if (item.crop_position === 'top') return '50% 18%'
+  if (item.crop_position === 'bottom') return '50% 82%'
+  return '50% 50%'
 }
 
 async function fileToCompressedBlob(file: File): Promise<Blob> {
@@ -122,6 +154,198 @@ async function triggerDownload(url: string, filenameBase?: string) {
   }
 }
 
+async function detectAutoFocus(file: File): Promise<{
+  crop_position: 'top' | 'center' | 'bottom'
+  crop_focus_x: number | null
+  crop_focus_y: number | null
+}> {
+  if (!file.type.startsWith('image/')) {
+    return { crop_position: 'center', crop_focus_x: 0.5, crop_focus_y: 0.5 }
+  }
+
+  try {
+    const AnyWindow = window as any
+    if (typeof AnyWindow.FaceDetector === 'function') {
+      const detector = new AnyWindow.FaceDetector({
+        fastMode: true,
+        maxDetectedFaces: 1,
+      })
+      const bitmap = await createImageBitmap(file)
+      const faces = await detector.detect(bitmap)
+      if (faces?.length) {
+        const face = faces
+          .slice()
+          .sort(
+            (a: any, b: any) =>
+              (b.boundingBox?.width || 0) * (b.boundingBox?.height || 0) -
+              (a.boundingBox?.width || 0) * (a.boundingBox?.height || 0)
+          )[0]
+
+        const box = face.boundingBox
+        const cx = (box.x + box.width / 2) / bitmap.width
+        const cy = (box.y + box.height / 2) / bitmap.height
+
+        return {
+          crop_position: cy < 0.34 ? 'top' : cy > 0.66 ? 'bottom' : 'center',
+          crop_focus_x: Math.max(0, Math.min(1, cx)),
+          crop_focus_y: Math.max(0, Math.min(1, cy)),
+        }
+      }
+    }
+  } catch {}
+
+  const imgUrl = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('failed to load image'))
+      el.src = imgUrl
+    })
+
+    if (img.naturalWidth < img.naturalHeight) {
+      return { crop_position: 'top', crop_focus_x: 0.5, crop_focus_y: 0.28 }
+    }
+    return { crop_position: 'center', crop_focus_x: 0.5, crop_focus_y: 0.5 }
+  } finally {
+    URL.revokeObjectURL(imgUrl)
+  }
+}
+
+function CropEditor({
+  asset,
+  onChange,
+  onClose,
+  onConfirm,
+  busy,
+}: {
+  asset: PendingAsset
+  onChange: (patch: Partial<PendingAsset>) => void
+  onClose: () => void
+  onConfirm: () => void
+  busy?: boolean
+}) {
+  const areaRef = useRef<HTMLDivElement | null>(null)
+
+  function applyPoint(clientX: number, clientY: number) {
+    if (!areaRef.current) return
+    const rect = areaRef.current.getBoundingClientRect()
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+
+    onChange({
+      crop_focus_x: x,
+      crop_focus_y: y,
+      crop_position: y < 0.34 ? 'top' : y > 0.66 ? 'bottom' : 'center',
+    })
+  }
+
+  const markerLeft = `${Math.round((clamp01(asset.crop_focus_x) ?? 0.5) * 100)}%`
+  const markerTop = `${Math.round((clamp01(asset.crop_focus_y) ?? 0.5) * 100)}%`
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl"
+        dir="rtl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-lg font-semibold">מיקום בתוך הריבוע</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-zinc-200 px-3 py-2 text-sm"
+          >
+            סגור
+          </button>
+        </div>
+
+        <p className="mb-3 text-sm text-zinc-600">
+          הזז את הסמן למרכז הרצוי. אם יש זיהוי פנים, המיקום כבר נבחר אוטומטית.
+        </p>
+
+        <div
+          ref={areaRef}
+          className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-100"
+          onClick={(e) => applyPoint(e.clientX, e.clientY)}
+          onTouchStart={(e) => {
+            const t = e.touches?.[0]
+            if (t) applyPoint(t.clientX, t.clientY)
+          }}
+        >
+          {asset.isVideo ? (
+            <video
+              src={asset.previewUrl}
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{ objectPosition: objectPositionFromCrop(asset) }}
+              muted
+              playsInline
+            />
+          ) : (
+            <img
+              src={asset.previewUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{ objectPosition: objectPositionFromCrop(asset) }}
+            />
+          )}
+
+          <div
+            className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-black/30 shadow"
+            style={{ left: markerLeft, top: markerTop }}
+          />
+          <div
+            className="pointer-events-none absolute h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/70"
+            style={{ left: markerLeft, top: markerTop }}
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              onChange({ crop_position: 'top', crop_focus_x: 0.5, crop_focus_y: 0.22 })
+            }
+            className="rounded-full border border-zinc-200 px-4 py-2 text-sm"
+          >
+            למעלה
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onChange({ crop_position: 'center', crop_focus_x: 0.5, crop_focus_y: 0.5 })
+            }
+            className="rounded-full border border-zinc-200 px-4 py-2 text-sm"
+          >
+            מרכז
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onChange({ crop_position: 'bottom', crop_focus_x: 0.5, crop_focus_y: 0.78 })
+            }
+            className="rounded-full border border-zinc-200 px-4 py-2 text-sm"
+          >
+            למטה
+          </button>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-xl bg-zinc-900 px-5 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {busy ? 'שומר...' : 'שמור'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function GalleryClient({
   initialItems,
   galleryId,
@@ -144,9 +368,12 @@ export default function GalleryClient({
   const [uploadLabel, setUploadLabel] = useState<string>('')
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({})
+  const [captureMenuOpen, setCaptureMenuOpen] = useState(false)
+  const [cropAsset, setCropAsset] = useState<PendingAsset | null>(null)
 
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
-  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraPhotoRef = useRef<HTMLInputElement | null>(null)
+  const cameraVideoRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     setDeviceId(getOrCreateDeviceId())
@@ -211,72 +438,110 @@ export default function GalleryClient({
     } catch {}
   }
 
-  async function uploadFiles(files: FileList | File[] | null, source: 'upload' | 'camera') {
+  async function uploadSingleAsset(asset: PendingAsset, source: 'upload' | 'camera') {
+    if (!asset.file) return
+
+    const fd = new FormData()
+    const isVideo = asset.file.type.startsWith('video/')
+
+    if (isVideo) {
+      fd.set('file', asset.file)
+    } else {
+      const compressed = await fileToCompressedBlob(asset.file)
+      fd.set(
+        'file',
+        compressed instanceof File
+          ? compressed
+          : new File([compressed], asset.file.name.replace(/\.[^.]+$/, '') + '.jpg', {
+              type: 'image/jpeg',
+            })
+      )
+    }
+
+    fd.set('kind', 'gallery')
+    fd.set('gallery_id', galleryId)
+    fd.set('device_id', deviceId)
+    fd.set('crop_position', asset.crop_position)
+    if (asset.crop_focus_x != null) fd.set('crop_focus_x', String(asset.crop_focus_x))
+    if (asset.crop_focus_y != null) fd.set('crop_focus_y', String(asset.crop_focus_y))
+
+    const up = await fetch('/api/upload', {
+      method: 'POST',
+      body: fd,
+    })
+
+    const upJson = await up.json().catch(() => ({}))
+    if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+
+    return upJson
+  }
+
+  async function openCropForFiles(files: FileList | File[] | null, source: 'upload' | 'camera') {
     const list = Array.from(files || [])
     if (!list.length) return
 
+    const first = list[0]
+    const isVideo = first.type.startsWith('video/')
+    const previewUrl = URL.createObjectURL(first)
+
+    if (isVideo) {
+      setBusy(true)
+      setUploadProgress(30)
+      setUploadLabel(source === 'camera' ? 'מעלה צילום וידאו...' : 'מעלה וידאו...')
+      setMsg('')
+      try {
+        const asset: PendingAsset = {
+          file: first,
+          previewUrl,
+          isVideo: true,
+          crop_position: 'center',
+          crop_focus_x: 0.5,
+          crop_focus_y: 0.5,
+        }
+        const upJson = await uploadSingleAsset(asset, source)
+        await refreshItems()
+        await loadReactions()
+        setMsg(upJson?.is_approved === false ? 'הווידאו הועלה וממתין לאישור מנהל' : 'הווידאו הועלה בהצלחה')
+      } catch (e: any) {
+        setMsg(e?.message || 'שגיאה בהעלאת וידאו')
+      } finally {
+        setBusy(false)
+        setUploadProgress(0)
+        setUploadLabel('')
+        URL.revokeObjectURL(previewUrl)
+        if (uploadInputRef.current) uploadInputRef.current.value = ''
+        if (cameraPhotoRef.current) cameraPhotoRef.current.value = ''
+        if (cameraVideoRef.current) cameraVideoRef.current.value = ''
+      }
+      return
+    }
+
+    const auto = await detectAutoFocus(first)
+    setCropAsset({
+      file: first,
+      previewUrl,
+      isVideo: false,
+      crop_position: auto.crop_position,
+      crop_focus_x: auto.crop_focus_x,
+      crop_focus_y: auto.crop_focus_y,
+    })
+  }
+
+  async function confirmCropAndUpload(source: 'upload' | 'camera' = 'upload') {
+    if (!cropAsset) return
     setBusy(true)
-    setUploadProgress(0)
-    setUploadLabel(source === 'camera' ? 'מעלה צילום...' : 'מעלה קבצים...')
+    setUploadProgress(35)
+    setUploadLabel('מעלה קובץ...')
     setMsg('')
 
     try {
-      let pendingCount = 0
-      let approvedCount = 0
-
-      for (let i = 0; i < list.length; i++) {
-        const file = list[i]
-        const fd = new FormData()
-
-        const isVideo = file.type.startsWith('video/')
-        if (isVideo) {
-          fd.set('file', file)
-        } else {
-          const compressed = await fileToCompressedBlob(file)
-          fd.set(
-            'file',
-            compressed instanceof File
-              ? compressed
-              : new File([compressed], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
-                  type: 'image/jpeg',
-                })
-          )
-        }
-
-        fd.set('kind', 'gallery')
-        fd.set('gallery_id', galleryId)
-        fd.set('device_id', deviceId)
-
-        const up = await fetch('/api/upload', {
-          method: 'POST',
-          body: fd,
-        })
-
-        const upJson = await up.json().catch(() => ({}))
-        if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
-
-        if (upJson?.is_approved === false) pendingCount += 1
-        else approvedCount += 1
-
-        const pct = Math.round(((i + 1) / list.length) * 100)
-        setUploadProgress(pct)
-        setUploadLabel(`${source === 'camera' ? 'מעלה צילום...' : 'מעלה קבצים...'} ${i + 1}/${list.length}`)
-      }
-
+      const upJson = await uploadSingleAsset(cropAsset, source)
       await refreshItems()
       await loadReactions()
 
-      if (pendingCount > 0 && approvedCount > 0) {
-        setMsg(`הועלו ${approvedCount} קבצים בהצלחה, ו-${pendingCount} ממתינים לאישור מנהל`)
-      } else if (pendingCount > 0) {
-        setMsg(
-          pendingCount === 1
-            ? 'הקובץ הועלה וממתין לאישור מנהל'
-            : `${pendingCount} קבצים הועלו וממתינים לאישור מנהל`
-        )
-      } else {
-        setMsg(list.length === 1 ? 'הקובץ הועלה בהצלחה' : `${list.length} קבצים הועלו בהצלחה`)
-      }
+      setMsg(upJson?.is_approved === false ? 'הקובץ הועלה וממתין לאישור מנהל' : 'הקובץ הועלה בהצלחה')
+      URL.revokeObjectURL(cropAsset.previewUrl)
+      setCropAsset(null)
     } catch (e: any) {
       setMsg(e?.message || 'שגיאה בהעלאה')
     } finally {
@@ -284,8 +549,59 @@ export default function GalleryClient({
       setUploadProgress(0)
       setUploadLabel('')
       if (uploadInputRef.current) uploadInputRef.current.value = ''
-      if (cameraInputRef.current) cameraInputRef.current.value = ''
+      if (cameraPhotoRef.current) cameraPhotoRef.current.value = ''
+      if (cameraVideoRef.current) cameraVideoRef.current.value = ''
     }
+  }
+
+  async function saveCropForExisting(itemId: string, crop: PendingAsset) {
+    try {
+      setBusy(true)
+      const res = await fetch('/api/public/gallery-items', {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({
+          id: itemId,
+          crop_position: crop.crop_position,
+          crop_focus_x: crop.crop_focus_x,
+          crop_focus_y: crop.crop_focus_y,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'שגיאה בשמירת מיקום')
+
+      await refreshItems()
+      setPreview((prev) =>
+        prev && prev.id === itemId
+          ? {
+              ...prev,
+              crop_position: crop.crop_position,
+              crop_focus_x: crop.crop_focus_x,
+              crop_focus_y: crop.crop_focus_y,
+            }
+          : prev
+      )
+      setMsg('המיקום נשמר')
+      setCropAsset(null)
+    } catch (e: any) {
+      setMsg(e?.message || 'שגיאה בשמירת מיקום')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function openCropEditorForExisting(item: GalleryItem) {
+    setCropAsset({
+      existingItemId: item.id,
+      previewUrl: item.url,
+      isVideo: isVideoItem(item),
+      crop_position: (item.crop_position as any) || 'center',
+      crop_focus_x: item.crop_focus_x ?? 0.5,
+      crop_focus_y: item.crop_focus_y ?? 0.5,
+    })
   }
 
   async function replaceFile(item: GalleryItem, file: File) {
@@ -293,8 +609,19 @@ export default function GalleryClient({
       setEditingItemId(item.id)
       setMsg('מחליף קובץ...')
 
-      const fd = new FormData()
       const isVideo = file.type.startsWith('video/')
+      let crop_position: 'top' | 'center' | 'bottom' = 'center'
+      let crop_focus_x: number | null = 0.5
+      let crop_focus_y: number | null = 0.5
+
+      if (!isVideo) {
+        const auto = await detectAutoFocus(file)
+        crop_position = auto.crop_position
+        crop_focus_x = auto.crop_focus_x
+        crop_focus_y = auto.crop_focus_y
+      }
+
+      const fd = new FormData()
       if (isVideo) {
         fd.set('file', file)
       } else {
@@ -312,6 +639,9 @@ export default function GalleryClient({
       fd.set('kind', 'gallery')
       fd.set('gallery_id', galleryId)
       fd.set('device_id', deviceId)
+      fd.set('crop_position', crop_position)
+      if (crop_focus_x != null) fd.set('crop_focus_x', String(crop_focus_x))
+      if (crop_focus_y != null) fd.set('crop_focus_y', String(crop_focus_y))
 
       const up = await fetch('/api/upload', {
         method: 'POST',
@@ -332,6 +662,9 @@ export default function GalleryClient({
           replacement_thumb_url: upJson?.thumbUrl || null,
           replacement_storage_path: upJson?.path || null,
           replacement_kind: upJson?.kind || null,
+          crop_position: upJson?.crop_position || crop_position,
+          crop_focus_x: upJson?.crop_focus_x ?? crop_focus_x,
+          crop_focus_y: upJson?.crop_focus_y ?? crop_focus_y,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -379,7 +712,6 @@ export default function GalleryClient({
     const currentSelected = (myReactionsByItem[itemId] || [])[0] || null
     const isSame = currentSelected === emoji
 
-    // optimistic update - תמיד אימוג'י אחד בלבד
     setMyReactionsByItem((prev) => ({
       ...prev,
       [itemId]: isSame ? [] : [emoji],
@@ -512,20 +844,68 @@ export default function GalleryClient({
 
   return (
     <div className="space-y-5" dir="rtl">
+      {cropAsset ? (
+        <CropEditor
+          asset={cropAsset}
+          busy={busy}
+          onClose={() => {
+            if (!cropAsset.existingItemId) {
+              URL.revokeObjectURL(cropAsset.previewUrl)
+            }
+            setCropAsset(null)
+          }}
+          onChange={(patch) => setCropAsset((prev) => (prev ? { ...prev, ...patch } : prev))}
+          onConfirm={() => {
+            if (cropAsset.existingItemId) {
+              saveCropForExisting(cropAsset.existingItemId, cropAsset)
+            } else {
+              confirmCropAndUpload('upload')
+            }
+          }}
+        />
+      ) : null}
+
       <div className="rounded-2xl border border-zinc-200 bg-white p-4">
         <h2 className="text-2xl font-bold">תמונות בגלריה</h2>
         <p className="mt-1 text-sm text-zinc-600">בחר תמונות לגלריה</p>
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => cameraInputRef.current?.click()}
-            disabled={!uploadEnabled || busy || selectMode}
-            className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
-            title="צילום תמונה או וידאו"
-          >
-            📸 צילום
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setCaptureMenuOpen((p) => !p)}
+              disabled={!uploadEnabled || busy || selectMode}
+              className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              title="צילום"
+            >
+              📸 צילום
+            </button>
+
+            {captureMenuOpen ? (
+              <div className="absolute right-0 z-20 mt-2 w-44 rounded-2xl border border-zinc-200 bg-white p-2 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaptureMenuOpen(false)
+                    cameraPhotoRef.current?.click()
+                  }}
+                  className="block w-full rounded-xl px-3 py-2 text-right text-sm hover:bg-zinc-50"
+                >
+                  צילום תמונה
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaptureMenuOpen(false)
+                    cameraVideoRef.current?.click()
+                  }}
+                  className="mt-1 block w-full rounded-xl px-3 py-2 text-right text-sm hover:bg-zinc-50"
+                >
+                  צילום וידאו
+                </button>
+              </div>
+            ) : null}
+          </div>
 
           <button
             type="button"
@@ -579,10 +959,8 @@ export default function GalleryClient({
         </div>
 
         <div className="mt-4 rounded-2xl border border-zinc-200 p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="text-sm text-zinc-700">
-              {uploadEnabled ? 'אפשר להעלות תמונות או סרטונים' : 'העלאה סגורה כרגע'}
-            </div>
+          <div className="text-sm text-zinc-700">
+            {uploadEnabled ? 'אפשר להעלות תמונות או סרטונים' : 'העלאה סגורה כרגע'}
           </div>
 
           {busy ? (
@@ -607,16 +985,25 @@ export default function GalleryClient({
           accept="image/*,video/*"
           multiple
           hidden
-          onChange={(e) => uploadFiles(e.target.files, 'upload')}
+          onChange={(e) => openCropForFiles(e.target.files, 'upload')}
         />
 
         <input
-          ref={cameraInputRef}
+          ref={cameraPhotoRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*"
           capture="environment"
           hidden
-          onChange={(e) => uploadFiles(e.target.files, 'camera')}
+          onChange={(e) => openCropForFiles(e.target.files, 'camera')}
+        />
+
+        <input
+          ref={cameraVideoRef}
+          type="file"
+          accept="video/*"
+          capture="environment"
+          hidden
+          onChange={(e) => openCropForFiles(e.target.files, 'camera')}
         />
       </div>
 
@@ -649,6 +1036,7 @@ export default function GalleryClient({
                   <video
                     src={item.url}
                     className="absolute inset-0 h-full w-full object-cover"
+                    style={{ objectPosition: objectPositionFromCrop(item) }}
                     muted
                     playsInline
                     preload="metadata"
@@ -658,6 +1046,7 @@ export default function GalleryClient({
                     src={thumb}
                     alt=""
                     className="absolute inset-0 h-full w-full object-cover"
+                    style={{ objectPosition: objectPositionFromCrop(item) }}
                   />
                 )}
 
@@ -725,7 +1114,7 @@ export default function GalleryClient({
           onClick={() => setPreview(null)}
         >
           <div
-            className="relative w-full max-w-4xl rounded-2xl bg-white p-4"
+            className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-4"
             onClick={(e) => e.stopPropagation()}
             dir="rtl"
           >
@@ -750,13 +1139,13 @@ export default function GalleryClient({
                   controls
                   playsInline
                   preload="metadata"
-                  className="max-h-[70vh] w-full bg-black object-contain"
+                  className="max-h-[60vh] w-full bg-black object-contain"
                 />
               ) : (
                 <img
                   src={preview.url}
                   alt=""
-                  className="max-h-[70vh] w-full object-contain"
+                  className="max-h-[60vh] w-full object-contain"
                 />
               )}
             </div>
@@ -777,6 +1166,16 @@ export default function GalleryClient({
               >
                 💾 הורדה
               </button>
+
+              {canEdit(preview) && !isVideoItem(preview) ? (
+                <button
+                  type="button"
+                  onClick={() => openCropEditorForExisting(preview)}
+                  className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
+                >
+                  🎯 מיקום
+                </button>
+              ) : null}
             </div>
 
             <div className="mt-4">
