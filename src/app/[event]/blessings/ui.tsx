@@ -810,7 +810,7 @@ async function saveEdit() {
 
           {editDraft.media_url && !editRemoveMedia && !editFile && !editDraft.video_url && (
             <div className="rounded-xl border border-zinc-200 p-3">
-              <p className="mb-2 text-sm font-medium text-right">🎯 מיקום תמונה</p>
+              <p className="mb-2 text-sm font-medium text-right">🎯 מיקוד תמונה</p>
               <CropEditor
                 src={editDraft.media_url}
                 x={editDraft.crop_focus_x ?? 0.5}
