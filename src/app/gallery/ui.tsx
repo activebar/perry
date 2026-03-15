@@ -15,6 +15,7 @@ type GalleryItem = {
 type ReactionSummary = Record<string, number>
 
 const EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '😮']
+const DIRECT_DOWNLOAD_LIMIT = 8
 
 function getOrCreateDeviceId() {
   if (typeof window === 'undefined') return ''
@@ -32,6 +33,11 @@ function getOrCreateDeviceId() {
 
 function isVideoUrl(url?: string | null) {
   return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
+}
+
+function isVideoItem(item?: GalleryItem | null) {
+  if (!item) return false
+  return isVideoUrl(item.url) || String(item.kind || '').toLowerCase().includes('video')
 }
 
 function formatRemaining(ms: number) {
@@ -81,6 +87,41 @@ async function fileToCompressedBlob(file: File): Promise<Blob> {
   }
 }
 
+async function triggerDownload(url: string, filenameBase?: string) {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const ext =
+      blob.type === 'image/png'
+        ? 'png'
+        : blob.type === 'image/webp'
+          ? 'webp'
+          : blob.type === 'video/mp4'
+            ? 'mp4'
+            : blob.type === 'video/webm'
+              ? 'webm'
+              : blob.type === 'video/quicktime'
+                ? 'mov'
+                : 'jpg'
+
+    const safeBase = String(filenameBase || 'activebar')
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-zA-Z0-9_\-]+/g, '_')
+      .slice(0, 60) || 'activebar'
+
+    const href = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = `${safeBase}.${ext}`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(href), 1500)
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+}
+
 export default function GalleryClient({
   initialItems,
   galleryId,
@@ -101,10 +142,11 @@ export default function GalleryClient({
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number>(0)
   const [uploadLabel, setUploadLabel] = useState<string>('')
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({})
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
-  const attachInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     setDeviceId(getOrCreateDeviceId())
@@ -169,7 +211,7 @@ export default function GalleryClient({
     } catch {}
   }
 
-  async function uploadFiles(files: FileList | File[] | null, source: 'upload' | 'camera' | 'attach') {
+  async function uploadFiles(files: FileList | File[] | null, source: 'upload' | 'camera') {
     const list = Array.from(files || [])
     if (!list.length) return
 
@@ -218,7 +260,7 @@ export default function GalleryClient({
 
         const pct = Math.round(((i + 1) / list.length) * 100)
         setUploadProgress(pct)
-        setUploadLabel(`מעלה קבצים... ${i + 1}/${list.length}`)
+        setUploadLabel(`${source === 'camera' ? 'מעלה צילום...' : 'מעלה קבצים...'} ${i + 1}/${list.length}`)
       }
 
       await refreshItems()
@@ -241,9 +283,8 @@ export default function GalleryClient({
       setBusy(false)
       setUploadProgress(0)
       setUploadLabel('')
-      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (uploadInputRef.current) uploadInputRef.current.value = ''
       if (cameraInputRef.current) cameraInputRef.current.value = ''
-      if (attachInputRef.current) attachInputRef.current.value = ''
     }
   }
 
@@ -335,6 +376,25 @@ export default function GalleryClient({
   }
 
   async function toggleReaction(itemId: string, emoji: string) {
+    const currentMine = new Set(myReactionsByItem[itemId] || [])
+    const wasActive = currentMine.has(emoji)
+
+    setMyReactionsByItem((prev) => {
+      const next = new Set(prev[itemId] || [])
+      if (wasActive) next.delete(emoji)
+      else next.add(emoji)
+      return { ...prev, [itemId]: Array.from(next) }
+    })
+
+    setReactionsByItem((prev) => {
+      const current = { ...(prev[itemId] || {}) }
+      const before = Number(current[emoji] || 0)
+      const after = wasActive ? Math.max(0, before - 1) : before + 1
+      if (after <= 0) delete current[emoji]
+      else current[emoji] = after
+      return { ...prev, [itemId]: current }
+    })
+
     try {
       const res = await fetch('/api/reactions/toggle', {
         method: 'POST',
@@ -352,8 +412,9 @@ export default function GalleryClient({
 
       setReactionsByItem((prev) => {
         const current = { ...(prev[itemId] || {}) }
-        current[emoji] = Number(json?.count || 0)
-        if (current[emoji] <= 0) delete current[emoji]
+        const count = Number(json?.count || 0)
+        if (count <= 0) delete current[emoji]
+        else current[emoji] = count
         return { ...prev, [itemId]: current }
       })
 
@@ -365,6 +426,7 @@ export default function GalleryClient({
       })
     } catch (e: any) {
       setMsg(e?.message || 'שגיאה בעדכון תגובה')
+      await loadReactions()
     }
   }
 
@@ -397,6 +459,46 @@ export default function GalleryClient({
     }
   }
 
+  function clearSelected() {
+    setSelectedIds({})
+  }
+
+  function toggleSelected(itemId: string) {
+    setSelectedIds((prev) => {
+      const next = { ...prev }
+      if (next[itemId]) delete next[itemId]
+      else next[itemId] = true
+      return next
+    })
+  }
+
+  async function downloadSelected() {
+    try {
+      const ids = Object.keys(selectedIds)
+      if (!ids.length) {
+        setMsg('לא נבחרו קבצים להורדה')
+        return
+      }
+
+      const selected = sortedItems.filter((x) => ids.includes(x.id))
+      for (let i = 0; i < selected.length; i++) {
+        const item = selected[i]
+        await triggerDownload(item.url, `gallery_${String(i + 1).padStart(2, '0')}`)
+        await new Promise((r) => setTimeout(r, 250))
+      }
+
+      setMsg(
+        ids.length > DIRECT_DOWNLOAD_LIMIT
+          ? `החלה הורדה של ${ids.length} קבצים`
+          : 'ההורדות התחילו'
+      )
+      setSelectMode(false)
+      clearSelected()
+    } catch (e: any) {
+      setMsg(e?.message || 'שגיאה בהורדה')
+    }
+  }
+
   const sortedItems = useMemo(
     () =>
       [...items].sort((a, b) => {
@@ -417,45 +519,66 @@ export default function GalleryClient({
           <button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
-            disabled={!uploadEnabled || busy}
+            disabled={!uploadEnabled || busy || selectMode}
             className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
-            title="צילום"
+            title="צילום תמונה או וידאו"
           >
             📷 צילום
           </button>
 
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!uploadEnabled || busy}
+            onClick={() => uploadInputRef.current?.click()}
+            disabled={!uploadEnabled || busy || selectMode}
             className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
-            title="העלאת תמונות או סרטונים"
+            title="העלאת קבצים"
           >
             ⬆️ העלאה
           </button>
 
-          <button
-            type="button"
-            onClick={() => attachInputRef.current?.click()}
-            disabled={!uploadEnabled || busy}
-            className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
-            title="צירוף תמונה או סרטון"
-          >
-            📎 צירוף
-          </button>
+          {!selectMode ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectMode(true)
+                clearSelected()
+                setMsg('בחר קבצים להורדה')
+              }}
+              disabled={busy}
+              className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              title="בחירה מרובה להורדה"
+            >
+              ⬇️ הורדה
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={downloadSelected}
+                disabled={busy || Object.keys(selectedIds).length === 0}
+                className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              >
+                הורד נבחרות ({Object.keys(selectedIds).length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectMode(false)
+                  clearSelected()
+                  setMsg('')
+                }}
+                disabled={busy}
+                className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              >
+                ביטול
+              </button>
+            </>
+          )}
         </div>
 
         <div className="mt-4 rounded-2xl border border-zinc-200 p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!uploadEnabled || busy}
-              className="rounded-xl bg-zinc-700 px-8 py-3 text-white disabled:opacity-50"
-            >
-              {busy ? 'מעלה...' : 'העלה'}
-            </button>
-
             <div className="text-sm text-zinc-700">
               {uploadEnabled ? 'אפשר להעלות תמונות או סרטונים' : 'העלאה סגורה כרגע'}
             </div>
@@ -478,7 +601,7 @@ export default function GalleryClient({
         </div>
 
         <input
-          ref={fileInputRef}
+          ref={uploadInputRef}
           type="file"
           accept="image/*,video/*"
           multiple
@@ -489,40 +612,37 @@ export default function GalleryClient({
         <input
           ref={cameraInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           capture="environment"
           hidden
           onChange={(e) => uploadFiles(e.target.files, 'camera')}
-        />
-
-        <input
-          ref={attachInputRef}
-          type="file"
-          accept="image/*,video/*"
-          multiple
-          hidden
-          onChange={(e) => uploadFiles(e.target.files, 'attach')}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {sortedItems.map((item) => {
           const thumb = item.thumb_url || item.url
-          const video =
-            isVideoUrl(item.url) || String(item.kind || '').toLowerCase().includes('video')
+          const video = isVideoItem(item)
           const reactions = reactionsByItem[item.id] || {}
           const topReaction = Object.entries(reactions).sort((a, b) => b[1] - a[1])[0]
           const editable = canEdit(item)
+          const selected = !!selectedIds[item.id]
 
           return (
             <div
               key={item.id}
-              className="overflow-hidden rounded-2xl border border-zinc-200 bg-white"
+              className={`overflow-hidden rounded-2xl border bg-white ${selected ? 'border-black ring-2 ring-black/10' : 'border-zinc-200'}`}
             >
               <button
                 type="button"
                 className="relative block aspect-square w-full bg-zinc-50"
-                onClick={() => setPreview(item)}
+                onClick={() => {
+                  if (selectMode) {
+                    toggleSelected(item.id)
+                    return
+                  }
+                  setPreview(item)
+                }}
               >
                 {video ? (
                   <video
@@ -530,6 +650,7 @@ export default function GalleryClient({
                     className="absolute inset-0 h-full w-full object-cover"
                     muted
                     playsInline
+                    preload="metadata"
                   />
                 ) : (
                   <img
@@ -556,29 +677,15 @@ export default function GalleryClient({
                     🎥
                   </div>
                 ) : null}
+
+                {selectMode ? (
+                  <div className="absolute bottom-2 right-2 rounded-full bg-white/90 px-2 py-1 text-xs text-zinc-800 shadow">
+                    {selected ? '✓ נבחר' : 'בחר'}
+                  </div>
+                ) : null}
               </button>
 
               <div className="flex items-center justify-center gap-6 px-4 py-3 text-lg">
-                <button
-                  type="button"
-                  className="transition hover:scale-110"
-                  onClick={() => shareItem(item)}
-                  title="שיתוף"
-                >
-                  🔗
-                </button>
-
-                <a
-                  href={item.url}
-                  download
-                  target="_blank"
-                  rel="noreferrer"
-                  className="transition hover:scale-110"
-                  title="הורדה"
-                >
-                  ⬇️
-                </a>
-
                 <button
                   type="button"
                   className="transition hover:scale-110"
@@ -586,6 +693,24 @@ export default function GalleryClient({
                   title="תגובות"
                 >
                   😊
+                </button>
+
+                <button
+                  type="button"
+                  className="transition hover:scale-110"
+                  onClick={() => triggerDownload(item.url, item.id)}
+                  title="הורדה"
+                >
+                  ⬇️
+                </button>
+
+                <button
+                  type="button"
+                  className="transition hover:scale-110"
+                  onClick={() => shareItem(item)}
+                  title="שיתוף"
+                >
+                  🔗
                 </button>
               </div>
             </div>
@@ -618,11 +743,12 @@ export default function GalleryClient({
             </div>
 
             <div className="overflow-hidden rounded-2xl bg-zinc-100">
-              {isVideoUrl(preview.url) || String(preview.kind || '').toLowerCase().includes('video') ? (
+              {isVideoItem(preview) ? (
                 <video
                   src={preview.url}
                   controls
                   playsInline
+                  preload="metadata"
                   className="max-h-[70vh] w-full bg-black object-contain"
                 />
               ) : (
@@ -643,15 +769,13 @@ export default function GalleryClient({
                 🔗 שיתוף
               </button>
 
-              <a
-                href={preview.url}
-                download
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => triggerDownload(preview.url, preview.id)}
                 className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
               >
                 ⬇️ הורדה
-              </a>
+              </button>
             </div>
 
             <div className="mt-4">
