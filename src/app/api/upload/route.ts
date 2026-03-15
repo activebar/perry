@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
         height = typeof meta.height === 'number' ? meta.height : null
         if (width && height && width < height) {
           crop_position = 'top'
-          crop_focus_y = 0.28
+          crop_focus_y = 0.08
           crop_focus_x = 0.5
         } else {
           crop_position = 'center'
