@@ -254,7 +254,7 @@ function CropEditor({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">מיקום בתוך הריבוע</h3>
+          <h3 className="text-lg font-semibold">מיקוד בתוך הריבוע</h3>
           <button
             type="button"
             onClick={onClose}
@@ -265,7 +265,7 @@ function CropEditor({
         </div>
 
         <p className="mb-3 text-sm text-zinc-600">
-          הזז את הסמן למרכז הרצוי. אם יש זיהוי פנים, המיקום כבר נבחר אוטומטית.
+          הזז את הסמן למרכז הרצוי. אם יש זיהוי פנים, המיקוד כבר נבחר אוטומטית.
         </p>
 
         <div
@@ -621,7 +621,7 @@ export default function GalleryClient({
         }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json?.error || 'שגיאה בשמירת מיקום')
+      if (!res.ok) throw new Error(json?.error || 'שגיאה בשמירת מיקוד')
 
       await refreshItems()
       setPreview((prev) =>
@@ -634,10 +634,10 @@ export default function GalleryClient({
             }
           : prev
       )
-      setMsg('המיקום נשמר')
+      setMsg('המיקוד נשמר')
       setCropAsset(null)
     } catch (e: any) {
-      setMsg(e?.message || 'שגיאה בשמירת מיקום')
+      setMsg(e?.message || 'שגיאה בשמירת מיקוד')
     } finally {
       setBusy(false)
     }
@@ -1256,7 +1256,7 @@ export default function GalleryClient({
                   onClick={() => openCropEditorForExisting(preview)}
                   className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
                 >
-                  🎯 מיקום
+                  🎯 מיקוד
                 </button>
               ) : null}
 
