@@ -317,69 +317,68 @@ export default function BlessingsClient({
   }
 
   async function toggleReaction(post_id: string, emoji: string) {
-  setErr(null)
+    setErr(null)
 
-  const currentPost = items.find((p) => p.id === post_id)
-  const currentSelected = (currentPost?.my_reactions || [])[0] || null
-  const isSame = currentSelected === emoji
+    const currentPost = items.find((p) => p.id === post_id)
+    const currentSelected = (currentPost?.my_reactions || [])[0] || null
+    const isSame = currentSelected === emoji
 
-  // optimistic update - תמיד אימוג'י אחד בלבד
-  setItems((prev) =>
-    prev.map((p) => {
-      if (p.id !== post_id) return p
-
-      const nextCounts = { ...(p.reaction_counts || {}) }
-
-      if (currentSelected && nextCounts[currentSelected]) {
-        nextCounts[currentSelected] = Math.max(0, nextCounts[currentSelected] - 1)
-        if (nextCounts[currentSelected] <= 0) delete nextCounts[currentSelected]
-      }
-
-      let nextMy: string[] = []
-      if (!isSame) {
-        nextCounts[emoji] = Number(nextCounts[emoji] || 0) + 1
-        nextMy = [emoji]
-      }
-
-      return {
-        ...p,
-        reaction_counts: nextCounts,
-        my_reactions: nextMy,
-      }
-    })
-  )
-
-  try {
-    const res = await jfetch(`/api/reactions/toggle${eventQuery}`, {
-      method: 'POST',
-      body: JSON.stringify({ post_id, emoji }),
-    })
-
+    // optimistic update - תמיד אימוג'י אחד בלבד
     setItems((prev) =>
-      prev.map((p) =>
-        p.id === post_id
-          ? {
-              ...p,
-              reaction_counts: res.counts || p.reaction_counts,
-              my_reactions: res.selected_emoji ? [res.selected_emoji] : [],
-            }
-          : p
-      )
+      prev.map((p) => {
+        if (p.id !== post_id) return p
+
+        const nextCounts = { ...(p.reaction_counts || {}) }
+
+        if (currentSelected && nextCounts[currentSelected]) {
+          nextCounts[currentSelected] = Math.max(0, nextCounts[currentSelected] - 1)
+          if (nextCounts[currentSelected] <= 0) delete nextCounts[currentSelected]
+        }
+
+        let nextMy: string[] = []
+        if (!isSame) {
+          nextCounts[emoji] = Number(nextCounts[emoji] || 0) + 1
+          nextMy = [emoji]
+        }
+
+        return {
+          ...p,
+          reaction_counts: nextCounts,
+          my_reactions: nextMy,
+        }
+      })
     )
-  } catch (e: any) {
-    setErr(friendlyError(e?.message || 'שגיאה'))
-    // fallback to truth from server on next refresh
+
     try {
-      const res = await fetch(`/api/blessings/feed?ts=${Date.now()}${effectiveEventId ? `&event=${encodeURIComponent(effectiveEventId)}` : ''}`, { cache: 'no-store' })
-      const j = await res.json().catch(() => ({}))
-      if (res.ok && Array.isArray(j.items)) setItems(j.items)
-    } catch {}
-  }
-}
+      const res = await jfetch(`/api/reactions/toggle${eventQuery}`, {
+        method: 'POST',
+        body: JSON.stringify({ post_id, emoji }),
+      })
+
+      setItems((prev) =>
+        prev.map((p) =>
+          p.id === post_id
+            ? {
+                ...p,
+                reaction_counts: res.counts || {},
+                my_reactions: res.selected_emoji ? [res.selected_emoji] : [],
+              }
+            : p
+        )
+      )
     } catch (e: any) {
       setErr(friendlyError(e?.message || 'שגיאה'))
+      try {
+        const res = await fetch(
+          `/api/blessings/feed?ts=${Date.now()}${effectiveEventId ? `&event=${encodeURIComponent(effectiveEventId)}` : ''}`,
+          { cache: 'no-store' }
+        )
+        const j = await res.json().catch(() => ({}))
+        if (res.ok && Array.isArray(j.items)) setItems(j.items)
+      } catch {}
     }
   }
+
   async function editMine(id: string) {
   const p = (items || []).find((x: any) => x.id === id)
   if (!p) return
