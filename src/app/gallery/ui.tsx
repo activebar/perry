@@ -375,61 +375,61 @@ export default function GalleryClient({
     }
   }
 
-async function toggleReaction(itemId: string, emoji: string) {
-  const currentSelected = (myReactionsByItem[itemId] || [])[0] || null
-  const isSame = currentSelected === emoji
+  async function toggleReaction(itemId: string, emoji: string) {
+    const currentSelected = (myReactionsByItem[itemId] || [])[0] || null
+    const isSame = currentSelected === emoji
 
-  // optimistic update - תמיד אימוג'י אחד בלבד
-  setMyReactionsByItem((prev) => ({
-    ...prev,
-    [itemId]: isSame ? [] : [emoji],
-  }))
-
-  setReactionsByItem((prev) => {
-    const next = { ...(prev[itemId] || {}) }
-
-    if (currentSelected && next[currentSelected]) {
-      next[currentSelected] = Math.max(0, next[currentSelected] - 1)
-      if (next[currentSelected] <= 0) delete next[currentSelected]
-    }
-
-    if (!isSame) {
-      next[emoji] = Number(next[emoji] || 0) + 1
-    }
-
-    return { ...prev, [itemId]: next }
-  })
-
-  try {
-    const res = await fetch('/api/reactions/toggle', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-device-id': deviceId,
-      },
-      body: JSON.stringify({
-        media_item_id: itemId,
-        emoji,
-      }),
-    })
-
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(json?.error || 'שגיאה בעדכון תגובה')
-
-    setReactionsByItem((prev) => ({
-      ...prev,
-      [itemId]: json?.counts || {},
-    }))
-
+    // optimistic update - תמיד אימוג'י אחד בלבד
     setMyReactionsByItem((prev) => ({
       ...prev,
-      [itemId]: json?.selected_emoji ? [json.selected_emoji] : [],
+      [itemId]: isSame ? [] : [emoji],
     }))
-  } catch (e: any) {
-    setMsg(e?.message || 'שגיאה בעדכון תגובה')
-    await loadReactions()
+
+    setReactionsByItem((prev) => {
+      const next = { ...(prev[itemId] || {}) }
+
+      if (currentSelected && next[currentSelected]) {
+        next[currentSelected] = Math.max(0, next[currentSelected] - 1)
+        if (next[currentSelected] <= 0) delete next[currentSelected]
+      }
+
+      if (!isSame) {
+        next[emoji] = Number(next[emoji] || 0) + 1
+      }
+
+      return { ...prev, [itemId]: next }
+    })
+
+    try {
+      const res = await fetch('/api/reactions/toggle', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({
+          media_item_id: itemId,
+          emoji,
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'שגיאה בעדכון תגובה')
+
+      setReactionsByItem((prev) => ({
+        ...prev,
+        [itemId]: json?.counts || {},
+      }))
+
+      setMyReactionsByItem((prev) => ({
+        ...prev,
+        [itemId]: json?.selected_emoji ? [json.selected_emoji] : [],
+      }))
+    } catch (e: any) {
+      setMsg(e?.message || 'שגיאה בעדכון תגובה')
+      await loadReactions()
+    }
   }
-}
 
   async function shareItem(item: GalleryItem) {
     try {
