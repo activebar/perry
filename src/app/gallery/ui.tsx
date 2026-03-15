@@ -204,7 +204,7 @@ async function detectAutoFocus(file: File): Promise<{
     })
 
     if (img.naturalWidth < img.naturalHeight) {
-      return { crop_position: 'top', crop_focus_x: 0.5, crop_focus_y: 0.28 }
+      return { crop_position: 'top', crop_focus_x: 0.5, crop_focus_y: 0.08 }
     }
     return { crop_position: 'center', crop_focus_x: 0.5, crop_focus_y: 0.5 }
   } finally {
