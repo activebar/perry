@@ -305,7 +305,7 @@ function CropEditor({
           <button
             type="button"
             onClick={() =>
-              onChange({ crop_position: 'top', crop_focus_x: 0.5, crop_focus_y: 0.22 })
+              onChange({ crop_position: 'top', crop_focus_x: 0.5, crop_focus_y: 0.14 })
             }
             className="rounded-full border border-zinc-200 px-4 py-2 text-sm"
           >
