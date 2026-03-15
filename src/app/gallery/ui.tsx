@@ -523,7 +523,7 @@ export default function GalleryClient({
             className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
             title="צילום תמונה או וידאו"
           >
-            📷 צילום
+            📸 צילום
           </button>
 
           <button
@@ -548,7 +548,7 @@ export default function GalleryClient({
               className="rounded-full border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
               title="בחירה מרובה להורדה"
             >
-              ⬇️ הורדה
+              💾 הורדה
             </button>
           ) : (
             <>
@@ -701,7 +701,7 @@ export default function GalleryClient({
                   onClick={() => triggerDownload(item.url, item.id)}
                   title="הורדה"
                 >
-                  ⬇️
+                  💾
                 </button>
 
                 <button
@@ -774,7 +774,7 @@ export default function GalleryClient({
                 onClick={() => triggerDownload(preview.url, preview.id)}
                 className="rounded-xl border border-zinc-200 px-4 py-2 text-sm hover:bg-zinc-50"
               >
-                ⬇️ הורדה
+                💾 הורדה
               </button>
             </div>
 
