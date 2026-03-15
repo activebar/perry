@@ -1133,22 +1133,26 @@ export default function GalleryClient({
             </div>
 
             <div className="overflow-hidden rounded-2xl bg-zinc-100">
-              {isVideoItem(preview) ? (
-                <video
-                  src={preview.url}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="max-h-[60vh] w-full bg-black object-contain"
-                />
-              ) : (
-                <img
-                  src={preview.url}
-                  alt=""
-                  className="max-h-[60vh] w-full object-contain"
-                />
-              )}
-            </div>
+  <div className="mx-auto aspect-square w-full max-w-[420px] overflow-hidden rounded-2xl bg-zinc-100">
+    {isVideoItem(preview) ? (
+      <video
+        src={preview.url}
+        controls
+        playsInline
+        preload="metadata"
+        className="h-full w-full bg-black object-cover"
+        style={{ objectPosition: objectPositionFromCrop(preview) }}
+      />
+    ) : (
+      <img
+        src={preview.url}
+        alt=""
+        className="h-full w-full object-cover"
+        style={{ objectPosition: objectPositionFromCrop(preview) }}
+      />
+    )}
+  </div>
+</div>
 
             <div className="mt-4 flex flex-wrap gap-3">
               <button
