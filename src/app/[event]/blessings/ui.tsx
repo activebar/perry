@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button, Card, Container, Input, Textarea } from '@/components/ui'
 import ShareModal from '@/components/share/ShareModal'
+import CropEditor from '@/components/CropEditor'
 import { buildShareMessage } from '@/lib/share/buildShareMessage'
 
 type Post = {
@@ -16,6 +17,9 @@ type Post = {
   video_url: string | null
   link_url: string | null
   media_path?: string | null
+  crop_position?: string | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
   status: string
   reaction_counts: Record<string, number>
   my_reactions: string[]
@@ -46,6 +50,15 @@ function isVideo(url: string) {
 
 function isVideoFile(f: File) {
   return (f.type || '').startsWith('video/')
+}
+
+function objectPositionFromCrop(item: { crop_position?: string | null; crop_focus_x?: number | null; crop_focus_y?: number | null }) {
+  const x = typeof item.crop_focus_x === 'number' ? Math.max(0, Math.min(1, item.crop_focus_x)) : null
+  const y = typeof item.crop_focus_y === 'number' ? Math.max(0, Math.min(1, item.crop_focus_y)) : null
+  if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
+  if (item.crop_position === 'top') return '50% 12%'
+  if (item.crop_position === 'bottom') return '50% 82%'
+  return '50% 50%'
 }
 
 async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
@@ -308,7 +321,7 @@ export default function BlessingsClient({
       setLinkTouched(false)
       setFile(null)
 
-      setMsg(res.status === 'pending' ? '✅ נשלח לאישור מנהל' : '✅ נשמר!')
+      setMsg(res.status === 'pending' ? 'ברכות ממתינות לאישור מנהל.' : '✅ הברכה נשמרה בהצלחה')
     } catch (e: any) {
       setErr(friendlyError(e?.message || 'שגיאה'))
     } finally {
@@ -318,64 +331,17 @@ export default function BlessingsClient({
 
   async function toggleReaction(post_id: string, emoji: string) {
     setErr(null)
-
-    const currentPost = items.find((p) => p.id === post_id)
-    const currentSelected = (currentPost?.my_reactions || [])[0] || null
-    const isSame = currentSelected === emoji
-
-    // optimistic update - תמיד אימוג'י אחד בלבד
-    setItems((prev) =>
-      prev.map((p) => {
-        if (p.id !== post_id) return p
-
-        const nextCounts = { ...(p.reaction_counts || {}) }
-
-        if (currentSelected && nextCounts[currentSelected]) {
-          nextCounts[currentSelected] = Math.max(0, nextCounts[currentSelected] - 1)
-          if (nextCounts[currentSelected] <= 0) delete nextCounts[currentSelected]
-        }
-
-        let nextMy: string[] = []
-        if (!isSame) {
-          nextCounts[emoji] = Number(nextCounts[emoji] || 0) + 1
-          nextMy = [emoji]
-        }
-
-        return {
-          ...p,
-          reaction_counts: nextCounts,
-          my_reactions: nextMy,
-        }
-      })
-    )
-
     try {
-      const res = await jfetch(`/api/reactions/toggle${eventQuery}`, {
-        method: 'POST',
-        body: JSON.stringify({ post_id, emoji }),
-      })
-
-      setItems((prev) =>
-        prev.map((p) =>
+      const res = await jfetch(`/api/reactions/toggle${eventQuery}`, { method: 'POST', body: JSON.stringify({ post_id, emoji }) })
+      setItems(prev =>
+        prev.map(p =>
           p.id === post_id
-            ? {
-                ...p,
-                reaction_counts: res.counts || {},
-                my_reactions: res.selected_emoji ? [res.selected_emoji] : [],
-              }
+            ? { ...p, reaction_counts: res.counts || p.reaction_counts, my_reactions: res.my || p.my_reactions }
             : p
         )
       )
     } catch (e: any) {
       setErr(friendlyError(e?.message || 'שגיאה'))
-      try {
-        const res = await fetch(
-          `/api/blessings/feed?ts=${Date.now()}${effectiveEventId ? `&event=${encodeURIComponent(effectiveEventId)}` : ''}`,
-          { cache: 'no-store' }
-        )
-        const j = await res.json().catch(() => ({}))
-        if (res.ok && Array.isArray(j.items)) setItems(j.items)
-      } catch {}
     }
   }
 
@@ -422,11 +388,13 @@ async function saveEdit() {
   try {
     let media_path = editDraft.media_path || null
     let media_url = editDraft.media_url || null
+    let video_url = editDraft.video_url || null
 
     // remove media (explicit)
     if (editRemoveMedia) {
       media_path = null
       media_url = null
+      video_url = null
     }
 
     // replace media (upload new)
@@ -441,7 +409,13 @@ async function saveEdit() {
       if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
       media_path = upJson.path
-      media_url = upJson.publicUrl
+      if (isVideoFile(editFile)) {
+        video_url = upJson.publicUrl
+        media_url = null
+      } else {
+        media_url = upJson.publicUrl
+        video_url = null
+      }
     }
 
     const patch = {
@@ -450,7 +424,11 @@ async function saveEdit() {
       text: editDraft.text || null,
       link_url: editDraft.link_url || null,
       media_path,
-      media_url
+      media_url,
+      video_url,
+      crop_position: editDraft.crop_position || null,
+      crop_focus_x: editDraft.crop_focus_x ?? null,
+      crop_focus_y: editDraft.crop_focus_y ?? null,
     }
 
     const res = await jfetch(`/api/posts${eventQuery}`, { method: 'PUT', body: JSON.stringify(patch) })
@@ -608,8 +586,8 @@ async function saveEdit() {
               </Button>
             </div>
 
-            {err && <p className="text-sm text-red-600">{err}</p>}
-            {msg && <p className="text-sm text-emerald-600">{msg}</p>}
+            {err && <p className="text-sm font-medium text-red-600">{err}</p>}
+            {msg && <p className="text-sm font-medium text-emerald-600">{msg}</p>}
           </div>
         </Card>
 
@@ -648,7 +626,7 @@ async function saveEdit() {
                         {video ? (
                           <video src={mediaUrl} className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} muted playsInline />
                         ) : (
-                          <img src={mediaUrl} alt="" className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} />
+                          <img src={mediaUrl} alt="" className="h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
                         )}
                       </button>
                     </div>
@@ -829,6 +807,18 @@ async function saveEdit() {
           </div>
 
           {editErr && <p className="text-sm text-red-600">{editErr}</p>}
+
+          {editDraft.media_url && !editRemoveMedia && !editFile && !editDraft.video_url && (
+            <div className="rounded-xl border border-zinc-200 p-3">
+              <p className="mb-2 text-sm font-medium text-right">🎯 מיקום תמונה</p>
+              <CropEditor
+                src={editDraft.media_url}
+                x={editDraft.crop_focus_x ?? 0.5}
+                y={editDraft.crop_focus_y ?? 0.5}
+                onChange={(point) => setEditDraft((d: any) => ({ ...d, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' }))}
+              />
+            </div>
+          )}
 
           <div className="mt-2 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setEditOpen(false)}>בטל</Button>

@@ -142,9 +142,13 @@ const device_id = cookies().get('device_id')?.value || null
     if (error) throw error
 
     if (insert.media_path) {
+      const mediaPatch: any = { post_id: data.id, kind }
+      if ('crop_position' in body) mediaPatch.crop_position = body.crop_position
+      if ('crop_focus_x' in body) mediaPatch.crop_focus_x = body.crop_focus_x
+      if ('crop_focus_y' in body) mediaPatch.crop_focus_y = body.crop_focus_y
       await srv
         .from('media_items')
-        .update({ post_id: data.id, kind })
+        .update(mediaPatch)
         .eq('storage_path', insert.media_path)
         .is('post_id', null)
     }
@@ -228,11 +232,26 @@ export async function PUT(req: Request) {
 
     // attach media_items if a new media_path is provided
     if (patch.media_path) {
+      const mediaPatch: any = { post_id: data.id, kind: data.kind }
+      if ('crop_position' in body) mediaPatch.crop_position = body.crop_position
+      if ('crop_focus_x' in body) mediaPatch.crop_focus_x = body.crop_focus_x
+      if ('crop_focus_y' in body) mediaPatch.crop_focus_y = body.crop_focus_y
       await srv
         .from('media_items')
-        .update({ post_id: data.id, kind: data.kind })
+        .update(mediaPatch)
         .eq('storage_path', patch.media_path)
         .is('post_id', null)
+    }
+
+    if ('crop_position' in body || 'crop_focus_x' in body || 'crop_focus_y' in body) {
+      const cropPatch: any = {}
+      if ('crop_position' in body) cropPatch.crop_position = body.crop_position
+      if ('crop_focus_x' in body) cropPatch.crop_focus_x = body.crop_focus_x
+      if ('crop_focus_y' in body) cropPatch.crop_focus_y = body.crop_focus_y
+      await srv
+        .from('media_items')
+        .update(cropPatch)
+        .eq('post_id', data.id)
     }
 
     return NextResponse.json({ ok: true, post: data, moderation })

@@ -6,6 +6,7 @@ import QrPanel from '@/components/qr/QrPanel'
 import PermissionsPanel from './PermissionsPanel'
 import AiPanel from './AiPanel'
 import ClonePanel from './ClonePanel'
+import CropEditor from '@/components/CropEditor'
 
 const DEFAULT_EVENT_ID = (process.env.NEXT_PUBLIC_EVENT_ID || '').trim() || 'IDO'
 
@@ -201,6 +202,15 @@ function LinkPreview({
 
 function isVideoUrl(url?: string | null) {
   return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
+}
+
+function objectPositionFromCrop(item: any) {
+  const x = typeof item?.crop_focus_x === 'number' ? Math.max(0, Math.min(1, item.crop_focus_x)) : null
+  const y = typeof item?.crop_focus_y === 'number' ? Math.max(0, Math.min(1, item.crop_focus_y)) : null
+  if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
+  if (item?.crop_position === 'top') return '50% 12%'
+  if (item?.crop_position === 'bottom') return '50% 82%'
+  return '50% 50%'
 }
 
 function MediaBox({
@@ -432,6 +442,7 @@ export default function AdminApp({
   const [adminBusy, setAdminBusy] = useState(false)
   const [adminMsg, setAdminMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [focusTarget, setFocusTarget] = useState<any | null>(null)
 
   const [galleries, setGalleries] = useState<any[]>([])
   const galleriesTotalPending = useMemo(() => galleries.reduce((sum: number, g: any) => sum + (g?.pending_count || 0), 0), [galleries])
@@ -1198,6 +1209,30 @@ export default function AdminApp({
     }
   }
 
+  async function saveGalleryFocus(item: any) {
+    try {
+      const res = await jfetch('/api/admin/media-items', { method: 'PUT', body: JSON.stringify({ id: item.id, crop_position: item.crop_position, crop_focus_x: item.crop_focus_x, crop_focus_y: item.crop_focus_y }) })
+      setPendingMedia(prev => prev.map((x:any) => x.id === item.id ? res.item : x))
+      setApprovedMedia(prev => prev.map((x:any) => x.id === item.id ? res.item : x))
+      setGalleryMsg('✅ מיקום התמונה נשמר')
+      setFocusTarget(null)
+    } catch (e: any) {
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה בשמירת מיקום'))
+    }
+  }
+
+  async function saveBlessingFocus(item: any) {
+    try {
+      await jfetch('/api/admin/posts', { method: 'PUT', body: JSON.stringify({ id: item.id, crop_position: item.crop_position, crop_focus_x: item.crop_focus_x, crop_focus_y: item.crop_focus_y }) })
+      setApprovedBlessings(prev => prev.map((x:any) => x.id === item.id ? { ...x, crop_position: item.crop_position, crop_focus_x: item.crop_focus_x, crop_focus_y: item.crop_focus_y } : x))
+      setEditBlessing((prev: any) => prev && prev.id === item.id ? { ...prev, crop_position: item.crop_position, crop_focus_x: item.crop_focus_x, crop_focus_y: item.crop_focus_y } : prev)
+      setErr('')
+      setFocusTarget(null)
+    } catch (e: any) {
+      setErr(friendlyError(e?.message || 'שגיאה בשמירת מיקום'))
+    }
+  }
+
   async function loadDiag() {
     const d = await jfetch('/api/admin/diag', { method: 'GET', headers: {} as any })
     setDiag(d)
@@ -1228,6 +1263,24 @@ export default function AdminApp({
     loadPendingMedia(selectedGalleryId)
     loadApprovedMedia(selectedGalleryId)
   }, [tab, selectedGalleryId])
+
+  const focusModal = focusTarget ? (
+    <div className="fixed inset-0 z-[60] bg-black/60 p-4" onClick={() => setFocusTarget(null)}>
+      <div className="mx-auto w-full max-w-md rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()} dir="rtl">
+        <h3 className="mb-3 font-semibold text-right">🎯 מיקום תמונה</h3>
+        <CropEditor
+          src={focusTarget.media_url || focusTarget.thumb_url || focusTarget.url}
+          x={focusTarget.crop_focus_x ?? 0.5}
+          y={focusTarget.crop_focus_y ?? 0.5}
+          onChange={(point) => setFocusTarget((prev: any) => prev ? { ...prev, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' } : prev)}
+        />
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setFocusTarget(null)}>ביטול</Button>
+          <Button onClick={() => focusTarget.type === 'gallery' ? saveGalleryFocus(focusTarget) : saveBlessingFocus(focusTarget)}>שמור</Button>
+        </div>
+      </div>
+    </div>
+  ) : null
 
   if (!admin) {
     return (
@@ -1285,6 +1338,7 @@ export default function AdminApp({
 
   return (
     <div className="space-y-4" dir="rtl">
+      {focusModal}
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-right">
@@ -2315,6 +2369,7 @@ export default function AdminApp({
 
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
+                    {b.media_url && !b.video_url ? <Button variant="ghost" onClick={() => setFocusTarget({ type: 'blessing', ...b })}>🎯 מיקום</Button> : null}
                     <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
                   </div>
                 </div>
@@ -2362,6 +2417,7 @@ export default function AdminApp({
                     >
                       הסר מדיה
                     </Button>
+                    {editBlessing.media_url && !editBlessing.video_url ? <Button variant="ghost" onClick={() => setFocusTarget({ type: 'blessing', ...editBlessing })}>🎯 מיקום</Button> : null}
                   </div>
 
                   <div className="flex gap-2">
@@ -2631,7 +2687,7 @@ export default function AdminApp({
                             onClick={() => p.url && setLightbox(p.url)}
                             type="button"
                           >
-                            <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
+                            <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
                           </button>
 
                           <div className="p-3 flex gap-2">
@@ -2721,7 +2777,7 @@ export default function AdminApp({
                               }}
                               type="button"
                             >
-                              <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
+                              <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
 
                               {selectMode ? (
                                 <div className="absolute left-2 top-2">
@@ -2736,6 +2792,7 @@ export default function AdminApp({
                             </button>
 
                             <div className="p-3 flex gap-2 justify-end">
+                              <Button variant="ghost" onClick={() => setFocusTarget({ type: 'gallery', ...p })}>🎯 מיקום</Button>
                               <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
                                 מחק
                               </Button>

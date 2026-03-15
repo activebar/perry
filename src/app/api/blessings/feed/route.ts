@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     // NOTE: we DO select device_id to compute can_edit/can_delete, but we do NOT return it to the client.
     const { data: posts, error } = await srv
       .from('posts')
-      .select('id, created_at, author_name, text, media_url, video_url, link_url, status, device_id')
+      .select('id, created_at, author_name, text, media_url, video_url, link_url, status, device_id, media_path')
       .eq('event_id', eventId)
       .eq('kind', 'blessing')
       .eq('status', 'approved')
@@ -34,6 +34,18 @@ export async function GET(req: Request) {
     if (!items.length) return NextResponse.json({ ok: true, items: [] })
 
     const ids = items.map((p: any) => p.id)
+
+    const { data: mediaRows } = await srv
+      .from('media_items')
+      .select('post_id, crop_position, crop_focus_x, crop_focus_y')
+      .in('post_id', ids)
+
+    const mediaByPost: Record<string, any> = {}
+    for (const m of mediaRows || []) {
+      const pid = String((m as any).post_id || '')
+      if (!pid) continue
+      mediaByPost[pid] = m
+    }
 
     // reactions: counts + my reactions
     const { data: rRows, error: rErr } = await srv
@@ -74,6 +86,9 @@ export async function GET(req: Request) {
         video_url: p.video_url,
         link_url: p.link_url,
         status: p.status,
+        crop_position: mediaByPost[p.id]?.crop_position || null,
+        crop_focus_x: mediaByPost[p.id]?.crop_focus_x ?? null,
+        crop_focus_y: mediaByPost[p.id]?.crop_focus_y ?? null,
 
         editable_until: createdMs ? new Date(createdMs + 60 * 60 * 1000).toISOString() : null,
         can_delete: canMine,
