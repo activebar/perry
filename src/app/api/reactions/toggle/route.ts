@@ -6,9 +6,9 @@ function jsonError(msg: string, status = 400) {
 }
 
 function getDeviceId(req: NextRequest) {
-  const bodyDevice = req.headers.get('x-device-id') || ''
+  const headerDevice = req.headers.get('x-device-id') || ''
   const cookieDevice = req.cookies.get('device_id')?.value || ''
-  return String(bodyDevice || cookieDevice || '').trim()
+  return String(headerDevice || cookieDevice || '').trim()
 }
 
 export async function POST(req: NextRequest) {
@@ -21,34 +21,41 @@ export async function POST(req: NextRequest) {
 
     if (!emoji) return jsonError('missing emoji', 400)
     if (!deviceId) return jsonError('missing device id', 400)
-    if (!postId && !mediaItemId) {
-      return jsonError('missing target id', 400)
-    }
-    if (postId && mediaItemId) {
-      return jsonError('only one target is allowed', 400)
-    }
+    if (!postId && !mediaItemId) return jsonError('missing target id', 400)
+    if (postId && mediaItemId) return jsonError('only one target is allowed', 400)
 
     const sb = supabaseServiceRole()
 
-    let query = sb
+    let baseQuery = sb
       .from('reactions')
-      .select('id')
+      .select('id, emoji')
       .eq('device_id', deviceId)
-      .eq('emoji', emoji)
 
-    if (postId) query = query.eq('post_id', postId).is('media_item_id', null)
-    if (mediaItemId) query = query.eq('media_item_id', mediaItemId).is('post_id', null)
-
-    const existingRes = await query.maybeSingle()
-
-    if (existingRes.error) {
-      return jsonError(existingRes.error.message, 500)
+    if (postId) {
+      baseQuery = baseQuery.eq('post_id', postId).is('media_item_id', null)
+    } else {
+      baseQuery = baseQuery.eq('media_item_id', mediaItemId).is('post_id', null)
     }
 
-    if (existingRes.data?.id) {
-      const del = await sb.from('reactions').delete().eq('id', existingRes.data.id)
+    const existingRes = await baseQuery
+    if (existingRes.error) return jsonError(existingRes.error.message, 500)
+
+    const existingRows = existingRes.data || []
+    const alreadySelected = existingRows.find((r: any) => String(r.emoji || '') === emoji)
+    const previousEmoji = existingRows.find((r: any) => String(r.emoji || '') !== emoji)?.emoji || null
+
+    if (alreadySelected) {
+      const del = await sb.from('reactions').delete().eq('id', alreadySelected.id)
       if (del.error) return jsonError(del.error.message, 500)
     } else {
+      if (existingRows.length > 0) {
+        const ids = existingRows.map((r: any) => r.id).filter(Boolean)
+        if (ids.length) {
+          const delOld = await sb.from('reactions').delete().in('id', ids)
+          if (delOld.error) return jsonError(delOld.error.message, 500)
+        }
+      }
+
       const ins = await sb.from('reactions').insert({
         post_id: postId || null,
         media_item_id: mediaItemId || null,
@@ -58,22 +65,36 @@ export async function POST(req: NextRequest) {
       if (ins.error) return jsonError(ins.error.message, 500)
     }
 
-    let countQuery = sb
+    let countsQuery = sb
       .from('reactions')
-      .select('id', { count: 'exact', head: true })
-      .eq('emoji', emoji)
+      .select('emoji')
 
-    if (postId) countQuery = countQuery.eq('post_id', postId).is('media_item_id', null)
-    if (mediaItemId) countQuery = countQuery.eq('media_item_id', mediaItemId).is('post_id', null)
+    if (postId) {
+      countsQuery = countsQuery.eq('post_id', postId).is('media_item_id', null)
+    } else {
+      countsQuery = countsQuery.eq('media_item_id', mediaItemId).is('post_id', null)
+    }
 
-    const countRes = await countQuery
-    if (countRes.error) return jsonError(countRes.error.message, 500)
+    const countsRes = await countsQuery
+    if (countsRes.error) return jsonError(countsRes.error.message, 500)
+
+    const counts: Record<string, number> = {}
+    for (const row of countsRes.data || []) {
+      const e = String((row as any)?.emoji || '').trim()
+      if (!e) continue
+      counts[e] = Number(counts[e] || 0) + 1
+    }
+
+    const active = !alreadySelected
 
     return NextResponse.json({
       ok: true,
       emoji,
-      count: Number(countRes.count || 0),
-      active: !existingRes.data?.id,
+      active,
+      count: Number(counts[emoji] || 0),
+      counts,
+      selected_emoji: active ? emoji : null,
+      previous_emoji: alreadySelected ? emoji : previousEmoji,
     })
   } catch (e: any) {
     return jsonError(e?.message || 'server error', 500)
