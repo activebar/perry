@@ -19,6 +19,18 @@ function canStillEdit(editableUntil?: string | null) {
   return Number.isFinite(t) && t > Date.now()
 }
 
+function clamp01(v: unknown): number | null {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, Math.min(1, n))
+}
+
+function normalizeCropPosition(v: unknown): 'top' | 'center' | 'bottom' {
+  const s = String(v || '').trim().toLowerCase()
+  if (s === 'top' || s === 'bottom') return s
+  return 'center'
+}
+
 export async function GET(req: NextRequest) {
   const galleryId = String(req.nextUrl.searchParams.get('gallery_id') || '').trim()
   const mediaItemIds = req.nextUrl.searchParams.getAll('media_item_id').map(String).filter(Boolean)
@@ -65,7 +77,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await sb
     .from('media_items')
-    .select('id, url, thumb_url, kind, created_at, editable_until, uploader_device_id')
+    .select('id, url, thumb_url, kind, crop_position, crop_focus_x, crop_focus_y, created_at, editable_until, uploader_device_id')
     .eq('gallery_id', galleryId)
     .eq('is_approved', true)
     .in('kind', ['gallery', 'galleries'])
@@ -105,6 +117,10 @@ export async function PUT(req: NextRequest) {
   if ('replacement_thumb_url' in body) patch.thumb_url = body.replacement_thumb_url || null
   if (body?.replacement_storage_path) patch.storage_path = body.replacement_storage_path
   if (body?.replacement_kind) patch.kind = body.replacement_kind
+
+  if ('crop_position' in body) patch.crop_position = normalizeCropPosition(body.crop_position)
+  if ('crop_focus_x' in body) patch.crop_focus_x = clamp01(body.crop_focus_x)
+  if ('crop_focus_y' in body) patch.crop_focus_y = clamp01(body.crop_focus_y)
 
   const { data, error } = await sb
     .from('media_items')
