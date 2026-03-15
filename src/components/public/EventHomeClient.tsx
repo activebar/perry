@@ -553,29 +553,6 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                       (p.my_reactions || []).includes(e) ? 'bg-black text-white' : 'bg-white'
                                     }`}
                                     onClick={async () => {
-                                      try {
-                                        const res = await fetch(`/api/reactions/toggle?event=${encodeURIComponent(eventId)}`, {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ post_id: p.id, emoji: e }),
-                                        })
-                                        if (!res.ok) return
-                                        const j = await res.json().catch(() => ({} as any))
-                                        setData(prev => {
-                                          if (!prev) return prev
-                                          const next = { ...prev } as any
-                                          next.blessingsPreview = (next.blessingsPreview || []).map((x: any) => {
-                                            if (x.id !== p.id) return x
-                                            return {
-                                              ...x,
-                                              reaction_counts: j.counts || x.reaction_counts || {},
-                                              my_reactions: j.my || x.my_reactions || [],
-                                            }
-                                          })
-                                          return next
-                                        })
-                                      } catch {}
-                                    }}
                                   >
                                     {e} {Number((p.reaction_counts || ({} as any))[e] || 0)}
                                   </button>
