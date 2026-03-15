@@ -1214,10 +1214,10 @@ export default function AdminApp({
       const res = await jfetch('/api/admin/media-items', { method: 'PUT', body: JSON.stringify({ id: item.id, crop_position: item.crop_position, crop_focus_x: item.crop_focus_x, crop_focus_y: item.crop_focus_y }) })
       setPendingMedia(prev => prev.map((x:any) => x.id === item.id ? res.item : x))
       setApprovedMedia(prev => prev.map((x:any) => x.id === item.id ? res.item : x))
-      setGalleryMsg('✅ מיקום התמונה נשמר')
+      setGalleryMsg('✅ מיקוד התמונה נשמר')
       setFocusTarget(null)
     } catch (e: any) {
-      setGalleryMsg(friendlyError(e?.message || 'שגיאה בשמירת מיקום'))
+      setGalleryMsg(friendlyError(e?.message || 'שגיאה בשמירת מיקוד'))
     }
   }
 
@@ -1229,7 +1229,7 @@ export default function AdminApp({
       setErr('')
       setFocusTarget(null)
     } catch (e: any) {
-      setErr(friendlyError(e?.message || 'שגיאה בשמירת מיקום'))
+      setErr(friendlyError(e?.message || 'שגיאה בשמירת מיקוד'))
     }
   }
 
@@ -1267,7 +1267,7 @@ export default function AdminApp({
   const focusModal = focusTarget ? (
     <div className="fixed inset-0 z-[60] bg-black/60 p-4" onClick={() => setFocusTarget(null)}>
       <div className="mx-auto w-full max-w-md rounded-2xl bg-white p-4" onClick={(e) => e.stopPropagation()} dir="rtl">
-        <h3 className="mb-3 font-semibold text-right">🎯 מיקום תמונה</h3>
+        <h3 className="mb-3 font-semibold text-right">🎯 מיקוד תמונה</h3>
         <CropEditor
           src={focusTarget.media_url || focusTarget.thumb_url || focusTarget.url}
           x={focusTarget.crop_focus_x ?? 0.5}
@@ -2369,7 +2369,7 @@ export default function AdminApp({
 
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button variant="ghost" onClick={() => setEditBlessing(b)}>ערוך</Button>
-                    {b.media_url && !b.video_url ? <Button variant="ghost" onClick={() => setFocusTarget({ type: 'blessing', ...b })}>🎯 מיקום</Button> : null}
+                    {b.media_url && !b.video_url ? <Button variant="ghost" onClick={() => setFocusTarget({ type: 'blessing', ...b })}>🎯 מיקוד</Button> : null}
                     <Button variant="ghost" onClick={() => deleteBlessing(b.id)}>מחק</Button>
                   </div>
                 </div>
@@ -2417,7 +2417,7 @@ export default function AdminApp({
                     >
                       הסר מדיה
                     </Button>
-                    {editBlessing.media_url && !editBlessing.video_url ? <Button variant="ghost" onClick={() => setFocusTarget({ type: 'blessing', ...editBlessing })}>🎯 מיקום</Button> : null}
+                    {editBlessing.media_url && !editBlessing.video_url ? <Button variant="ghost" onClick={() => setFocusTarget({ type: 'blessing', ...editBlessing })}>🎯 מיקוד</Button> : null}
                   </div>
 
                   <div className="flex gap-2">
@@ -2792,7 +2792,7 @@ export default function AdminApp({
                             </button>
 
                             <div className="p-3 flex gap-2 justify-end">
-                              <Button variant="ghost" onClick={() => setFocusTarget({ type: 'gallery', ...p })}>🎯 מיקום</Button>
+                              <Button variant="ghost" onClick={() => setFocusTarget({ type: 'gallery', ...p })}>🎯 מיקוד</Button>
                               <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
                                 מחק
                               </Button>
