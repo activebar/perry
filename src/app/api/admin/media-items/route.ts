@@ -10,9 +10,7 @@ function jsonError(msg: string, status = 400) {
 export async function GET(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return jsonError('unauthorized', 401)
-  const canRead =
-    admin.role === 'master' ||
-    ['galleries.read', 'galleries.manage', 'site.manage'].some((p) => !!(admin as any).permissions?.[p])
+  const canRead = admin.role === 'master' || ['galleries.read', 'galleries.manage', 'site.manage'].some((p) => !!(admin as any).permissions?.[p])
   if (!canRead) return jsonError('forbidden', 403)
 
   const sp = req.nextUrl.searchParams
@@ -39,9 +37,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return jsonError('unauthorized', 401)
-  const canManage =
-    admin.role === 'master' ||
-    ['galleries.manage', 'site.manage'].some((p) => !!(admin as any)?.permissions?.[p])
+  const canManage = admin.role === 'master' || ['galleries.manage', 'site.manage'].some((p) => !!(admin as any)?.permissions?.[p])
   if (!canManage) return jsonError('forbidden', 403)
 
   const body = await req.json().catch(() => ({}))
@@ -69,9 +65,7 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const admin = await getAdminFromRequest(req)
   if (!admin) return jsonError('unauthorized', 401)
-  const canManage =
-    admin.role === 'master' ||
-    ['galleries.manage', 'site.manage'].some((p) => !!(admin as any)?.permissions?.[p])
+  const canManage = admin.role === 'master' || ['galleries.manage', 'site.manage'].some((p) => !!(admin as any)?.permissions?.[p])
   if (!canManage) return jsonError('forbidden', 403)
 
   const body = await req.json().catch(() => ({}))
@@ -90,13 +84,11 @@ export async function DELETE(req: NextRequest) {
   const path = (row as any)?.storage_path
   const url = (row as any)?.url
   const thumbUrl = (row as any)?.thumb_url
-
   const derivePath = (u: any): string | null => {
     if (typeof u !== 'string') return null
     const m = u.match(/\/storage\/v1\/object\/public\/uploads\/(.+)$/)
     return m?.[1] ? String(m[1]) : null
   }
-
   const thumbCandidates = (basePath: string): string[] => {
     const out = new Set<string>()
     out.add(`${basePath}.thumb.webp`)
@@ -104,24 +96,15 @@ export async function DELETE(req: NextRequest) {
     if (stripped && stripped !== basePath) out.add(`${stripped}.thumb.webp`)
     return Array.from(out)
   }
-
   const base = (typeof path === 'string' && path.trim()) ? path.trim() : (derivePath(url) || derivePath(thumbUrl))
   if (base) {
     const paths: string[] = [base]
-    if (!base.endsWith('.thumb.webp')) {
-      paths.push(...thumbCandidates(base))
-    } else {
-      paths.push(base.replace(/\.thumb\.webp$/, ''))
-    }
+    if (!base.endsWith('.thumb.webp')) paths.push(...thumbCandidates(base))
+    else paths.push(base.replace(/\.thumb\.webp$/, ''))
     await sb.storage.from('uploads').remove(Array.from(new Set(paths))).catch(() => null as any)
   }
 
-  const { error: derr } = await sb
-    .from('media_items')
-    .delete()
-    .eq('event_id', (admin as any).event_id || getEventIdFromRequest(req))
-    .eq('id', id)
+  const { error: derr } = await sb.from('media_items').delete().eq('event_id', (admin as any).event_id || getEventIdFromRequest(req)).eq('id', id)
   if (derr) return jsonError(derr.message, 500)
-
   return NextResponse.json({ ok: true })
 }

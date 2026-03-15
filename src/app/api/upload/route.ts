@@ -15,7 +15,6 @@ function jsonError(msg: string, status = 400) {
 function isImageFile(file: File) {
   return (file.type || '').startsWith('image/')
 }
-
 function isVideoFile(file: File) {
   return (file.type || '').startsWith('video/')
 }
@@ -45,7 +44,6 @@ export async function POST(req: NextRequest) {
 
     const file = fd.get('file') as File | null
     const kind = String(fd.get('kind') || 'gallery').trim()
-
     const gallery_id =
       (String(fd.get('gallery_id') || '').trim() ||
         String(fd.get('galleryId') || '').trim()) || null
@@ -65,9 +63,7 @@ export async function POST(req: NextRequest) {
       const u = new URL(referer)
       const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
       if (/^[a-z0-9_-]{2,32}$/.test(seg) && seg !== 'admin') eventFromReferer = seg
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     let event_id = (providedEventId || legacyEvent || eventFromQuery || eventFromReferer || (srv.EVENT_SLUG || 'ido'))
       .trim()
@@ -77,7 +73,7 @@ export async function POST(req: NextRequest) {
 
     let is_approved = true
     let autoApproveUntil: string | null = null
-    let requireApproval = true
+    let requireApproval: boolean = true
 
     if (kind === 'gallery') {
       if (!gallery_id) return jsonError('missing gallery_id', 400)
@@ -130,16 +126,14 @@ export async function POST(req: NextRequest) {
         height = typeof meta.height === 'number' ? meta.height : null
         if (width && height && width < height) {
           crop_position = 'top'
+          crop_focus_y = 0.18
           crop_focus_x = 0.5
-          crop_focus_y = 0.05
         } else {
           crop_position = 'center'
-          crop_focus_x = 0.5
           crop_focus_y = 0.5
+          crop_focus_x = 0.5
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     } else {
       crop_position = 'center'
       crop_focus_x = 0.5
@@ -159,10 +153,7 @@ export async function POST(req: NextRequest) {
     crop_position = deriveCropPositionFromFocusY(crop_focus_y, crop_position)
 
     const kindFolder = kind === 'blessing' ? 'blessings' : kind
-    const folder =
-      kind === 'gallery'
-        ? `${event_id}/gallery/${gallery_id}`
-        : `${event_id}/${kindFolder}`
+    const folder = kind === 'gallery' ? `${event_id}/gallery/${gallery_id}` : `${event_id}/${kindFolder}`
 
     const baseName = `${Date.now()}_${randomUUID()}`
     const originalName = String(file.name || '').trim()
@@ -228,7 +219,7 @@ export async function POST(req: NextRequest) {
         uploaded_by: kind === 'gallery' ? 'guest' : 'admin',
         uploader_device_id: device_id,
       } as any)
-      .select('id,editable_until,crop_position,crop_focus_x,crop_focus_y')
+      .select('id,editable_until,crop_position,crop_focus_x,crop_focus_y,kind')
       .single()
 
     if (ierr) return jsonError(ierr.message, 500)
@@ -245,6 +236,7 @@ export async function POST(req: NextRequest) {
       crop_position: (inserted as any)?.crop_position || crop_position,
       crop_focus_x: (inserted as any)?.crop_focus_x ?? crop_focus_x,
       crop_focus_y: (inserted as any)?.crop_focus_y ?? crop_focus_y,
+      kind: (inserted as any)?.kind || dbKind,
     })
   } catch (e: any) {
     return jsonError(e?.message || 'error', 500)
