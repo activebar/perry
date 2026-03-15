@@ -380,7 +380,6 @@ export default function BlessingsClient({
       setErr(friendlyError(e?.message || 'שגיאה'))
     }
   }
-
   async function editMine(id: string) {
   const p = (items || []).find((x: any) => x.id === id)
   if (!p) return
