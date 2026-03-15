@@ -26,34 +26,34 @@ export async function POST(req: NextRequest) {
 
     const sb = supabaseServiceRole()
 
-    let baseQuery = sb
+    let existingQuery = sb
       .from('reactions')
       .select('id, emoji')
       .eq('device_id', deviceId)
 
     if (postId) {
-      baseQuery = baseQuery.eq('post_id', postId).is('media_item_id', null)
+      existingQuery = existingQuery.eq('post_id', postId).is('media_item_id', null)
     } else {
-      baseQuery = baseQuery.eq('media_item_id', mediaItemId).is('post_id', null)
+      existingQuery = existingQuery.eq('media_item_id', mediaItemId).is('post_id', null)
     }
 
-    const existingRes = await baseQuery
+    const existingRes = await existingQuery
     if (existingRes.error) return jsonError(existingRes.error.message, 500)
 
     const existingRows = existingRes.data || []
     const alreadySelected = existingRows.find((r: any) => String(r.emoji || '') === emoji)
-    const previousEmoji = existingRows.find((r: any) => String(r.emoji || '') !== emoji)?.emoji || null
 
     if (alreadySelected) {
-      const del = await sb.from('reactions').delete().eq('id', alreadySelected.id)
-      if (del.error) return jsonError(del.error.message, 500)
+      const ids = existingRows.map((r: any) => r.id).filter(Boolean)
+      if (ids.length) {
+        const del = await sb.from('reactions').delete().in('id', ids)
+        if (del.error) return jsonError(del.error.message, 500)
+      }
     } else {
-      if (existingRows.length > 0) {
-        const ids = existingRows.map((r: any) => r.id).filter(Boolean)
-        if (ids.length) {
-          const delOld = await sb.from('reactions').delete().in('id', ids)
-          if (delOld.error) return jsonError(delOld.error.message, 500)
-        }
+      const ids = existingRows.map((r: any) => r.id).filter(Boolean)
+      if (ids.length) {
+        const delOld = await sb.from('reactions').delete().in('id', ids)
+        if (delOld.error) return jsonError(delOld.error.message, 500)
       }
 
       const ins = await sb.from('reactions').insert({
@@ -65,9 +65,7 @@ export async function POST(req: NextRequest) {
       if (ins.error) return jsonError(ins.error.message, 500)
     }
 
-    let countsQuery = sb
-      .from('reactions')
-      .select('emoji')
+    let countsQuery = sb.from('reactions').select('emoji')
 
     if (postId) {
       countsQuery = countsQuery.eq('post_id', postId).is('media_item_id', null)
@@ -85,16 +83,15 @@ export async function POST(req: NextRequest) {
       counts[e] = Number(counts[e] || 0) + 1
     }
 
-    const active = !alreadySelected
+    const selectedEmoji = alreadySelected ? null : emoji
 
     return NextResponse.json({
       ok: true,
-      emoji,
-      active,
-      count: Number(counts[emoji] || 0),
       counts,
-      selected_emoji: active ? emoji : null,
-      previous_emoji: alreadySelected ? emoji : previousEmoji,
+      selected_emoji: selectedEmoji,
+      active: !!selectedEmoji,
+      emoji,
+      count: Number(counts[emoji] || 0),
     })
   } catch (e: any) {
     return jsonError(e?.message || 'server error', 500)
