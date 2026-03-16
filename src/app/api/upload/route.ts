@@ -16,9 +16,7 @@ function isImageFile(file: File) {
   return (file.type || '').startsWith('image/')
 }
 function isVideoFile(file: File) {
-  const type = String(file.type || '').toLowerCase()
-  const name = String(file.name || '').toLowerCase()
-  return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
+  return (file.type || '').startsWith('video/')
 }
 
 /**

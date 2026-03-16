@@ -76,6 +76,7 @@ function validateSelectedMedia(file?: File | null) {
   return ''
 }
 
+
 function formatRemaining(ms: number) {
   if (ms <= 0) return '00:00'
   const total = Math.floor(ms / 1000)

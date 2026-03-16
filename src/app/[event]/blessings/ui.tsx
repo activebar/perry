@@ -25,7 +25,7 @@ type Post = {
   my_reactions: string[]
 }
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
-const MAX_VIDEO_UPLOAD_BYTES = 4.5 * 1024 * 1024
+const MAX_VIDEO_UPLOAD_BYTES = 9 * 1024 * 1024
 
 async function jfetch(url: string, init?: RequestInit) {
   const res = await fetch(url, {
@@ -81,7 +81,7 @@ function objectPositionFromCrop(item: {
 function validateSelectedMedia(file: File) {
   if (!file) return ''
   if (isVideoFile(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
-    return 'סרטון גדול מדי להעלאה דרך השרת. כרגע ניתן להעלות סרטון עד כ-4.5MB.'
+    return 'סרטון גדול מדי להעלאה דרך השרת כרגע. ניתן להעלות עד כ-9MB. לסרטונים גדולים יותר נעבור ל-direct upload.'
   }
   return ''
 }

@@ -1,11 +1,8 @@
 'use client'
 
-import React, { useRef, useState } from 'react'
+import { useMemo } from 'react'
 
-type CropPoint = {
-  x: number
-  y: number
-}
+type CropPoint = { x: number; y: number }
 
 type CropEditorProps = {
   src: string
@@ -14,57 +11,81 @@ type CropEditorProps = {
   onChange?: (point: CropPoint) => void
 }
 
+function clamp01(v: number | undefined) {
+  if (typeof v !== 'number' || Number.isNaN(v)) return 0.5
+  return Math.max(0, Math.min(1, v))
+}
+
 export default function CropEditor({
   src,
   x = 0.5,
   y = 0.5,
   onChange,
 }: CropEditorProps) {
-  const ref = useRef<HTMLImageElement | null>(null)
-  const [pos, setPos] = useState<CropPoint>({ x, y })
+  const px = useMemo(() => clamp01(x), [x])
+  const py = useMemo(() => clamp01(y), [y])
 
-  function handleClick(e: React.MouseEvent<HTMLImageElement>) {
-    if (!ref.current) return
-    const rect = ref.current.getBoundingClientRect()
-    const nx = (e.clientX - rect.left) / rect.width
-    const ny = (e.clientY - rect.top) / rect.height
-    const p: CropPoint = {
-      x: Math.max(0, Math.min(1, nx)),
-      y: Math.max(0, Math.min(1, ny)),
-    }
-    setPos(p)
-    onChange?.(p)
+  function setPoint(nx: number, ny: number) {
+    onChange?.({ x: clamp01(nx), y: clamp01(ny) })
+  }
+
+  function handlePointer(clientX: number, clientY: number, el: HTMLDivElement | null) {
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const nx = (clientX - rect.left) / rect.width
+    const ny = (clientY - rect.top) / rect.height
+    setPoint(nx, ny)
   }
 
   return (
-    <div style={{ position: 'relative', width: '100%', maxWidth: 420 }}>
-      <img
-        ref={ref}
-        src={src}
-        onClick={handleClick}
-        alt=""
-        style={{
-          width: '100%',
-          aspectRatio: '1 / 1',
-          objectFit: 'cover',
-          cursor: 'crosshair',
-          display: 'block',
-        }}
-      />
+    <div className="grid gap-3">
       <div
-        style={{
-          position: 'absolute',
-          left: `${pos.x * 100}%`,
-          top: `${pos.y * 100}%`,
-          transform: 'translate(-50%, -50%)',
-          width: 22,
-          height: 22,
-          borderRadius: '50%',
-          border: '3px solid #ff2d55',
-          background: 'rgba(255,45,85,0.25)',
-          pointerEvents: 'none',
+        className="relative mx-auto aspect-square w-full max-w-[420px] overflow-hidden rounded-2xl bg-zinc-100"
+        onClick={(e) => handlePointer(e.clientX, e.clientY, e.currentTarget)}
+        onTouchStart={(e) => {
+          const t = e.touches?.[0]
+          if (t) handlePointer(t.clientX, t.clientY, e.currentTarget)
         }}
-      />
+      >
+        <img
+          src={src}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: `${Math.round(px * 100)}% ${Math.round(py * 100)}%` }}
+        />
+        <div
+          className="pointer-events-none absolute h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/80"
+          style={{ left: `${px * 100}%`, top: `${py * 100}%` }}
+        />
+        <div
+          className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-pink-500/30 shadow"
+          style={{ left: `${px * 100}%`, top: `${py * 100}%` }}
+        />
+      </div>
+
+      <div className="flex flex-wrap justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => setPoint(0.5, 0.14)}
+          className="rounded-full border border-zinc-200 px-4 py-2 text-sm"
+        >
+          למעלה
+        </button>
+        <button
+          type="button"
+          onClick={() => setPoint(0.5, 0.5)}
+          className="rounded-full border border-zinc-200 px-4 py-2 text-sm"
+        >
+          מרכז
+        </button>
+        <button
+          type="button"
+          onClick={() => setPoint(0.5, 0.78)}
+          className="rounded-full border border-zinc-200 px-4 py-2 text-sm"
+        >
+          למטה
+        </button>
+      </div>
     </div>
   )
 }
