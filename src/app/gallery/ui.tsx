@@ -30,7 +30,7 @@ type PendingAsset = {
 
 const EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '😮']
 const DIRECT_DOWNLOAD_LIMIT = 8
-const MAX_VIDEO_UPLOAD_BYTES = 4.5 * 1024 * 1024
+const MAX_VIDEO_UPLOAD_BYTES = 9 * 1024 * 1024
 
 function getOrCreateDeviceId() {
   if (typeof window === 'undefined') return ''
@@ -61,6 +61,21 @@ function isVideoItem(item?: GalleryItem | null) {
   return isVideoUrl(item.url) || String(item.kind || '').toLowerCase().includes('video')
 }
 
+function isVideoFile(file?: File | null) {
+  if (!file) return false
+  const type = String(file.type || '').toLowerCase()
+  const name = String(file.name || '').toLowerCase()
+  return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
+}
+
+function validateSelectedMedia(file?: File | null) {
+  if (!file) return ''
+  if (isVideoFile(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
+    return 'סרטון גדול מדי להעלאה דרך השרת כרגע. ניתן להעלות עד כ-9MB. לסרטונים גדולים יותר נעבור ל-direct upload.'
+  }
+  return ''
+}
+
 function formatRemaining(ms: number) {
   if (ms <= 0) return '00:00'
   const total = Math.floor(ms / 1000)
@@ -80,21 +95,6 @@ function objectPositionFromCrop(item: {
   if (item.crop_position === 'top') return '50% 12%'
   if (item.crop_position === 'bottom') return '50% 82%'
   return '50% 50%'
-}
-
-
-function isVideoFileFromInput(file: File) {
-  const type = String(file.type || '').toLowerCase()
-  const name = String(file.name || '').toLowerCase()
-  return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
-}
-
-function validateSelectedMedia(file: File) {
-  if (!file) return ''
-  if (isVideoFileFromInput(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
-    return 'סרטון גדול מדי להעלאה דרך השרת. כרגע ניתן להעלות סרטון עד כ-4.5MB.'
-  }
-  return ''
 }
 
 async function fileToCompressedBlob(file: File): Promise<Blob> {
@@ -470,7 +470,7 @@ export default function GalleryClient({
     if (!asset.file) return
 
     const fd = new FormData()
-    const isVideo = isVideoFileFromInput(asset.file)
+    const isVideo = isVideoFile(asset.file)
 
     if (isVideo) {
       fd.set('file', asset.file)
@@ -517,7 +517,7 @@ export default function GalleryClient({
         const file = list[i]
         const mediaError = validateSelectedMedia(file)
         if (mediaError) throw new Error(mediaError)
-        const isVideo = isVideoFileFromInput(file)
+        const isVideo = isVideoFile(file)
         const auto = isVideo
           ? { crop_position: 'center' as const, crop_focus_x: 0.5, crop_focus_y: 0.5 }
           : await detectAutoFocus(file)
@@ -576,7 +576,12 @@ export default function GalleryClient({
     }
 
     const first = list[0]
-    const isVideo = isVideoFileFromInput(first)
+    const mediaError = validateSelectedMedia(first)
+    if (mediaError) {
+      setMsg(mediaError)
+      return
+    }
+    const isVideo = isVideoFile(first)
 
     if (isVideo) {
       await uploadBatch([first], source)
@@ -678,7 +683,7 @@ export default function GalleryClient({
       setEditingItemId(item.id)
       setMsg('מחליף קובץ...')
 
-      const isVideo = isVideoFileFromInput(file)
+      const isVideo = isVideoFile(file)
       let crop_position: 'top' | 'center' | 'bottom' = 'center'
       let crop_focus_x: number | null = 0.5
       let crop_focus_y: number | null = 0.5
@@ -1045,7 +1050,7 @@ export default function GalleryClient({
             </div>
           ) : null}
 
-          {msg ? <div className={`mt-4 text-sm font-medium ${(msg.includes('שגיאה') || msg.includes('גדול מדי')) ? 'text-red-600' : 'text-emerald-600'}`}>{msg}</div> : null}
+          {msg ? <div className={`mt-4 text-sm ${msg.includes('שגיאה') ? 'text-red-600' : 'text-emerald-600'}`}>{msg}</div> : null}
         </div>
 
         <input
