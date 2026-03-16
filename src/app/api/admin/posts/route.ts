@@ -44,8 +44,16 @@ export async function PUT(req: NextRequest) {
   for (const key of ['author_name','text','link_url','media_url','media_path','video_url','status']) {
     if (key in (body as any)) patch[key] = (body as any)[key] ?? null
   }
-  const { data, error } = await sb.from('posts').update(patch).eq('event_id', (admin as any).event_id || getEventIdFromRequest(req)).eq('id', id).select('*').single()
-  if (error) return jsonError(error.message, 500)
+  let data: any = null
+  if (Object.keys(patch).length > 0) {
+    const updated = await sb.from('posts').update(patch).eq('event_id', (admin as any).event_id || getEventIdFromRequest(req)).eq('id', id).select('*').single()
+    if (updated.error) return jsonError(updated.error.message, 500)
+    data = updated.data
+  } else {
+    const current = await sb.from('posts').select('*').eq('event_id', (admin as any).event_id || getEventIdFromRequest(req)).eq('id', id).single()
+    if (current.error) return jsonError(current.error.message, 500)
+    data = current.data
+  }
   if ('crop_position' in (body as any) || 'crop_focus_x' in (body as any) || 'crop_focus_y' in (body as any)) {
     const cropPatch: Record<string, any> = {}
     if ('crop_position' in (body as any)) cropPatch.crop_position = (body as any).crop_position
