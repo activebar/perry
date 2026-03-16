@@ -16,10 +16,12 @@ type Post = {
   video_url: string | null
   link_url: string | null
   media_path?: string | null
+  crop_position?: string | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
   status: string
   reaction_counts: Record<string, number>
   my_reactions: string[]
-  can_reposition?: boolean
 }
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
