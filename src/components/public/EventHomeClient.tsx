@@ -146,16 +146,6 @@ function HomeLinkMeta({
   )
 }
 
-
-function objectPositionFromCrop(item: any) {
-  const x = typeof item?.crop_focus_x === 'number' ? Math.max(0, Math.min(1, item.crop_focus_x)) : null
-  const y = typeof item?.crop_focus_y === 'number' ? Math.max(0, Math.min(1, item.crop_focus_y)) : null
-  if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
-  if (item?.crop_position === 'top') return '50% 12%'
-  if (item?.crop_position === 'bottom') return '50% 82%'
-  return '50% 50%'
-}
-
 export default function EventHomeClient({ eventId }: { eventId: string }) {
   const router = useRouter()
 
@@ -580,7 +570,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                 </div>
                               ) : null}
 
-                              {p.media_url ? (
+                              {(p.video_url || p.media_url) ? (
                                 <div className="flex justify-center">
                                   <button
                                     type="button"
@@ -589,14 +579,24 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                       width: Math.max(120, Math.min(260, mediaSize)),
                                       height: Math.max(120, Math.min(260, mediaSize)),
                                     }}
-                                    onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
+                                    onClick={() => setLightbox({ url: (p.video_url || p.media_url) as string, isVideo: !!p.video_url })}
                                   >
-                                    <img
-                                      src={p.media_url}
-                                      alt=""
-                                      className="absolute inset-0 h-full w-full object-cover"
-                                      style={{ objectPosition: objectPositionFromCrop(p) }}
-                                    />
+                                    {p.video_url ? (
+                                      <video
+                                        src={p.video_url}
+                                        className="absolute inset-0 h-full w-full object-cover"
+                                        style={{ objectPosition: objectPositionFromCrop(p) }}
+                                        muted
+                                        playsInline
+                                      />
+                                    ) : (
+                                      <img
+                                        src={p.media_url as string}
+                                        alt=""
+                                        className="absolute inset-0 h-full w-full object-cover"
+                                        style={{ objectPosition: objectPositionFromCrop(p) }}
+                                      />
+                                    )}
                                   </button>
                                 </div>
                               ) : null}
