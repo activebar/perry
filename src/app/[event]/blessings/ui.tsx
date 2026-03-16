@@ -400,6 +400,46 @@ export default function BlessingsClient({
   }
 }
 
+
+async function saveFocusOnly() {
+  if (!focusDraft?.id) return
+  setFocusBusy(true)
+  setErr(null)
+  setMsg(null)
+  try {
+    const res = await jfetch(`/api/posts${eventQuery}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        id: focusDraft.id,
+        crop_position: focusDraft.crop_position || null,
+        crop_focus_x: focusDraft.crop_focus_x ?? null,
+        crop_focus_y: focusDraft.crop_focus_y ?? null,
+      }),
+    })
+
+    setItems((prev: any[]) =>
+      prev.map((p) =>
+        p.id === focusDraft.id
+          ? {
+              ...p,
+              ...(res?.post || {}),
+              crop_position: focusDraft.crop_position || null,
+              crop_focus_x: focusDraft.crop_focus_x ?? null,
+              crop_focus_y: focusDraft.crop_focus_y ?? null,
+            }
+          : p
+      )
+    )
+
+    setMsg('✅ המיקוד נשמר')
+    setFocusDraft(null)
+  } catch (e: any) {
+    setErr(friendlyError(e?.message || 'שגיאה בשמירת מיקוד'))
+  } finally {
+    setFocusBusy(false)
+  }
+}
+
 async function saveEdit() {
   if (!editDraft?.id) return
   setEditErr(null)
@@ -435,7 +475,11 @@ async function saveEdit() {
       text: editDraft.text || null,
       link_url: editDraft.link_url || null,
       media_path,
-      media_url
+      media_url,
+      video_url: editDraft.video_url || null,
+      crop_position: editDraft.crop_position || null,
+      crop_focus_x: editDraft.crop_focus_x ?? null,
+      crop_focus_y: editDraft.crop_focus_y ?? null,
     }
 
     const res = await jfetch(`/api/posts${eventQuery}`, { method: 'PUT', body: JSON.stringify(patch) })
