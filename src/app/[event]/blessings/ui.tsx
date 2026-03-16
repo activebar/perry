@@ -50,7 +50,29 @@ function isVideoFile(f: File) {
   const name = String(f.name || '').toLowerCase()
   return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
 }
+function objectPositionFromCrop(item: {
+  crop_position?: string | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
+}) {
+  const x =
+    typeof item.crop_focus_x === 'number'
+      ? Math.max(0, Math.min(1, item.crop_focus_x))
+      : null
 
+  const y =
+    typeof item.crop_focus_y === 'number'
+      ? Math.max(0, Math.min(1, item.crop_focus_y))
+      : null
+
+  if (x != null && y != null) {
+    return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
+  }
+
+  if (item.crop_position === 'top') return '50% 12%'
+  if (item.crop_position === 'bottom') return '50% 82%'
+  return '50% 50%'
+}
 async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
   // @ts-ignore
   if (typeof createImageBitmap === 'function') return await createImageBitmap(file)
