@@ -25,7 +25,7 @@ type Post = {
   my_reactions: string[]
 }
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
-const MAX_VIDEO_UPLOAD_BYTES = 9 * 1024 * 1024
+const MAX_VIDEO_UPLOAD_BYTES = 4.5 * 1024 * 1024
 
 async function jfetch(url: string, init?: RequestInit) {
   const res = await fetch(url, {
@@ -81,7 +81,7 @@ function objectPositionFromCrop(item: {
 function validateSelectedMedia(file: File) {
   if (!file) return ''
   if (isVideoFile(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
-    return 'סרטון גדול מדי להעלאה דרך השרת כרגע. ניתן להעלות עד כ-9MB. לסרטונים גדולים יותר נעבור ל-direct upload.'
+    return 'סרטון גדול מדי להעלאה דרך השרת. כרגע ניתן להעלות סרטון עד כ-4.5MB.'
   }
   return ''
 }
@@ -459,6 +459,7 @@ async function saveEdit() {
   try {
     let media_path = editDraft.media_path || null
     let media_url = editDraft.media_url || null
+    let video_url = editDraft.video_url || null
 
     // remove media (explicit)
     if (editRemoveMedia) {
@@ -843,6 +844,17 @@ async function saveEdit() {
             y={focusDraft.crop_focus_y ?? 0.5}
             onChange={(point) => setFocusDraft((d: any) => ({ ...d, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' }))}
           />
+          <div className="rounded-xl border border-zinc-200 p-3">
+            <p className="mb-2 text-sm text-zinc-600">תצוגה מקדימה כמו באתר</p>
+            <div className="mx-auto aspect-square w-full max-w-[280px] overflow-hidden rounded-2xl bg-zinc-100">
+              <img
+                src={focusDraft.media_url}
+                alt=""
+                className="h-full w-full object-cover"
+                style={{ objectPosition: objectPositionFromCrop(focusDraft) }}
+              />
+            </div>
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setFocusDraft(null)}>ביטול</Button>
             <Button onClick={saveFocusOnly} disabled={focusBusy}>{focusBusy ? 'שומר...' : 'שמור מיקוד'}</Button>
