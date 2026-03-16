@@ -16,21 +16,7 @@ function isImageFile(file: File) {
   return (file.type || '').startsWith('image/')
 }
 function isVideoFile(file: File) {
-  const type = String(file.type || '').toLowerCase()
-  const name = String(file.name || '').toLowerCase()
-  return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
-}
-
-function clamp01(v: FormDataEntryValue | null) {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return null
-  return Math.max(0, Math.min(1, n))
-}
-
-function normalizeCropPosition(v: FormDataEntryValue | null): 'top' | 'center' | 'bottom' {
-  const s = String(v || '').trim().toLowerCase()
-  if (s === 'top' || s === 'bottom') return s
-  return 'center'
+  return (file.type || '').startsWith('video/')
 }
 
 /**
@@ -134,9 +120,7 @@ export async function POST(req: NextRequest) {
     // Image metadata (for smart cropping defaults)
     let width: number | null = null
     let height: number | null = null
-    let crop_position: 'top' | 'center' | 'bottom' = 'center'
-    let crop_focus_x: number | null = null
-    let crop_focus_y: number | null = null
+    let crop_position: 'top' | 'center' = 'center'
 
     const isImage = isImageFile(file)
     const isVideo = isVideoFile(file)
@@ -146,25 +130,11 @@ export async function POST(req: NextRequest) {
         const meta = await sharp(bytes).metadata()
         width = typeof meta.width === 'number' ? meta.width : null
         height = typeof meta.height === 'number' ? meta.height : null
-        if (width && height && width < height) {
-          crop_position = 'top'
-          crop_focus_x = 0.5
-          crop_focus_y = 0.18
-        } else {
-          crop_focus_x = 0.5
-          crop_focus_y = 0.5
-        }
+        if (width && height && width < height) crop_position = 'top'
       } catch {
         // ignore
       }
     }
-
-    const providedCropPosition = fd.get('crop_position')
-    const providedFocusX = clamp01(fd.get('crop_focus_x'))
-    const providedFocusY = clamp01(fd.get('crop_focus_y'))
-    if (providedCropPosition != null && String(providedCropPosition).trim()) crop_position = normalizeCropPosition(providedCropPosition)
-    if (providedFocusX != null) crop_focus_x = providedFocusX
-    if (providedFocusY != null) crop_focus_y = providedFocusY
 
     // Folder mapping:
     // DB kind stays 'blessing', but storage folder should be 'blessings'
@@ -177,10 +147,7 @@ export async function POST(req: NextRequest) {
 
     // Force JPG for images (as requested)
     const baseName = `${Date.now()}_${randomUUID()}`
-    const originalName = String(file.name || '').trim()
-    const extMatch = originalName.match(/\.([a-zA-Z0-9]+)$/)
-    const safeExt = extMatch ? `.${extMatch[1].toLowerCase()}` : (isVideo ? '.mp4' : '')
-    const path = isImage ? `${folder}/${baseName}.jpg` : `${folder}/${baseName}${safeExt}`
+    const path = isImage ? `${folder}/${baseName}.jpg` : `${folder}/${baseName}`
 
     let uploadBuf: Uint8Array | Buffer = bytes
     let contentType = file.type || 'application/octet-stream'
@@ -222,10 +189,8 @@ export async function POST(req: NextRequest) {
     const device_id = cookies().get('device_id')?.value || String(fd.get('device_id') || '').trim() || null
     const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
-    const dbKind = isVideo && kind === 'gallery' ? 'gallery_video' : (isVideo && kind === 'blessing' ? 'blessing_video' : kind)
-
     const { data: inserted, error: ierr } = await sb.from('media_items').insert({
-      kind: dbKind,
+      kind,
       event_id,
       gallery_id,
       url: publicUrl,
@@ -233,8 +198,6 @@ export async function POST(req: NextRequest) {
       width,
       height,
       crop_position: isImage ? crop_position : 'center',
-      crop_focus_x,
-      crop_focus_y,
       storage_provider: 'supabase',
       external_url: null,
       storage_path: path,
@@ -243,11 +206,11 @@ export async function POST(req: NextRequest) {
       source: kind === 'gallery' ? 'gallery' : 'admin',
       uploaded_by: kind === 'gallery' ? 'guest' : 'admin',
       uploader_device_id: device_id
-    } as any).select('id,editable_until,crop_position,crop_focus_x,crop_focus_y').single()
+    } as any).select('id,editable_until').single()
 
     if (ierr) return jsonError(ierr.message, 500)
 
-    return NextResponse.json({ ok: true, id: (inserted as any)?.id || null, path, publicUrl, thumbUrl, kind: dbKind, editable_until: (inserted as any)?.editable_until || editable_until, is_approved, autoApproveUntil, crop_position: (inserted as any)?.crop_position || crop_position, crop_focus_x: (inserted as any)?.crop_focus_x ?? crop_focus_x, crop_focus_y: (inserted as any)?.crop_focus_y ?? crop_focus_y })
+    return NextResponse.json({ ok: true, id: (inserted as any)?.id || null, path, publicUrl, thumbUrl, editable_until: (inserted as any)?.editable_until || editable_until, is_approved, autoApproveUntil })
   } catch (e: any) {
     return jsonError(e?.message || 'error', 500)
   }
