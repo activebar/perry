@@ -459,6 +459,7 @@ async function saveEdit() {
   try {
     let media_path = editDraft.media_path || null
     let media_url = editDraft.media_url || null
+    let video_url = editDraft.video_url || null
 
     // remove media (explicit)
     if (editRemoveMedia) {
@@ -496,7 +497,7 @@ async function saveEdit() {
       link_url: editDraft.link_url || null,
       media_path,
       media_url,
-      video_url: editDraft.video_url || null,
+      video_url,
       crop_position: editDraft.crop_position || null,
       crop_focus_x: editDraft.crop_focus_x ?? null,
       crop_focus_y: editDraft.crop_focus_y ?? null,
