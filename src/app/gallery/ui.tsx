@@ -30,6 +30,7 @@ type PendingAsset = {
 
 const EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '😮']
 const DIRECT_DOWNLOAD_LIMIT = 8
+const MAX_VIDEO_UPLOAD_BYTES = 4.5 * 1024 * 1024
 
 function getOrCreateDeviceId() {
   if (typeof window === 'undefined') return ''
@@ -79,6 +80,21 @@ function objectPositionFromCrop(item: {
   if (item.crop_position === 'top') return '50% 12%'
   if (item.crop_position === 'bottom') return '50% 82%'
   return '50% 50%'
+}
+
+
+function isVideoFileFromInput(file: File) {
+  const type = String(file.type || '').toLowerCase()
+  const name = String(file.name || '').toLowerCase()
+  return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
+}
+
+function validateSelectedMedia(file: File) {
+  if (!file) return ''
+  if (isVideoFileFromInput(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
+    return 'סרטון גדול מדי להעלאה דרך השרת. כרגע ניתן להעלות סרטון עד כ-4.5MB.'
+  }
+  return ''
 }
 
 async function fileToCompressedBlob(file: File): Promise<Blob> {
@@ -454,7 +470,7 @@ export default function GalleryClient({
     if (!asset.file) return
 
     const fd = new FormData()
-    const isVideo = asset.file.type.startsWith('video/')
+    const isVideo = isVideoFileFromInput(asset.file)
 
     if (isVideo) {
       fd.set('file', asset.file)
@@ -499,7 +515,9 @@ export default function GalleryClient({
 
       for (let i = 0; i < list.length; i++) {
         const file = list[i]
-        const isVideo = file.type.startsWith('video/')
+        const mediaError = validateSelectedMedia(file)
+        if (mediaError) throw new Error(mediaError)
+        const isVideo = isVideoFileFromInput(file)
         const auto = isVideo
           ? { crop_position: 'center' as const, crop_focus_x: 0.5, crop_focus_y: 0.5 }
           : await detectAutoFocus(file)
@@ -558,7 +576,7 @@ export default function GalleryClient({
     }
 
     const first = list[0]
-    const isVideo = first.type.startsWith('video/')
+    const isVideo = isVideoFileFromInput(first)
 
     if (isVideo) {
       await uploadBatch([first], source)
@@ -660,7 +678,7 @@ export default function GalleryClient({
       setEditingItemId(item.id)
       setMsg('מחליף קובץ...')
 
-      const isVideo = file.type.startsWith('video/')
+      const isVideo = isVideoFileFromInput(file)
       let crop_position: 'top' | 'center' | 'bottom' = 'center'
       let crop_focus_x: number | null = 0.5
       let crop_focus_y: number | null = 0.5
@@ -1027,7 +1045,7 @@ export default function GalleryClient({
             </div>
           ) : null}
 
-          {msg ? <div className="mt-4 text-sm text-zinc-600">{msg}</div> : null}
+          {msg ? <div className={`mt-4 text-sm font-medium ${(msg.includes('שגיאה') || msg.includes('גדול מדי')) ? 'text-red-600' : 'text-emerald-600'}`}>{msg}</div> : null}
         </div>
 
         <input
