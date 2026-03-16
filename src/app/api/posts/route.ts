@@ -174,11 +174,13 @@ export async function PUT(req: Request) {
     if (perr) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (post.device_id !== device_id) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
-    // allow edit/delete only within 1 hour from creation
+    const cropOnly = !('author_name' in body) && !('text' in body) && !('link_url' in body) && !('media_url' in body) && !('media_path' in body) && !('video_url' in body) && ('crop_position' in body || 'crop_focus_x' in body || 'crop_focus_y' in body)
+
+    // allow edit/delete only within 1 hour from creation, except focus-only updates
     const createdAt = new Date(post.created_at)
     const now = new Date()
     const oneHour = 60 * 60 * 1000
-    if (now.getTime() - createdAt.getTime() > oneHour) {
+    if (!cropOnly && now.getTime() - createdAt.getTime() > oneHour) {
       return NextResponse.json({ error: 'אפשר לערוך/למחוק רק בשעה הראשונה.' }, { status: 403 })
     }
 

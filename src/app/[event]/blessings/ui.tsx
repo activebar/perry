@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button, Card, Container, Input, Textarea } from '@/components/ui'
 import ShareModal from '@/components/share/ShareModal'
-import CropEditor from '@/components/CropEditor'
 import { buildShareMessage } from '@/lib/share/buildShareMessage'
 
 type Post = {
@@ -17,12 +16,10 @@ type Post = {
   video_url: string | null
   link_url: string | null
   media_path?: string | null
-  crop_position?: string | null
-  crop_focus_x?: number | null
-  crop_focus_y?: number | null
   status: string
   reaction_counts: Record<string, number>
   my_reactions: string[]
+  can_reposition?: boolean
 }
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
@@ -49,16 +46,9 @@ function isVideo(url: string) {
 }
 
 function isVideoFile(f: File) {
-  return (f.type || '').startsWith('video/')
-}
-
-function objectPositionFromCrop(item: { crop_position?: string | null; crop_focus_x?: number | null; crop_focus_y?: number | null }) {
-  const x = typeof item.crop_focus_x === 'number' ? Math.max(0, Math.min(1, item.crop_focus_x)) : null
-  const y = typeof item.crop_focus_y === 'number' ? Math.max(0, Math.min(1, item.crop_focus_y)) : null
-  if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
-  if (item.crop_position === 'top') return '50% 12%'
-  if (item.crop_position === 'bottom') return '50% 82%'
-  return '50% 50%'
+  const type = String(f.type || '').toLowerCase()
+  const name = String(f.name || '').toLowerCase()
+  return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
 }
 
 async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
@@ -215,6 +205,9 @@ export default function BlessingsClient({
   function canDeleteMine(p: any) {
     return !!p?.can_delete
   }
+  function canRepositionMine(p: any) {
+    return !!p?.can_reposition
+  }
   function secondsLeft(p: any) {
     const until = p?.editable_until
     if (!until) return 0
@@ -238,7 +231,8 @@ export default function BlessingsClient({
   const editCameraPhotoRef = useRef<HTMLInputElement | null>(null)
   const editCameraVideoRef = useRef<HTMLInputElement | null>(null)
   const [editBusy, setEditBusy] = useState(false)
-
+  const [focusDraft, setFocusDraft] = useState<any | null>(null)
+  const [focusBusy, setFocusBusy] = useState(false)
 
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -321,7 +315,7 @@ export default function BlessingsClient({
       setLinkTouched(false)
       setFile(null)
 
-      setMsg(res.status === 'pending' ? 'ברכות ממתינות לאישור מנהל.' : '✅ הברכה נשמרה בהצלחה')
+      setMsg(res.status === 'pending' ? '✅ נשלח לאישור מנהל' : '✅ נשמר!')
     } catch (e: any) {
       setErr(friendlyError(e?.message || 'שגיאה'))
     } finally {
@@ -388,13 +382,11 @@ async function saveEdit() {
   try {
     let media_path = editDraft.media_path || null
     let media_url = editDraft.media_url || null
-    let video_url = editDraft.video_url || null
 
     // remove media (explicit)
     if (editRemoveMedia) {
       media_path = null
       media_url = null
-      video_url = null
     }
 
     // replace media (upload new)
@@ -409,13 +401,7 @@ async function saveEdit() {
       if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
       media_path = upJson.path
-      if (isVideoFile(editFile)) {
-        video_url = upJson.publicUrl
-        media_url = null
-      } else {
-        media_url = upJson.publicUrl
-        video_url = null
-      }
+      media_url = upJson.publicUrl
     }
 
     const patch = {
@@ -424,11 +410,7 @@ async function saveEdit() {
       text: editDraft.text || null,
       link_url: editDraft.link_url || null,
       media_path,
-      media_url,
-      video_url,
-      crop_position: editDraft.crop_position || null,
-      crop_focus_x: editDraft.crop_focus_x ?? null,
-      crop_focus_y: editDraft.crop_focus_y ?? null,
+      media_url
     }
 
     const res = await jfetch(`/api/posts${eventQuery}`, { method: 'PUT', body: JSON.stringify(patch) })
@@ -586,8 +568,8 @@ async function saveEdit() {
               </Button>
             </div>
 
-            {err && <p className="text-sm font-medium text-red-600">{err}</p>}
-            {msg && <p className="text-sm font-medium text-emerald-600">{msg}</p>}
+            {err && <p className="text-sm text-red-600">{err}</p>}
+            {msg && <p className="text-sm text-emerald-600">{msg}</p>}
           </div>
         </Card>
 
@@ -624,7 +606,7 @@ async function saveEdit() {
                         aria-label="פתח מדיה"
                       >
                         {video ? (
-                          <video src={mediaUrl} className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} muted playsInline />
+                          <video src={mediaUrl} className="h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} muted playsInline />
                         ) : (
                           <img src={mediaUrl} alt="" className="h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
                         )}
@@ -701,17 +683,20 @@ async function saveEdit() {
                 </div>
 
                 {/* edit/delete (mine, within 1h) */}
-                {canEditMine(p) && (
+                {(canEditMine(p) || canRepositionMine(p)) && (
                   <div className="mt-3 flex flex-wrap items-center justify-end gap-2" dir="rtl">
-                    <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeft(p))}</span>
+                    {canEditMine(p) ? <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeft(p))}</span> : null}
+                    {canRepositionMine(p) && p.media_url && !p.video_url ? <Button variant="ghost" onClick={() => setFocusDraft({ ...p })}>🎯 מיקוד</Button> : null}
                     {canDeleteMine(p) && (
                       <Button variant="ghost" onClick={() => deleteMine(p.id)}>
                         מחק (שעה)
                       </Button>
                     )}
-                    <Button variant="ghost" onClick={() => editMine(p.id)}>
-                      ערוך (שעה)
-                    </Button>
+                    {canEditMine(p) && (
+                      <Button variant="ghost" onClick={() => editMine(p.id)}>
+                        ערוך (שעה)
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -756,6 +741,29 @@ async function saveEdit() {
           copyLabel={String(settings?.qr_btn_copy_label || 'העתק קישור')}
         />
 
+
+{focusDraft && (
+  <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setFocusDraft(null)}>
+    <div className="mx-auto max-w-xl" onClick={e => e.stopPropagation()}>
+      <Card>
+        <h3 className="font-semibold text-right">🎯 מיקוד תמונה</h3>
+        <div className="mt-3 grid gap-3 text-right">
+          <CropEditor
+            src={focusDraft.media_url}
+            x={focusDraft.crop_focus_x ?? 0.5}
+            y={focusDraft.crop_focus_y ?? 0.5}
+            onChange={(point) => setFocusDraft((d: any) => ({ ...d, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' }))}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setFocusDraft(null)}>ביטול</Button>
+            <Button onClick={saveFocusOnly} disabled={focusBusy}>{focusBusy ? 'שומר...' : 'שמור מיקוד'}</Button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  </div>
+)}
+
 {/* EDIT MODAL */}
 {editOpen && editDraft && (
   <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setEditOpen(false)}>
@@ -787,7 +795,7 @@ async function saveEdit() {
             {editDraft.media_url && !editRemoveMedia && !editFile && (
               <div className="mt-2 flex items-center justify-between gap-3">
                 <div className="h-16 w-16 overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
-                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover object-top" style={{ objectPosition: 'top' }} />
+                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(editDraft) }} />
                 </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input
