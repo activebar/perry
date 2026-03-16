@@ -25,6 +25,7 @@ type Post = {
   my_reactions: string[]
 }
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
+const MAX_VIDEO_UPLOAD_BYTES = 4.5 * 1024 * 1024
 
 async function jfetch(url: string, init?: RequestInit) {
   const res = await fetch(url, {
@@ -76,6 +77,15 @@ function objectPositionFromCrop(item: {
   if (item.crop_position === 'bottom') return '50% 82%'
   return '50% 50%'
 }
+
+function validateSelectedMedia(file: File) {
+  if (!file) return ''
+  if (isVideoFile(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
+    return 'סרטון גדול מדי להעלאה דרך השרת. כרגע ניתן להעלות סרטון עד כ-4.5MB.'
+  }
+  return ''
+}
+
 async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
   // @ts-ignore
   if (typeof createImageBitmap === 'function') return await createImageBitmap(file)
@@ -298,6 +308,8 @@ export default function BlessingsClient({
       let video_url: string | null = null
 
       if (file) {
+        const mediaError = validateSelectedMedia(file)
+        if (mediaError) throw new Error(mediaError)
         const fd = new FormData()
 
         // Compress images client-side (2MP) to keep uploads fast & cheap (Supabase free tier)
@@ -456,6 +468,8 @@ async function saveEdit() {
 
     // replace media (upload new)
     if (editFile) {
+      const mediaError = validateSelectedMedia(editFile)
+      if (mediaError) throw new Error(mediaError)
       const fd = new FormData()
       fd.set('file', editFile)
       fd.set('kind', 'blessing')
@@ -466,7 +480,13 @@ async function saveEdit() {
       if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
 
       media_path = upJson.path
-      media_url = upJson.publicUrl
+      if (isVideoFile(editFile)) {
+        video_url = upJson.publicUrl
+        media_url = null
+      } else {
+        media_url = upJson.publicUrl
+        video_url = null
+      }
     }
 
     const patch = {
@@ -823,6 +843,17 @@ async function saveEdit() {
             y={focusDraft.crop_focus_y ?? 0.5}
             onChange={(point) => setFocusDraft((d: any) => ({ ...d, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' }))}
           />
+          <div className="rounded-xl border border-zinc-200 p-3">
+            <p className="mb-2 text-sm text-zinc-600">תצוגה מקדימה כמו באתר</p>
+            <div className="mx-auto aspect-square w-full max-w-[280px] overflow-hidden rounded-2xl bg-zinc-100">
+              <img
+                src={focusDraft.media_url}
+                alt=""
+                className="h-full w-full object-cover"
+                style={{ objectPosition: objectPositionFromCrop(focusDraft) }}
+              />
+            </div>
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setFocusDraft(null)}>ביטול</Button>
             <Button onClick={saveFocusOnly} disabled={focusBusy}>{focusBusy ? 'שומר...' : 'שמור מיקוד'}</Button>
