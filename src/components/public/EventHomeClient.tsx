@@ -146,6 +146,16 @@ function HomeLinkMeta({
   )
 }
 
+
+function objectPositionFromCrop(item: any) {
+  const x = typeof item?.crop_focus_x === 'number' ? Math.max(0, Math.min(1, item.crop_focus_x)) : null
+  const y = typeof item?.crop_focus_y === 'number' ? Math.max(0, Math.min(1, item.crop_focus_y)) : null
+  if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
+  if (item?.crop_position === 'top') return '50% 12%'
+  if (item?.crop_position === 'bottom') return '50% 82%'
+  return '50% 50%'
+}
+
 export default function EventHomeClient({ eventId }: { eventId: string }) {
   const router = useRouter()
 
@@ -526,10 +536,8 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                   <img
                                     src={url}
                                     alt=""
-                                    className={
-                                      'absolute inset-0 h-full w-full object-cover ' +
-                                      (it.crop_position === 'center' ? 'object-center' : 'object-top')
-                                    }
+                                    className="absolute inset-0 h-full w-full object-cover"
+                                    style={{ objectPosition: objectPositionFromCrop(it) }}
                                   />
                                 ) : null}
                               </div>
@@ -583,7 +591,12 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                     }}
                                     onClick={() => setLightbox({ url: p.media_url, isVideo: false })}
                                   >
-                                    <img src={p.media_url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
+                                    <img
+                                      src={p.media_url}
+                                      alt=""
+                                      className="absolute inset-0 h-full w-full object-cover"
+                                      style={{ objectPosition: objectPositionFromCrop(p) }}
+                                    />
                                   </button>
                                 </div>
                               ) : null}
