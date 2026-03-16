@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button, Card, Container, Input, Textarea } from '@/components/ui'
 import ShareModal from '@/components/share/ShareModal'
+import CropEditor from '@/components/CropEditor'
 import { buildShareMessage } from '@/lib/share/buildShareMessage'
 
 type Post = {
