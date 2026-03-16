@@ -211,8 +211,12 @@ export async function PUT(req: Request) {
       }
     }
 
-    const { data, error } = await srv.from('posts').update(patch).eq('id', id).select('*').single()
-    if (error) throw error
+    let data: any = post
+    if (Object.keys(patch).length > 0) {
+      const updated = await srv.from('posts').update(patch).eq('id', id).select('*').single()
+      if (updated.error) throw updated.error
+      data = updated.data
+    }
 
     // If media was cleared/replaced, delete the previous blob + media_items (best-effort)
     const incomingMediaUrl = 'media_url' in patch ? patch.media_url : undefined
