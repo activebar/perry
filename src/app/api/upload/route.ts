@@ -16,7 +16,9 @@ function isImageFile(file: File) {
   return (file.type || '').startsWith('image/')
 }
 function isVideoFile(file: File) {
-  return (file.type || '').startsWith('video/')
+  const type = String(file.type || '').toLowerCase()
+  const name = String(file.name || '').toLowerCase()
+  return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
 }
 
 /**
@@ -147,7 +149,10 @@ export async function POST(req: NextRequest) {
 
     // Force JPG for images (as requested)
     const baseName = `${Date.now()}_${randomUUID()}`
-    const path = isImage ? `${folder}/${baseName}.jpg` : `${folder}/${baseName}`
+    const originalName = String(file.name || '').trim()
+    const extMatch = originalName.match(/\.([a-zA-Z0-9]+)$/)
+    const safeExt = extMatch ? `.${extMatch[1].toLowerCase()}` : (isVideo ? '.mp4' : '')
+    const path = isImage ? `${folder}/${baseName}.jpg` : `${folder}/${baseName}${safeExt}`
 
     let uploadBuf: Uint8Array | Buffer = bytes
     let contentType = file.type || 'application/octet-stream'
