@@ -216,17 +216,17 @@ function objectPositionFromCrop(item: any) {
 function MediaBox({
   media_url,
   video_url,
-  size,
   crop_position,
   crop_focus_x,
-  crop_focus_y
+  crop_focus_y,
+  size
 }: {
   media_url?: string | null
   video_url?: string | null
-  size: number
   crop_position?: string | null
   crop_focus_x?: number | null
   crop_focus_y?: number | null
+  size: number
 }) {
   const url = (video_url || media_url || '') as string
   if (!url) return null
@@ -243,9 +243,20 @@ function MediaBox({
       title="פתח מדיה"
     >
       {isVid ? (
-        <video src={url} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop({ crop_position, crop_focus_x, crop_focus_y }) }} muted playsInline />
+        <video
+          src={url}
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: objectPositionFromCrop({ crop_position, crop_focus_x, crop_focus_y }) }}
+          muted
+          playsInline
+        />
       ) : (
-        <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop({ crop_position, crop_focus_x, crop_focus_y }) }} />
+        <img
+          src={url}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: objectPositionFromCrop({ crop_position, crop_focus_x, crop_focus_y }) }}
+        />
       )}
     </a>
   )
@@ -2323,7 +2334,7 @@ export default function AdminApp({
 
                 {(p.media_url || p.video_url) ? (
                   <div className="mt-3 flex justify-center">
-                    <MediaBox media_url={p.media_url} video_url={p.video_url} size={safeBSize} crop_position={p.crop_position} crop_focus_x={p.crop_focus_x} crop_focus_y={p.crop_focus_y} />
+                    <MediaBox media_url={p.media_url} video_url={p.video_url} crop_position={p.crop_position} crop_focus_x={p.crop_focus_x} crop_focus_y={p.crop_focus_y} size={safeBSize} />
                   </div>
                 ) : null}
 
@@ -2361,7 +2372,7 @@ export default function AdminApp({
 
                   {(b.media_url || b.video_url) ? (
                     <div className="mt-3 flex justify-center">
-                      <MediaBox media_url={b.media_url} video_url={b.video_url} size={safeBSize} crop_position={b.crop_position} crop_focus_x={b.crop_focus_x} crop_focus_y={b.crop_focus_y} />
+                      <MediaBox media_url={b.media_url} video_url={b.video_url} crop_position={b.crop_position} crop_focus_x={b.crop_focus_x} crop_focus_y={b.crop_focus_y} size={safeBSize} />
                     </div>
                   ) : null}
 
@@ -2400,7 +2411,7 @@ export default function AdminApp({
                     <p className="text-sm font-medium">מדיה</p>
 
                     <div className="flex items-center justify-between gap-3">
-                      <MediaBox media_url={editBlessing.media_url} video_url={editBlessing.video_url} size={safeBSize} crop_position={editBlessing.crop_position} crop_focus_x={editBlessing.crop_focus_x} crop_focus_y={editBlessing.crop_focus_y} />
+                      <MediaBox media_url={editBlessing.media_url} video_url={editBlessing.video_url} crop_position={editBlessing.crop_position} crop_focus_x={editBlessing.crop_focus_x} crop_focus_y={editBlessing.crop_focus_y} size={safeBSize} />
                       {(editBlessing.media_url || editBlessing.video_url) && (
                         <a className="text-sm underline" href={(editBlessing.video_url || editBlessing.media_url) as string} target="_blank" rel="noreferrer">
                           פתח מדיה נוכחית
@@ -2674,7 +2685,7 @@ export default function AdminApp({
                       </div>
                     </div>
 
-                    {galleryMsg && <p className={`text-sm text-right ${galleryMsg.includes('✅') ? 'text-emerald-600' : 'text-red-600'}`}>{galleryMsg}</p>}
+                    {galleryMsg && <p className="text-sm text-zinc-700 text-right">{galleryMsg}</p>}
 
                     <div className="flex items-center justify-between">
                       <Button variant="ghost" onClick={() => loadPendingMedia(g.id)} disabled={galleryBusy}>
@@ -2693,7 +2704,7 @@ export default function AdminApp({
                             onClick={() => p.url && setLightbox(p.url)}
                             type="button"
                           >
-                            {String(p.kind || '').includes('video') || isVideoUrl(p.url) ? (<video src={p.url} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} muted playsInline />) : (<img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />)}
+                            <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
                           </button>
 
                           <div className="p-3 flex gap-2">
@@ -2783,7 +2794,7 @@ export default function AdminApp({
                               }}
                               type="button"
                             >
-                              {String(p.kind || '').includes('video') || isVideoUrl(p.url) ? (<video src={p.url} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} muted playsInline />) : (<img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />)}
+                              <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
 
                               {selectMode ? (
                                 <div className="absolute left-2 top-2">
@@ -2797,9 +2808,11 @@ export default function AdminApp({
                               ) : null}
                             </button>
 
-                            <div className="p-3 flex items-center justify-end gap-2">
-                              <Button variant="ghost" title="מיקוד" onClick={() => setFocusTarget({ type: 'gallery', ...p })}>🎯</Button>
-                              <Button variant="ghost" title="מחק" onClick={() => deleteMediaItem(p.id)}>🗑️</Button>
+                            <div className="p-3 flex gap-2 justify-end">
+                              <Button variant="ghost" onClick={() => setFocusTarget({ type: 'gallery', ...p })}>🎯 מיקוד</Button>
+                              <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
+                                מחק
+                              </Button>
                             </div>
                           </div>
                         ))}
