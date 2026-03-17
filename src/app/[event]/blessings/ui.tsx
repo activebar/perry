@@ -1,3 +1,8 @@
+// Path: src/app/[event]/blessings/ui.tsx
+// Version: V24.4
+// Updated: 2026-03-18 00:55
+// Note: blessings video badge + duration badge on video cards
+
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -85,6 +90,65 @@ function validateSelectedMedia(file: File) {
     return 'סרטון גדול מדי. כרגע ניתן לנסות direct upload לוידאו. אם ההעלאה נכשלה, נסה שוב או הקטן את הקובץ.'
   }
   return ''
+}
+
+
+function formatVideoTime(seconds?: number | null) {
+  const s = Math.max(0, Math.floor(Number(seconds || 0)))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${String(r).padStart(2, '0')}`
+}
+
+function VideoBadge({
+  src,
+  duration,
+}: {
+  src?: string | null
+  duration?: number | null
+}) {
+  const [seconds, setSeconds] = useState<number | null>(
+    typeof duration === 'number' && duration > 0 ? duration : null
+  )
+
+  useEffect(() => {
+    if (typeof duration === 'number' && duration > 0) {
+      setSeconds(duration)
+      return
+    }
+    if (!src) {
+      setSeconds(null)
+      return
+    }
+
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.src = src
+
+    const onLoaded = () => {
+      const d = Number(video.duration || 0)
+      if (Number.isFinite(d) && d > 0) setSeconds(d)
+    }
+
+    video.addEventListener('loadedmetadata', onLoaded)
+    return () => {
+      video.removeEventListener('loadedmetadata', onLoaded)
+      video.src = ''
+    }
+  }, [src, duration])
+
+  return (
+    <>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/45 text-white text-2xl shadow">
+          ▶
+        </div>
+      </div>
+      <div className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs font-medium text-white">
+        {typeof seconds === 'number' && seconds > 0 ? formatVideoTime(seconds) : 'וידאו'}
+      </div>
+    </>
+  )
 }
 
 async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
@@ -726,7 +790,17 @@ async function saveEdit() {
                         aria-label="פתח מדיה"
                       >
                         {video ? (
-                          <video src={mediaUrl} className="h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} muted playsInline />
+                          <>
+                            <video
+                              src={mediaUrl}
+                              className="h-full w-full object-cover"
+                              style={{ objectPosition: objectPositionFromCrop(p) }}
+                              muted
+                              playsInline
+                              preload="metadata"
+                            />
+                            <VideoBadge src={mediaUrl} duration={(p as any).video_duration_sec ?? (p as any).duration_sec ?? 0} />
+                          </>
                         ) : (
                           <img src={mediaUrl} alt="" className="h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
                         )}
@@ -1095,4 +1169,4 @@ function LinkPreview({ url }: { url?: string }) {
       </div>
     </div>
   )
-}
+                                                    }
