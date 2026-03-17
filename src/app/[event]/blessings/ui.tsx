@@ -872,12 +872,20 @@ async function saveEdit() {
             src={focusDraft.media_url}
             x={focusDraft.crop_focus_x ?? 0.5}
             y={focusDraft.crop_focus_y ?? 0.5}
-            onChange={(point) => setFocusDraft((d: any) => ({ ...d, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' }))}
+            onChange={(point) =>
+              setFocusDraft((d: any) => ({
+                ...d,
+                crop_focus_x: point.x,
+                crop_focus_y: point.y,
+                crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center',
+              }))
+            }
           />
-</div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setFocusDraft(null)}>ביטול</Button>
-            <Button onClick={saveFocusOnly} disabled={focusBusy}>{focusBusy ? 'שומר...' : 'שמור מיקוד'}</Button>
+            <Button onClick={saveFocusOnly} disabled={focusBusy}>
+              {focusBusy ? 'שומר...' : 'שמור מיקוד'}
+            </Button>
           </div>
         </div>
       </Card>
