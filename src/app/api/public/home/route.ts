@@ -1,231 +1,201 @@
 // Path: src/app/api/public/home/route.ts
-// Version: V24.3
-// Updated: 2026-03-18 00:05
-// Note: home blessings preview reads video_url from posts and infers video by URL/kind
+// Version: V24.4
+// Updated: 2026-03-18 00:20
+// Note: home blessings preview restores posts + media join and supports crop/video fields
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFromRequest } from '@/lib/adminSession'
-import { supabaseServiceRole } from '@/lib/supabase'
+import { cookies } from 'next/headers'
+import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
+import { getServerEnv } from '@/lib/env'
+
+async function fetchSettingsAndBlocks(eventId: string) {
+  const sb = supabaseAnon()
+  const [{ data: settings, error: sErr }, { data: blocks, error: bErr }] = await Promise.all([
+    sb
+      .from('event_settings')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single(),
+    sb.from('blocks').select('*').eq('event_id', eventId).order('order_index', { ascending: true }),
+  ])
+  if (sErr) throw sErr
+  if (bErr) throw bErr
+  return { settings, blocks: blocks || [] }
+}
+
+async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
+  const sb = supabaseAnon()
+  const galleryBlocks = (blocks || []).filter((b: any) => {
+    const t = String(b?.type || '')
+    return t === 'gallery' || t.startsWith('gallery_')
+  })
+
+  const galleryIds = galleryBlocks
+    .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
+    .filter((x: any) => typeof x === 'string' && x.length > 0)
+
+  if (galleryIds.length === 0) return {}
+
+  const { data, error } = await sb
+    .from('media_items')
+    .select('id, gallery_id, url, thumb_url, public_url, storage_path, created_at, kind, is_approved, crop_position, crop_focus_x, crop_focus_y')
+    .eq('event_id', eventId)
+    .in('kind', ['gallery', 'galleries'])
+    .eq('is_approved', true)
+    .in('gallery_id', galleryIds as any)
+    .order('created_at', { ascending: false })
+    .limit(600)
+
+  if (error || !data) return {}
+
+  const limitById: Record<string, number> = {}
+  for (const b of galleryBlocks) {
+    const gid = (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId
+    const lim = Number((b?.config as any)?.limit ?? 12)
+    if (typeof gid === 'string' && gid) {
+      limitById[gid] = Number.isFinite(lim) ? Math.max(0, Math.min(48, lim)) : 12
+    }
+  }
+
+  const grouped: Record<string, any[]> = {}
+  for (const it of data as any[]) {
+    const gid = String((it as any).gallery_id || '')
+    if (!gid) continue
+    const url = String((it as any).thumb_url || (it as any).url || (it as any).public_url || '')
+    if (!url) continue
+    if (!grouped[gid]) grouped[gid] = []
+    grouped[gid].push({
+      id: (it as any).id,
+      url,
+      created_at: (it as any).created_at,
+      crop_position: (it as any).crop_position ?? null,
+      crop_focus_x: (it as any).crop_focus_x ?? null,
+      crop_focus_y: (it as any).crop_focus_y ?? null,
+      kind: (it as any).kind ?? null,
+    })
+  }
+
+  const out: Record<string, any[]> = {}
+  for (const gid of Object.keys(grouped)) {
+    const arr = grouped[gid] || []
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    out[gid] = arr.slice(0, limitById[gid] ?? 12)
+  }
+
+  return out
+}
+
+async function fetchBlessingsPreview(eventId: string, limit: number, device_id?: string | null) {
+  const sb = supabaseAnon()
+  const safeLimit = Math.max(0, Math.min(20, Number(limit || 0)))
+  if (!safeLimit) return []
+
+  const { data: posts, error } = await sb
+    .from('posts')
+    .select('id, author_name, text, media_url, video_url, link_url, created_at, status')
+    .eq('event_id', eventId)
+    .eq('kind', 'blessing')
+    .eq('status', 'approved')
+    .order('created_at', { ascending: false })
+    .limit(safeLimit)
+
+  if (error || !posts || posts.length === 0) return []
+
+  const ids = (posts as any[]).map((p) => p.id)
+  const srv = supabaseServiceRole()
+
+  const [{ data: reactions }, { data: mediaRows }] = await Promise.all([
+    srv.from('reactions').select('post_id, emoji, device_id').in('post_id', ids),
+    srv
+      .from('media_items')
+      .select('post_id, url, thumb_url, crop_position, crop_focus_x, crop_focus_y, kind, created_at')
+      .eq('event_id', eventId)
+      .in('post_id', ids)
+      .order('created_at', { ascending: false }),
+  ])
+
+  const mediaByPost: Record<string, any> = {}
+  for (const r of mediaRows || []) {
+    const pid = String((r as any).post_id || '')
+    if (!pid || mediaByPost[pid]) continue
+    mediaByPost[pid] = r
+  }
+
+  const countsById: Record<string, Record<string, number>> = {}
+  const myById: Record<string, string | null> = {}
+
+  for (const id of ids) {
+    countsById[id] = { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }
+    myById[id] = null
+  }
+
+  for (const r of reactions || []) {
+    const pid = String((r as any).post_id || '')
+    const emo = String((r as any).emoji || '')
+    if (!countsById[pid]) continue
+    if (countsById[pid][emo] == null) continue
+    countsById[pid][emo] += 1
+    if (device_id && String((r as any).device_id || '') === device_id) {
+      myById[pid] = emo
+    }
+  }
+
+  return (posts as any[]).map((p) => {
+    const media = mediaByPost[p.id] || {}
+    const kind = String(media.kind || '')
+    const mediaRowUrl = String(media.url || media.thumb_url || '') || null
+    const postVideoUrl = String((p as any).video_url || '') || null
+    const postMediaUrl = String((p as any).media_url || '') || null
+    const url = postVideoUrl || mediaRowUrl || postMediaUrl || null
+    const isVideo =
+      !!postVideoUrl ||
+      kind.includes('video') ||
+      /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(url || ''))
+
+    return {
+      ...p,
+      media_url: isVideo ? null : (postMediaUrl || mediaRowUrl || null),
+      video_url: isVideo ? url : null,
+      crop_position: media.crop_position ?? null,
+      crop_focus_x: media.crop_focus_x ?? null,
+      crop_focus_y: media.crop_focus_y ?? null,
+      reaction_counts: countsById[p.id] || { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
+      my_reactions: myById[p.id] ? [myById[p.id] as string] : [],
+    }
+  })
+}
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-function stripRow(row: any, overrides: Record<string, any> = {}) {
-  const copy: any = { ...row }
-  delete copy.id
-  delete copy.created_at
-  delete copy.updated_at
-  delete copy.inserted_at
-  delete copy.user_id
-  delete copy.device_id
-  return { ...copy, ...overrides }
-}
-
-function remapBlockConfig(config: any, galleryMap: Map<string, string>) {
-  const next = config && typeof config === 'object' && !Array.isArray(config) ? { ...config } : {}
-  const oldGalleryId = String(next.gallery_id || '').trim()
-  if (oldGalleryId && galleryMap.has(oldGalleryId)) {
-    next.gallery_id = galleryMap.get(oldGalleryId)
-  }
-  return next
-}
-
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    const admin = await getAdminFromRequest(req)
-    if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const env = getServerEnv()
+    const url = new URL(req.url)
+    const eventFromQuery = String(url.searchParams.get('event') || '').trim()
+    const eventId = eventFromQuery || env.EVENT_SLUG
 
-    const body = await req.json().catch(() => ({}))
-    const targetEventId = String(body?.target_event_id || '').trim()
-    const targetEventName = String(body?.target_event_name || '').trim() || null
-    const templateId = String(body?.template_id || '').trim()
-    const explicitSourceEventId = String(body?.source_event_id || '').trim()
+    const { settings, blocks } = await fetchSettingsAndBlocks(eventId)
+    const device_id = cookies().get('device_id')?.value || null
 
-    if (!targetEventId) {
-      return NextResponse.json({ error: 'Missing target_event_id' }, { status: 400 })
-    }
-
-    const sb = supabaseServiceRole()
-
-    let sourceEventId = explicitSourceEventId
-
-    if (templateId) {
-      const tplRes = await sb
-        .from('site_templates')
-        .select('id,source_event_id,name')
-        .eq('id', templateId)
-        .single()
-
-      if (tplRes.error) {
-        return NextResponse.json({ error: tplRes.error.message }, { status: 400 })
-      }
-
-      sourceEventId = String((tplRes.data as any)?.source_event_id || '').trim()
-      if (!sourceEventId) {
-        return NextResponse.json(
-          { error: 'Missing source_event_id in site_templates. Add source_event_id to the template first.' },
-          { status: 400 }
-        )
-      }
-    }
-
-    if (!sourceEventId) {
-      return NextResponse.json({ error: 'Missing source_event_id' }, { status: 400 })
-    }
-
-    const existsRes = await sb.from('event_settings').select('event_id').eq('event_id', targetEventId).limit(1)
-    if (existsRes.error) return NextResponse.json({ error: existsRes.error.message }, { status: 400 })
-    if ((existsRes.data || []).length > 0) {
-      return NextResponse.json({ error: 'Target event_id already exists' }, { status: 400 })
-    }
-
-    const [settingsRes, galleriesRes, blocksRes, rulesRes, mediaRes, postsRes] = await Promise.all([
-      sb.from('event_settings').select('*').eq('event_id', sourceEventId),
-      sb.from('galleries').select('*').eq('event_id', sourceEventId),
-      sb.from('blocks').select('*').eq('event_id', sourceEventId),
-      sb.from('content_rules').select('*').eq('event_id', sourceEventId),
-      sb.from('media_items').select('*').eq('event_id', sourceEventId),
-      sb.from('posts').select('*').eq('event_id', sourceEventId).eq('kind', 'blessing').eq('status', 'approved'),
-    ])
-
-    const firstErr =
-      settingsRes.error ||
-      galleriesRes.error ||
-      blocksRes.error ||
-      rulesRes.error ||
-      mediaRes.error ||
-      postsRes.error
-
-    if (firstErr) {
-      return NextResponse.json({ error: firstErr.message }, { status: 400 })
-    }
-
-    const settings = settingsRes.data || []
-    const galleries = galleriesRes.data || []
-    const blocks = blocksRes.data || []
-    const rules = rulesRes.data || []
-    const mediaItems = mediaRes.data || []
-    const blessingPosts = postsRes.data || []
-
-    // 1) event_settings
-    const settingsRows = settings.map((row: any) => {
-      const next = stripRow(row, { event_id: targetEventId })
-
-      if (targetEventName && (next.key === 'event_name' || next.name === 'event_name')) {
-        if ('value' in next) next.value = targetEventName
-        if ('val' in next) next.val = targetEventName
-        if ('value_json' in next) next.value_json = targetEventName
-      }
-
-      if (targetEventName && 'event_name' in next) {
-        next.event_name = targetEventName
-      }
-
-      return next
-    })
-
-    if (settingsRows.length) {
-      const ins = await sb.from('event_settings').insert(settingsRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-    }
-
-    // 2) galleries first + build gallery map
-    const galleryMap = new Map<string, string>()
-    const sortedGalleries = galleries
-      .slice()
-      .sort((a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0))
-
-    for (const row of sortedGalleries) {
-      const oldId = String(row?.id || '').trim()
-      const payload = stripRow(row, { event_id: targetEventId })
-
-      const ins = await sb.from('galleries').insert(payload).select('*').single()
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-
-      const newId = String((ins.data as any)?.id || '').trim()
-      if (oldId && newId) galleryMap.set(oldId, newId)
-    }
-
-    // 3) blocks after galleries, with gallery_id remap
-    const hasNewGalleryBlocks = blocks.some((b: any) => String(b?.type || '').startsWith('gallery_'))
-    const filteredBlocks = hasNewGalleryBlocks
-      ? blocks.filter((b: any) => String(b?.type || '') !== 'gallery')
-      : blocks
-
-    const blocksRows = filteredBlocks
-      .slice()
-      .sort((a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0))
-      .map((row: any) => {
-        const next = stripRow(row, { event_id: targetEventId })
-        next.config = remapBlockConfig(next.config, galleryMap)
-        return next
-      })
-
-    if (blocksRows.length) {
-      const ins = await sb.from('blocks').insert(blocksRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-    }
-
-    // Hard cleanup: remove any legacy gallery blocks that may have been created by any flow.
-    const cleanupLegacyRes = await sb
-      .from('blocks')
-      .delete()
-      .eq('event_id', targetEventId)
-      .eq('type', 'gallery')
-
-    if (cleanupLegacyRes.error) {
-      return NextResponse.json({ error: cleanupLegacyRes.error.message }, { status: 400 })
-    }
-
-    // 4) content rules
-    const rulesRows = rules.map((row: any) => stripRow(row, { event_id: targetEventId }))
-    if (rulesRows.length) {
-      const ins = await sb.from('content_rules').insert(rulesRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-    }
-
-    // 5) media_items with gallery remap
-    const mediaRows = mediaItems.map((row: any) => {
-      const next = stripRow(row, { event_id: targetEventId })
-      const oldGalleryId = String(next.gallery_id || '').trim()
-      if (oldGalleryId && galleryMap.has(oldGalleryId)) {
-        next.gallery_id = galleryMap.get(oldGalleryId)
-      } else if (oldGalleryId && !galleryMap.has(oldGalleryId)) {
-        next.gallery_id = null
-      }
-      return next
-    })
-
-    if (mediaRows.length) {
-      const ins = await sb.from('media_items').insert(mediaRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-    }
-
-    // 6) default blessings
-    const blessingRows = blessingPosts.map((row: any) => stripRow(row, { event_id: targetEventId }))
-    if (blessingRows.length) {
-      const ins = await sb.from('posts').insert(blessingRows)
-      if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 })
-    }
+    const blessingsPreviewLimit = Number(settings?.blessings_preview_limit ?? 3)
+    const blessingsPreview = await fetchBlessingsPreview(eventId, blessingsPreviewLimit, device_id)
+    const galleryPreviews = await fetchGalleryPreviews(eventId, blocks)
 
     return NextResponse.json({
       ok: true,
-      message: 'השכפול הושלם בהצלחה',
-      source_event_id: sourceEventId,
-      target_event_id: targetEventId,
-      stats: {
-        event_settings: settingsRows.length,
-        galleries: sortedGalleries.length,
-        blocks: blocksRows.length,
-        content_rules: rulesRows.length,
-        media_items: mediaRows.length,
-        blessing_posts: blessingRows.length,
-        skipped_legacy_gallery_blocks: hasNewGalleryBlocks
-          ? blocks.filter((b: any) => String(b?.type || '') === 'gallery').length
-          : 0,
-        cleanup_deleted_gallery_blocks: 'all legacy gallery blocks removed at end of clone',
-      },
+      settings,
+      blocks,
+      blessingsPreview,
+      galleryPreviews,
     })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 })
+    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
-}
+      }
