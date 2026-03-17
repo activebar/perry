@@ -26,7 +26,6 @@ async function fetchSettingsAndBlocks(eventId: string) {
 // Gallery previews are now driven by *gallery blocks* (one block per gallery).
 // We keep /api/public/home focused on settings + blocks + blessings.
 
-
 async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
   const sb = supabaseAnon()
   const galleryBlocks = (blocks || []).filter((b: any) => {
@@ -41,9 +40,8 @@ async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
 
   const { data, error } = await sb
     .from('media_items')
-    .select('id, gallery_id, url, thumb_url, public_url, storage_path, created_at, kind, is_approved, crop_position')
+    .select('id, gallery_id, url, thumb_url, public_url, storage_path, created_at, kind, is_approved, crop_position, crop_focus_x, crop_focus_y')
     .eq('event_id', eventId)
-    // IMPORTANT: Some rows use kind='galleries' (legacy). Show both.
     .in('kind', ['gallery', 'galleries'])
     .eq('is_approved', true)
     .in('gallery_id', galleryIds as any)
@@ -52,7 +50,6 @@ async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
 
   if (error || !data) return {}
 
-  // limit per gallery block (default 12)
   const limitById: Record<string, number> = {}
   for (const b of galleryBlocks) {
     const gid = (b?.config as any)?.gallery_id
@@ -62,7 +59,6 @@ async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
     }
   }
 
-  // Group all items by gallery first
   const grouped: Record<string, any[]> = {}
   for (const it of data as any[]) {
     const gid = String((it as any).gallery_id || '')
@@ -74,11 +70,13 @@ async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
       id: (it as any).id,
       url,
       created_at: (it as any).created_at,
-      crop_position: (it as any).crop_position ?? null
+      crop_position: (it as any).crop_position ?? null,
+      crop_focus_x: (it as any).crop_focus_x ?? null,
+      crop_focus_y: (it as any).crop_focus_y ?? null,
+      kind: (it as any).kind ?? null,
     })
   }
 
-  // Randomize per gallery on every request (so refresh shows different photos)
   const out: Record<string, any[]> = {}
   for (const gid of Object.keys(grouped)) {
     const arr = grouped[gid] || []
@@ -92,25 +90,22 @@ async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
   return out
 }
 
-
 async function fetchBlessingsPreview(eventId: string, limit: number, device_id?: string | null) {
   const sb = supabaseAnon()
   const safeLimit = Math.max(0, Math.min(20, Number(limit || 0)))
   if (!safeLimit) return []
 
-  // Keep deterministic per-event query here.
-  // We intentionally do not use RPC random functions because they may not filter by event.
   const fallback = async () => {
-  const { data, error } = await sb
-    .from('posts')
-    .select('id, author_name, text, media_url, link_url, created_at')
-    .eq('event_id', eventId)
-    .eq('kind', 'blessing')
-    .eq('status', 'approved')
-    .order('created_at', { ascending: false })
-    .limit(safeLimit)
-  return { data, error }
-}
+    const { data, error } = await sb
+      .from('posts')
+      .select('id, author_name, text, media_url, video_url, link_url, created_at, crop_position, crop_focus_x, crop_focus_y')
+      .eq('event_id', eventId)
+      .eq('kind', 'blessing')
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+      .limit(safeLimit)
+    return { data, error }
+  }
 
   const final = await fallback()
   const postsFinal = final.data as any[] | null
@@ -118,7 +113,6 @@ async function fetchBlessingsPreview(eventId: string, limit: number, device_id?:
 
   if (errFinal || !postsFinal || postsFinal.length === 0) return []
 
-  // counts + my reaction (service role)
   const ids = postsFinal.map(p => p.id)
   const srv = supabaseServiceRole()
   const { data: reactions } = await srv
@@ -166,7 +160,6 @@ export async function GET(req: NextRequest) {
     const { settings, blocks } = await fetchSettingsAndBlocks(eventId)
     const device_id = cookies().get('device_id')?.value || null
 
-    // visible types
     const now = new Date()
     const visibleTypes = new Set(
       (blocks || [])
@@ -201,3 +194,4 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
 }
+
