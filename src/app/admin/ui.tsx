@@ -2806,14 +2806,11 @@ export default function AdminApp({
                                   </div>
                                 </div>
                               ) : null}
+                              <div className="absolute bottom-2 left-2 z-10 flex gap-2">
+                                <Button variant="ghost" className="bg-white/90 shadow" onClick={(e) => { e.stopPropagation(); setFocusTarget({ type: 'gallery', ...p }) }}>🎯</Button>
+                                <Button variant="ghost" className="bg-white/90 shadow" onClick={(e) => { e.stopPropagation(); deleteMediaItem(p.id) }}>🗑️</Button>
+                              </div>
                             </button>
-
-                            <div className="p-3 flex gap-2 justify-end">
-                              <Button variant="ghost" onClick={() => setFocusTarget({ type: 'gallery', ...p })}>🎯 מיקוד</Button>
-                              <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
-                                מחק
-                              </Button>
-                            </div>
                           </div>
                         ))}
                       </div>

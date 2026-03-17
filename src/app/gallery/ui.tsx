@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { supabaseAnon } from '@/lib/supabase'
 
 type GalleryItem = {
   id: string
@@ -30,7 +31,7 @@ type PendingAsset = {
 
 const EMOJIS = ['❤️', '🔥', '😍', '👏', '😂', '😮']
 const DIRECT_DOWNLOAD_LIMIT = 8
-const MAX_VIDEO_UPLOAD_BYTES = 9 * 1024 * 1024
+const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024
 
 function getOrCreateDeviceId() {
   if (typeof window === 'undefined') return ''
@@ -71,7 +72,7 @@ function isVideoFile(file?: File | null) {
 function validateSelectedMedia(file?: File | null) {
   if (!file) return ''
   if (isVideoFile(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
-    return 'סרטון גדול מדי להעלאה דרך השרת כרגע. ניתן להעלות עד כ-9MB. לסרטונים גדולים יותר נעבור ל-direct upload.'
+    return 'סרטון גדול מדי. כרגע ניתן לנסות direct upload לוידאו. אם ההעלאה נכשלה, נסה שוב או הקטן את הקובץ.'
   }
   return ''
 }
@@ -467,25 +468,71 @@ export default function GalleryClient({
     }
   }
 
+
+async function directUploadVideoGallery(file: File, crop: { crop_position: 'top' | 'center' | 'bottom'; crop_focus_x: number | null; crop_focus_y: number | null }) {
+  const signRes = await fetch('/api/upload/sign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: file.name,
+      contentType: file.type || 'video/mp4',
+      kind: 'gallery',
+      gallery_id: galleryId,
+    }),
+  })
+  const signJson = await signRes.json().catch(() => ({}))
+  if (!signRes.ok) throw new Error(signJson?.error || 'שגיאה בהעלאת וידאו')
+
+  const sb = supabaseAnon()
+  const uploaded = await (sb.storage.from('uploads') as any).uploadToSignedUrl(
+    String(signJson.path || ''),
+    String(signJson.token || ''),
+    file
+  )
+  if (uploaded?.error) throw uploaded.error
+
+  const fin = await fetch('/api/upload/finalize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-device-id': deviceId },
+    body: JSON.stringify({
+      kind: 'gallery',
+      gallery_id: galleryId,
+      event_id: signJson.event_id || null,
+      path: signJson.path,
+      publicUrl: signJson.publicUrl,
+      crop_position: crop.crop_position,
+      crop_focus_x: crop.crop_focus_x,
+      crop_focus_y: crop.crop_focus_y,
+    }),
+  })
+  const finJson = await fin.json().catch(() => ({}))
+  if (!fin.ok) throw new Error(finJson?.error || 'שגיאה בשמירת וידאו')
+  return finJson
+}
+
   async function uploadSingleAsset(asset: PendingAsset) {
     if (!asset.file) return
 
-    const fd = new FormData()
     const isVideo = isVideoFile(asset.file)
 
     if (isVideo) {
-      fd.set('file', asset.file)
-    } else {
-      const compressed = await fileToCompressedBlob(asset.file)
-      fd.set(
-        'file',
-        compressed instanceof File
-          ? compressed
-          : new File([compressed], asset.file.name.replace(/\.[^.]+$/, '') + '.jpg', {
-              type: 'image/jpeg',
-            })
-      )
+      return await directUploadVideoGallery(asset.file, {
+        crop_position: asset.crop_position,
+        crop_focus_x: asset.crop_focus_x,
+        crop_focus_y: asset.crop_focus_y,
+      })
     }
+
+    const fd = new FormData()
+    const compressed = await fileToCompressedBlob(asset.file)
+    fd.set(
+      'file',
+      compressed instanceof File
+        ? compressed
+        : new File([compressed], asset.file.name.replace(/\.[^.]+$/, '') + '.jpg', {
+            type: 'image/jpeg',
+          })
+    )
 
     fd.set('kind', 'gallery')
     fd.set('gallery_id', galleryId)

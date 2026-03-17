@@ -7,6 +7,7 @@ import { Button, Card, Container, Input, Textarea } from '@/components/ui'
 import ShareModal from '@/components/share/ShareModal'
 import CropEditor from '@/components/CropEditor'
 import { buildShareMessage } from '@/lib/share/buildShareMessage'
+import { supabaseAnon } from '@/lib/supabase'
 
 type Post = {
   id: string
@@ -25,7 +26,7 @@ type Post = {
   my_reactions: string[]
 }
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
-const MAX_VIDEO_UPLOAD_BYTES = 9 * 1024 * 1024
+const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024
 
 async function jfetch(url: string, init?: RequestInit) {
   const res = await fetch(url, {
@@ -81,7 +82,7 @@ function objectPositionFromCrop(item: {
 function validateSelectedMedia(file: File) {
   if (!file) return ''
   if (isVideoFile(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
-    return 'סרטון גדול מדי להעלאה דרך השרת כרגע. ניתן להעלות עד כ-9MB. לסרטונים גדולים יותר נעבור ל-direct upload.'
+    return 'סרטון גדול מדי. כרגע ניתן לנסות direct upload לוידאו. אם ההעלאה נכשלה, נסה שוב או הקטן את הקובץ.'
   }
   return ''
 }
@@ -298,6 +299,31 @@ export default function BlessingsClient({
     }
   }, [])
 
+
+async function directUploadVideo(file: File, kind: 'blessing' | 'gallery', galleryId?: string | null) {
+  const signRes = await fetch('/api/upload/sign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: file.name,
+      contentType: file.type || 'video/mp4',
+      kind,
+      event_id: effectiveEventId,
+      gallery_id: galleryId || null,
+    }),
+  })
+  const signJson = await signRes.json().catch(() => ({}))
+  if (!signRes.ok) throw new Error(signJson?.error || 'שגיאה בהעלאת וידאו')
+  const sb = supabaseAnon()
+  const uploaded = await (sb.storage.from('uploads') as any).uploadToSignedUrl(
+    String(signJson.path || ''),
+    String(signJson.token || ''),
+    file
+  )
+  if (uploaded?.error) throw uploaded.error
+  return signJson
+}
+
   async function submitBlessing() {
     setErr(null)
     setMsg(null)
@@ -310,23 +336,25 @@ export default function BlessingsClient({
       if (file) {
         const mediaError = validateSelectedMedia(file)
         if (mediaError) throw new Error(mediaError)
-        const fd = new FormData()
-
-        // Compress images client-side (2MP) to keep uploads fast & cheap (Supabase free tier)
-        const outFile = isVideoFile(file) ? file : await compressToJpeg2MP(file)
-
-        fd.set('file', outFile)
-
-        fd.set('kind', 'blessing')
-          if (effectiveEventId) fd.append('event_id', effectiveEventId)
-        const up = await fetch('/api/upload', { method: 'POST', body: fd })
-        const upJson = await up.json().catch(() => ({}))
-        if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
-        media_path = upJson.path
         if (isVideoFile(file)) {
+          const upJson = await directUploadVideo(file, 'blessing')
+          media_path = upJson.path
           video_url = upJson.publicUrl
           media_url = null
         } else {
+          const fd = new FormData()
+
+          // Compress images client-side (2MP) to keep uploads fast & cheap (Supabase free tier)
+          const outFile = await compressToJpeg2MP(file)
+
+          fd.set('file', outFile)
+
+          fd.set('kind', 'blessing')
+          if (effectiveEventId) fd.append('event_id', effectiveEventId)
+          const up = await fetch('/api/upload', { method: 'POST', body: fd })
+          const upJson = await up.json().catch(() => ({}))
+          if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+          media_path = upJson.path
           media_url = upJson.publicUrl
           video_url = null
         }
@@ -460,6 +488,7 @@ async function saveEdit() {
     let media_path = editDraft.media_path || null
     let media_url = editDraft.media_url || null
     let video_url = editDraft.video_url || null
+    let video_url = editDraft.video_url || null
 
     // remove media (explicit)
     if (editRemoveMedia) {
@@ -471,20 +500,22 @@ async function saveEdit() {
     if (editFile) {
       const mediaError = validateSelectedMedia(editFile)
       if (mediaError) throw new Error(mediaError)
-      const fd = new FormData()
-      fd.set('file', editFile)
-      fd.set('kind', 'blessing')
-          if (effectiveEventId) fd.append('event_id', effectiveEventId)
-
-      const up = await fetch('/api/upload', { method: 'POST', body: fd })
-      const upJson = await up.json()
-      if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
-
-      media_path = upJson.path
       if (isVideoFile(editFile)) {
+        const upJson = await directUploadVideo(editFile, 'blessing')
+        media_path = upJson.path
         video_url = upJson.publicUrl
         media_url = null
       } else {
+        const fd = new FormData()
+        fd.set('file', editFile)
+        fd.set('kind', 'blessing')
+        if (effectiveEventId) fd.append('event_id', effectiveEventId)
+
+        const up = await fetch('/api/upload', { method: 'POST', body: fd })
+        const upJson = await up.json()
+        if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+
+        media_path = upJson.path
         media_url = upJson.publicUrl
         video_url = null
       }
