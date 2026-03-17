@@ -1,3 +1,8 @@
+// Path: src/components/public/EventHomeClient.tsx
+// Version: V24.2
+// Updated: 2026-03-17 23:40
+// Note: home blessings video preview + play badge + duration badge
+
 'use client'
 
 import Link from 'next/link'
@@ -19,6 +24,29 @@ type HomePayload = {
   galleryPreviews?: Record<string, any[]>
 }
 
+
+
+function formatVideoTime(seconds?: number | null) {
+  const s = Math.max(0, Math.floor(Number(seconds || 0)))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${String(r).padStart(2, '0')}`
+}
+
+function VideoBadge({ duration }: { duration?: number | null }) {
+  return (
+    <>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/45 text-white text-2xl shadow">
+          ▶
+        </div>
+      </div>
+      <div className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs font-medium text-white">
+        {formatVideoTime(duration)}
+      </div>
+    </>
+  )
+}
 
 function objectPositionFromCrop(item: {
   crop_position?: string | null
@@ -607,13 +635,17 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                     onClick={() => setLightbox({ url: (p.video_url || p.media_url) as string, isVideo: !!p.video_url })}
                                   >
                                     {p.video_url ? (
-                                      <video
-                                        src={p.video_url}
-                                        className="absolute inset-0 h-full w-full object-cover"
-                                        style={{ objectPosition: objectPositionFromCrop(p) }}
-                                        muted
-                                        playsInline
-                                      />
+                                      <>
+                                        <video
+                                          src={p.video_url}
+                                          className="absolute inset-0 h-full w-full object-cover"
+                                          style={{ objectPosition: objectPositionFromCrop(p) }}
+                                          muted
+                                          playsInline
+                                          preload="metadata"
+                                        />
+                                        <VideoBadge duration={(p as any).video_duration_sec ?? (p as any).duration_sec ?? 0} />
+                                      </>
                                     ) : (
                                       <img
                                         src={p.media_url as string}
@@ -761,4 +793,4 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
       </Container>
     </main>
   )
-}
+                              }
