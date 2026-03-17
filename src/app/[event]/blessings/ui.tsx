@@ -874,17 +874,7 @@ async function saveEdit() {
             y={focusDraft.crop_focus_y ?? 0.5}
             onChange={(point) => setFocusDraft((d: any) => ({ ...d, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' }))}
           />
-          <div className="rounded-xl border border-zinc-200 p-3">
-            <p className="mb-2 text-sm text-zinc-600">תצוגה מקדימה כמו באתר</p>
-            <div className="mx-auto aspect-square w-full max-w-[280px] overflow-hidden rounded-2xl bg-zinc-100">
-              <img
-                src={focusDraft.media_url}
-                alt=""
-                className="h-full w-full object-cover"
-                style={{ objectPosition: objectPositionFromCrop(focusDraft) }}
-              />
-            </div>
-          </div>
+</div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setFocusDraft(null)}>ביטול</Button>
             <Button onClick={saveFocusOnly} disabled={focusBusy}>{focusBusy ? 'שומר...' : 'שמור מיקוד'}</Button>
