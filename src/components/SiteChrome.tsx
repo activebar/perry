@@ -171,8 +171,8 @@ export default function SiteChrome({
               </div>
             ) : null}
 
-            <div className="mt-2 text-[10px] opacity-40" dir="ltr">
-              build v13.21
+            <div className="mt-2 text-[12px] opacity-60" dir="ltr">
+              build v2.24.4
             </div>
           </div>
         </div>
