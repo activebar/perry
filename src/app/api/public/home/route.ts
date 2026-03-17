@@ -3,8 +3,6 @@ import { cookies } from 'next/headers'
 import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
 
-const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
-
 async function fetchSettingsAndBlocks(eventId: string) {
   const sb = supabaseAnon()
   const [{ data: settings, error: sErr }, { data: blocks, error: bErr }] = await Promise.all([
@@ -16,15 +14,12 @@ async function fetchSettingsAndBlocks(eventId: string) {
       .order('created_at', { ascending: false })
       .limit(1)
       .single(),
-    sb.from('blocks').select('*').eq('event_id', eventId).order('order_index', { ascending: true })
+    sb.from('blocks').select('*').eq('event_id', eventId).order('order_index', { ascending: true }),
   ])
   if (sErr) throw sErr
   if (bErr) throw bErr
   return { settings, blocks: blocks || [] }
 }
-
-// Gallery previews are now driven by *gallery blocks* (one block per gallery).
-// We keep /api/public/home focused on settings + blocks + blessings.
 
 async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
   const sb = supabaseAnon()
@@ -32,6 +27,7 @@ async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
     const t = String(b?.type || '')
     return t === 'gallery' || t.startsWith('gallery_')
   })
+
   const galleryIds = galleryBlocks
     .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
     .filter((x: any) => typeof x === 'string' && x.length > 0)
@@ -52,7 +48,7 @@ async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
 
   const limitById: Record<string, number> = {}
   for (const b of galleryBlocks) {
-    const gid = (b?.config as any)?.gallery_id
+    const gid = (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId
     const lim = Number((b?.config as any)?.limit ?? 12)
     if (typeof gid === 'string' && gid) {
       limitById[gid] = Number.isFinite(lim) ? Math.max(0, Math.min(48, lim)) : 12
@@ -95,30 +91,36 @@ async function fetchBlessingsPreview(eventId: string, limit: number, device_id?:
   const safeLimit = Math.max(0, Math.min(20, Number(limit || 0)))
   if (!safeLimit) return []
 
-  const fallback = async () => {
-    const { data, error } = await sb
-      .from('posts')
-      .select('id, author_name, text, media_url, video_url, link_url, created_at, crop_position, crop_focus_x, crop_focus_y')
-      .eq('event_id', eventId)
-      .eq('kind', 'blessing')
-      .eq('status', 'approved')
-      .order('created_at', { ascending: false })
-      .limit(safeLimit)
-    return { data, error }
-  }
+  const { data: posts, error } = await sb
+    .from('posts')
+    .select('id, author_name, text, link_url, created_at, status')
+    .eq('event_id', eventId)
+    .eq('kind', 'blessing')
+    .eq('status', 'approved')
+    .order('created_at', { ascending: false })
+    .limit(safeLimit)
 
-  const final = await fallback()
-  const postsFinal = final.data as any[] | null
-  const errFinal = final.error
+  if (error || !posts || posts.length === 0) return []
 
-  if (errFinal || !postsFinal || postsFinal.length === 0) return []
-
-  const ids = postsFinal.map(p => p.id)
+  const ids = (posts as any[]).map((p) => p.id)
   const srv = supabaseServiceRole()
-  const { data: reactions } = await srv
-    .from('reactions')
-    .select('post_id, emoji, device_id')
-    .in('post_id', ids)
+
+  const [{ data: reactions }, { data: mediaRows }] = await Promise.all([
+    srv.from('reactions').select('post_id, emoji, device_id').in('post_id', ids),
+    srv
+      .from('media_items')
+      .select('post_id, url, thumb_url, crop_position, crop_focus_x, crop_focus_y, kind, created_at')
+      .eq('event_id', eventId)
+      .in('post_id', ids)
+      .order('created_at', { ascending: false }),
+  ])
+
+  const mediaByPost: Record<string, any> = {}
+  for (const r of mediaRows || []) {
+    const pid = String((r as any).post_id || '')
+    if (!pid || mediaByPost[pid]) continue
+    mediaByPost[pid] = r
+  }
 
   const countsById: Record<string, Record<string, number>> = {}
   const myById: Record<string, string | null> = {}
@@ -129,22 +131,33 @@ async function fetchBlessingsPreview(eventId: string, limit: number, device_id?:
   }
 
   for (const r of reactions || []) {
-    const pid = (r as any).post_id
-    const emo = (r as any).emoji
+    const pid = String((r as any).post_id || '')
+    const emo = String((r as any).emoji || '')
     if (!countsById[pid]) continue
     if (countsById[pid][emo] == null) continue
     countsById[pid][emo] += 1
-
-    if (device_id && (r as any).device_id === device_id) {
+    if (device_id && String((r as any).device_id || '') === device_id) {
       myById[pid] = emo
     }
   }
 
-  return (postsFinal as any[]).map(p => ({
-    ...p,
-    reaction_counts: countsById[p.id] || { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
-    my_reactions: myById[p.id] ? [myById[p.id]] : []
-  }))
+  return (posts as any[]).map((p) => {
+    const media = mediaByPost[p.id] || {}
+    const kind = String(media.kind || '')
+    const url = String(media.url || media.thumb_url || '') || null
+    const isVideo = kind.includes('video')
+
+    return {
+      ...p,
+      media_url: isVideo ? null : url,
+      video_url: isVideo ? url : null,
+      crop_position: media.crop_position ?? null,
+      crop_focus_x: media.crop_focus_x ?? null,
+      crop_focus_y: media.crop_focus_y ?? null,
+      reaction_counts: countsById[p.id] || { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
+      my_reactions: myById[p.id] ? [myById[p.id] as string] : [],
+    }
+  })
 }
 
 export const dynamic = 'force-dynamic'
@@ -160,26 +173,7 @@ export async function GET(req: NextRequest) {
     const { settings, blocks } = await fetchSettingsAndBlocks(eventId)
     const device_id = cookies().get('device_id')?.value || null
 
-    const now = new Date()
-    const visibleTypes = new Set(
-      (blocks || [])
-        .filter((b: any) => {
-          if (!b?.is_visible) return false
-          if (b.type === 'gift' && b.config?.auto_hide_after_hours) {
-            const hours = Number(b.config.auto_hide_after_hours)
-            if (Number.isFinite(hours) && hours > 0) {
-              const start = new Date(settings.start_at)
-              const hideAt = new Date(start.getTime() + hours * 60 * 60 * 1000)
-              if (now > hideAt) return false
-            }
-          }
-          return true
-        })
-        .map((b: any) => b.type)
-    )
-
-    const blessingsPreviewLimit = Number(settings.blessings_preview_limit ?? 3)
-
+    const blessingsPreviewLimit = Number(settings?.blessings_preview_limit ?? 3)
     const blessingsPreview = await fetchBlessingsPreview(eventId, blessingsPreviewLimit, device_id)
     const galleryPreviews = await fetchGalleryPreviews(eventId, blocks)
 
@@ -188,10 +182,9 @@ export async function GET(req: NextRequest) {
       settings,
       blocks,
       blessingsPreview,
-      galleryPreviews
+      galleryPreviews,
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
   }
 }
-
