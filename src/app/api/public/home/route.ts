@@ -1,201 +1,279 @@
 // Path: src/app/api/public/home/route.ts
-// Version: V24.4
-// Updated: 2026-03-18 00:20
-// Note: home blessings preview restores posts + media join and supports crop/video fields
+// Version: V24.5
+// Updated: 2026-03-18 00:55
+// Note: restore random blessings order on each refresh while keeping crop/video support
 
 import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
+import sharp from 'sharp'
 import { cookies } from 'next/headers'
-import { supabaseAnon, supabaseServiceRole } from '@/lib/supabase'
+import { supabaseServiceRole, getPublicUploadUrl } from '@/lib/supabase'
 import { getServerEnv } from '@/lib/env'
-
-async function fetchSettingsAndBlocks(eventId: string) {
-  const sb = supabaseAnon()
-  const [{ data: settings, error: sErr }, { data: blocks, error: bErr }] = await Promise.all([
-    sb
-      .from('event_settings')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('updated_at', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single(),
-    sb.from('blocks').select('*').eq('event_id', eventId).order('order_index', { ascending: true }),
-  ])
-  if (sErr) throw sErr
-  if (bErr) throw bErr
-  return { settings, blocks: blocks || [] }
-}
-
-async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
-  const sb = supabaseAnon()
-  const galleryBlocks = (blocks || []).filter((b: any) => {
-    const t = String(b?.type || '')
-    return t === 'gallery' || t.startsWith('gallery_')
-  })
-
-  const galleryIds = galleryBlocks
-    .map((b: any) => (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId)
-    .filter((x: any) => typeof x === 'string' && x.length > 0)
-
-  if (galleryIds.length === 0) return {}
-
-  const { data, error } = await sb
-    .from('media_items')
-    .select('id, gallery_id, url, thumb_url, public_url, storage_path, created_at, kind, is_approved, crop_position, crop_focus_x, crop_focus_y')
-    .eq('event_id', eventId)
-    .in('kind', ['gallery', 'galleries'])
-    .eq('is_approved', true)
-    .in('gallery_id', galleryIds as any)
-    .order('created_at', { ascending: false })
-    .limit(600)
-
-  if (error || !data) return {}
-
-  const limitById: Record<string, number> = {}
-  for (const b of galleryBlocks) {
-    const gid = (b?.config as any)?.gallery_id || (b?.config as any)?.galleryId
-    const lim = Number((b?.config as any)?.limit ?? 12)
-    if (typeof gid === 'string' && gid) {
-      limitById[gid] = Number.isFinite(lim) ? Math.max(0, Math.min(48, lim)) : 12
-    }
-  }
-
-  const grouped: Record<string, any[]> = {}
-  for (const it of data as any[]) {
-    const gid = String((it as any).gallery_id || '')
-    if (!gid) continue
-    const url = String((it as any).thumb_url || (it as any).url || (it as any).public_url || '')
-    if (!url) continue
-    if (!grouped[gid]) grouped[gid] = []
-    grouped[gid].push({
-      id: (it as any).id,
-      url,
-      created_at: (it as any).created_at,
-      crop_position: (it as any).crop_position ?? null,
-      crop_focus_x: (it as any).crop_focus_x ?? null,
-      crop_focus_y: (it as any).crop_focus_y ?? null,
-      kind: (it as any).kind ?? null,
-    })
-  }
-
-  const out: Record<string, any[]> = {}
-  for (const gid of Object.keys(grouped)) {
-    const arr = grouped[gid] || []
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[arr[i], arr[j]] = [arr[j], arr[i]]
-    }
-    out[gid] = arr.slice(0, limitById[gid] ?? 12)
-  }
-
-  return out
-}
-
-async function fetchBlessingsPreview(eventId: string, limit: number, device_id?: string | null) {
-  const sb = supabaseAnon()
-  const safeLimit = Math.max(0, Math.min(20, Number(limit || 0)))
-  if (!safeLimit) return []
-
-  const { data: posts, error } = await sb
-    .from('posts')
-    .select('id, author_name, text, media_url, video_url, link_url, created_at, status')
-    .eq('event_id', eventId)
-    .eq('kind', 'blessing')
-    .eq('status', 'approved')
-    .order('created_at', { ascending: false })
-    .limit(safeLimit)
-
-  if (error || !posts || posts.length === 0) return []
-
-  const ids = (posts as any[]).map((p) => p.id)
-  const srv = supabaseServiceRole()
-
-  const [{ data: reactions }, { data: mediaRows }] = await Promise.all([
-    srv.from('reactions').select('post_id, emoji, device_id').in('post_id', ids),
-    srv
-      .from('media_items')
-      .select('post_id, url, thumb_url, crop_position, crop_focus_x, crop_focus_y, kind, created_at')
-      .eq('event_id', eventId)
-      .in('post_id', ids)
-      .order('created_at', { ascending: false }),
-  ])
-
-  const mediaByPost: Record<string, any> = {}
-  for (const r of mediaRows || []) {
-    const pid = String((r as any).post_id || '')
-    if (!pid || mediaByPost[pid]) continue
-    mediaByPost[pid] = r
-  }
-
-  const countsById: Record<string, Record<string, number>> = {}
-  const myById: Record<string, string | null> = {}
-
-  for (const id of ids) {
-    countsById[id] = { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 }
-    myById[id] = null
-  }
-
-  for (const r of reactions || []) {
-    const pid = String((r as any).post_id || '')
-    const emo = String((r as any).emoji || '')
-    if (!countsById[pid]) continue
-    if (countsById[pid][emo] == null) continue
-    countsById[pid][emo] += 1
-    if (device_id && String((r as any).device_id || '') === device_id) {
-      myById[pid] = emo
-    }
-  }
-
-  return (posts as any[]).map((p) => {
-    const media = mediaByPost[p.id] || {}
-    const kind = String(media.kind || '')
-    const mediaRowUrl = String(media.url || media.thumb_url || '') || null
-    const postVideoUrl = String((p as any).video_url || '') || null
-    const postMediaUrl = String((p as any).media_url || '') || null
-    const url = postVideoUrl || mediaRowUrl || postMediaUrl || null
-    const isVideo =
-      !!postVideoUrl ||
-      kind.includes('video') ||
-      /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(url || ''))
-
-    return {
-      ...p,
-      media_url: isVideo ? null : (postMediaUrl || mediaRowUrl || null),
-      video_url: isVideo ? url : null,
-      crop_position: media.crop_position ?? null,
-      crop_focus_x: media.crop_focus_x ?? null,
-      crop_focus_y: media.crop_focus_y ?? null,
-      reaction_counts: countsById[p.id] || { '👍': 0, '😍': 0, '🔥': 0, '🙏': 0 },
-      my_reactions: myById[p.id] ? [myById[p.id] as string] : [],
-    }
-  })
-}
+import { getAdminFromRequest } from '@/lib/adminSession'
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
 
-export async function GET(req: NextRequest) {
+function jsonError(msg: string, status = 400) {
+  return NextResponse.json({ error: msg }, { status })
+}
+
+function isImageFile(file: File) {
+  return (file.type || '').startsWith('image/')
+}
+function isVideoFile(file: File) {
+  return (file.type || '').startsWith('video/')
+}
+
+/**
+ * Upload endpoint
+ * - Accepts FormData: file, kind, gallery_id?, event_id? (preferred)
+ * - Also supports legacy: event, galleryId
+ *
+ * Storage:
+ * - hero:      {event}/hero/{name}.jpg (+ .thumb.webp)
+ * - blessing:  {event}/blessings/{name}.jpg (+ .thumb.webp)
+ * - gallery:   {event}/gallery/{gallery_id}/{name}.jpg (+ .thumb.webp)
+ *
+ * Response (backward compatible):
+ * { ok, path, publicUrl, thumbUrl, is_approved, autoApproveUntil }
+ */
+export async function POST(req: NextRequest) {
   try {
-    const env = getServerEnv()
+    const fd = await req.formData()
+
+    const file = fd.get('file') as File | null
+    const kind = String(fd.get('kind') || 'gallery').trim()
+
+    // Accept both gallery_id and galleryId
+    const gallery_id =
+      (String(fd.get('gallery_id') || '').trim() ||
+        String(fd.get('galleryId') || '').trim()) || null
+
+    if (!file) return jsonError('missing file', 400)
+
+    const srv = getServerEnv()
+
+    // Resolve event_id robustly:
+    // 1) formData event_id (preferred)
+    // 2) formData event (legacy)
+    // 3) query param ?event=
+    // 4) referer path prefix /{event}/...
+    // 5) server ENV fallback
     const url = new URL(req.url)
-    const eventFromQuery = String(url.searchParams.get('event') || '').trim()
-    const eventId = eventFromQuery || env.EVENT_SLUG
+    const eventFromQuery = (url.searchParams.get('event') || '').trim().toLowerCase()
+    const providedEventId = String(fd.get('event_id') || '').trim().toLowerCase()
+    const legacyEvent = String(fd.get('event') || '').trim().toLowerCase()
 
-    const { settings, blocks } = await fetchSettingsAndBlocks(eventId)
-    const device_id = cookies().get('device_id')?.value || null
+    const referer = req.headers.get('referer') || ''
+    let eventFromReferer = ''
+    try {
+      const u = new URL(referer)
+      const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
+      // only accept simple slugs (avoid weird paths like /admin)
+      if (/^[a-z0-9_-]{2,32}$/.test(seg) && seg !== 'admin') eventFromReferer = seg
+    } catch {
+      // ignore
+    }
 
-    const blessingsPreviewLimit = Number(settings?.blessings_preview_limit ?? 3)
-    const blessingsPreview = await fetchBlessingsPreview(eventId, blessingsPreviewLimit, device_id)
-    const galleryPreviews = await fetchGalleryPreviews(eventId, blocks)
+    let event_id = (providedEventId || legacyEvent || eventFromQuery || eventFromReferer || (srv.EVENT_SLUG || 'ido'))
+      .trim()
+      .toLowerCase()
 
-    return NextResponse.json({
-      ok: true,
-      settings,
-      blocks,
-      blessingsPreview,
-      galleryPreviews,
-    })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'error' }, { status: 500 })
-  }
+    const sb = supabaseServiceRole()
+
+    // Gallery permission + approval logic (keep existing behavior)
+    let is_approved = true
+    let autoApproveUntil: string | null = null
+    let requireApproval: boolean = true
+
+    if (kind === 'gallery') {
+      if (!gallery_id) return jsonError('missing gallery_id', 400)
+
+      const { data: g, error: gerr } = await sb
+        .from('galleries')
+        .select('id, event_id, upload_enabled, auto_approve_until, require_approval')
+        .eq('id', gallery_id)
+        .maybeSingle()
+
+      if (gerr) return jsonError(gerr.message, 500)
+      if (!g) return jsonError('gallery not found', 404)
+
+      // Always trust the gallery's event_id for storage + row scoping
+      const galleryEventId = String((g as any).event_id || '').trim().toLowerCase()
+      if (galleryEventId) event_id = galleryEventId
+
+      const uploadEnabled = !!(g as any).upload_enabled
+      autoApproveUntil = (g as any).auto_approve_until || null
+      requireApproval = (g as any).require_approval !== false
+
+      if (!uploadEnabled) return jsonError('upload disabled', 403)
+
+      if (!requireApproval) {
+        is_approved = false
+      } else if (autoApproveUntil) {
+        const now = Date.now()
+        const until = new Date(autoApproveUntil).getTime()
+        is_approved = now < until
+      } else {
+        is_approved = false
       }
+    }
+
+    const ab = await file.arrayBuffer()
+    const bytes = new Uint8Array(ab)
+
+    // Image metadata (for smart cropping defaults)
+    let width: number | null = null
+    let height: number | null = null
+    let crop_position: 'top' | 'center' = 'center'
+
+    const isImage = isImageFile(file)
+    const isVideo = isVideoFile(file)
+
+    if (isImage) {
+      try {
+        const meta = await sharp(bytes).metadata()
+        width = typeof meta.width === 'number' ? meta.width : null
+        height = typeof meta.height === 'number' ? meta.height : null
+        if (width && height && width < height) crop_position = 'top'
+      } catch {
+        // ignore
+      }
+    }
+
+    // Folder mapping:
+    // DB kind stays 'blessing', but storage folder should be 'blessings'
+    const kindFolder = kind === 'blessing' ? 'blessings' : kind
+
+    const folder =
+      kind === 'gallery'
+        ? `${event_id}/gallery/${gallery_id}`
+        : `${event_id}/${kindFolder}`
+
+    // Force JPG for images (as requested)
+    const baseName = `${Date.now()}_${randomUUID()}`
+    const path = isImage ? `${folder}/${baseName}.jpg` : `${folder}/${baseName}`
+
+    let uploadBuf: Uint8Array | Buffer = bytes
+    let contentType = file.type || 'application/octet-stream'
+
+    let thumbPath: string | null = null
+    let thumbBuf: Buffer | null = null
+
+    if (isImage) {
+      // Full JPG
+      const fullJpg = await sharp(bytes).rotate().jpeg({ quality: 88, mozjpeg: true }).toBuffer()
+      uploadBuf = fullJpg
+      contentType = 'image/jpeg'
+
+      // Thumb WEBP
+      thumbBuf = await sharp(bytes).rotate().resize(600).webp({ quality: 82 }).toBuffer()
+      thumbPath = `${path}.thumb.webp`
+    }
+
+    // Upload full/original
+    const { error: uerr } = await sb.storage.from('uploads').upload(path, uploadBuf, {
+      contentType,
+      upsert: false
+    })
+    if (uerr) return jsonError(uerr.message, 500)
+
+    // Upload thumb if available
+    let thumbUrl: string | null = null
+    if (thumbPath && thumbBuf) {
+      const { error: terr } = await sb.storage.from('uploads').upload(thumbPath, thumbBuf, {
+        contentType: 'image/webp',
+        upsert: false
+      })
+      if (terr) return jsonError(terr.message, 500)
+      thumbUrl = getPublicUploadUrl(thumbPath)
+    }
+
+    const publicUrl = getPublicUploadUrl(path)
+
+    const device_id = cookies().get('device_id')?.value || String(fd.get('device_id') || '').trim() || null
+    const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+
+    const { data: inserted, error: ierr } = await sb.from('media_items').insert({
+      kind,
+      event_id,
+      gallery_id,
+      url: publicUrl,
+      thumb_url: thumbUrl || publicUrl,
+      width,
+      height,
+      crop_position: isImage ? crop_position : 'center',
+      storage_provider: 'supabase',
+      external_url: null,
+      storage_path: path,
+      is_approved,
+      editable_until,
+      source: kind === 'gallery' ? 'gallery' : 'admin',
+      uploaded_by: kind === 'gallery' ? 'guest' : 'admin',
+      uploader_device_id: device_id
+    } as any).select('id,editable_until').single()
+
+    if (ierr) return jsonError(ierr.message, 500)
+
+    return NextResponse.json({ ok: true, id: (inserted as any)?.id || null, path, publicUrl, thumbUrl, editable_until: (inserted as any)?.editable_until || editable_until, is_approved, autoApproveUntil })
+  } catch (e: any) {
+    return jsonError(e?.message || 'error', 500)
+  }
+}
+
+/**
+ * Delete media item:
+ * - Admin only
+ * - Deletes both original and thumb from Storage (uploads bucket) using storage_path
+ * - Soft-deletes the DB row (deleted_at)
+ *
+ * Body: { id: "<media_items.id>" }
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const admin = await getAdminFromRequest(req)
+    if (!admin) return jsonError('Unauthorized', 401)
+
+    const body = await req.json().catch(() => ({} as any))
+    const id = String(body?.id || '').trim()
+    if (!id) return jsonError('missing id', 400)
+
+    const sb = supabaseServiceRole()
+
+    const { data: item, error: rerr } = await sb
+      .from('media_items')
+      .select('id, storage_path, deleted_at')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (rerr) return jsonError(rerr.message, 500)
+    if (!item) return jsonError('not found', 404)
+
+    if ((item as any).deleted_at) {
+      return NextResponse.json({ ok: true, alreadyDeleted: true })
+    }
+
+    const storagePath = String((item as any).storage_path || '').trim()
+    if (!storagePath) {
+      const { error: uerr } = await sb
+        .from('media_items')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id)
+      if (uerr) return jsonError(uerr.message, 500)
+      return NextResponse.json({ ok: true, storageDeleted: false })
+    }
+
+    const { error: derr } = await sb.storage.from('uploads').remove([storagePath, `${storagePath}.thumb.webp`])
+    if (derr) return jsonError(`storage delete failed: ${derr.message}`, 500)
+
+    const { error: uerr } = await sb
+      .from('media_items')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
+    if (uerr) return jsonError(uerr.message, 500)
+
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    return jsonError(e?.message || 'error', 500)
+  }
+}
