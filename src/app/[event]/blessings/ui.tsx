@@ -488,7 +488,6 @@ async function saveEdit() {
     let media_path = editDraft.media_path || null
     let media_url = editDraft.media_url || null
     let video_url = editDraft.video_url || null
-    let video_url = editDraft.video_url || null
 
     // remove media (explicit)
     if (editRemoveMedia) {
