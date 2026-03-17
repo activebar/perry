@@ -1,7 +1,7 @@
 // Path: src/components/public/EventHomeClient.tsx
-// Version: V24.2
-// Updated: 2026-03-17 23:40
-// Note: home blessings video preview + play badge + duration badge
+// Version: V24.3
+// Updated: 2026-03-18 00:40
+// Note: home video duration badge reads metadata instead of showing 00:00
 
 'use client'
 
@@ -33,7 +33,45 @@ function formatVideoTime(seconds?: number | null) {
   return `${m}:${String(r).padStart(2, '0')}`
 }
 
-function VideoBadge({ duration }: { duration?: number | null }) {
+function VideoBadge({
+  src,
+  duration,
+}: {
+  src?: string | null
+  duration?: number | null
+}) {
+  const [seconds, setSeconds] = useState<number | null>(
+    typeof duration === 'number' && duration > 0 ? duration : null
+  )
+
+  useEffect(() => {
+    if (typeof duration === 'number' && duration > 0) {
+      setSeconds(duration)
+      return
+    }
+    if (!src) {
+      setSeconds(null)
+      return
+    }
+
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.src = src
+
+    const onLoaded = () => {
+      const d = Number(video.duration || 0)
+      if (Number.isFinite(d) && d > 0) {
+        setSeconds(d)
+      }
+    }
+
+    video.addEventListener('loadedmetadata', onLoaded)
+    return () => {
+      video.removeEventListener('loadedmetadata', onLoaded)
+      video.src = ''
+    }
+  }, [src, duration])
+
   return (
     <>
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -42,7 +80,7 @@ function VideoBadge({ duration }: { duration?: number | null }) {
         </div>
       </div>
       <div className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs font-medium text-white">
-        {formatVideoTime(duration)}
+        {typeof seconds === 'number' && seconds > 0 ? formatVideoTime(seconds) : 'וידאו'}
       </div>
     </>
   )
@@ -644,7 +682,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                                           playsInline
                                           preload="metadata"
                                         />
-                                        <VideoBadge duration={(p as any).video_duration_sec ?? (p as any).duration_sec ?? 0} />
+                                        <VideoBadge src={p.video_url} duration={(p as any).video_duration_sec ?? (p as any).duration_sec ?? 0} />
                                       </>
                                     ) : (
                                       <img
@@ -793,4 +831,4 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
       </Container>
     </main>
   )
-                              }
+            }
