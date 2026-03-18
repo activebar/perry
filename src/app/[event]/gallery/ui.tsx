@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V24.7
-// Updated: 2026-03-18 22:20
-// Note: restore clear download-selection button and use dedicated upload picker button
+// Version: V24.8
+// Updated: 2026-03-18 22:35
+// Note: upload gallery videos as kind=gallery so storage path and approval flow stay consistent
 
 'use client'
 
@@ -494,7 +494,7 @@ export default function GalleryClient({
         if (isVideo) {
           const fd = new FormData()
           fd.append('file', f)
-          fd.append('kind', 'video')
+          fd.append('kind', 'gallery')
           fd.append('gallery_id', galleryId)
           if (deviceId) fd.append('device_id', deviceId)
 
@@ -507,7 +507,7 @@ export default function GalleryClient({
               id: j.id || j.path || crypto.randomUUID(),
               url: j.publicUrl,
               thumb_url: j.thumbUrl || j.thumb || '',
-              kind: j.kind ?? 'video',
+              kind: j.kind ?? 'gallery',
               created_at: new Date().toISOString(),
               editable_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
               uploader_device_id: deviceId,
