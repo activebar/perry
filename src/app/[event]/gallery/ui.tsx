@@ -1,14 +1,13 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V24.5
-// Updated: 2026-03-18 01:35
-// Note: show videos correctly in gallery preview grid + clickable play overlay
+// Version: V24.6
+// Updated: 2026-03-18 01:55
+// Note: preserve kind/crop fields in initialItems so video preview grid renders correctly
 
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { Button, Card } from '@/components/ui'
-
 
 function getLocalDeviceId(): string | null {
   if (typeof window === 'undefined') return null
@@ -31,7 +30,7 @@ function ensureDeviceId(): string | null {
     return existing
   }
   try {
-    const id = (globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`)
+    const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`
     window.localStorage.setItem('device_id', id)
     document.cookie = `device_id=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`
     return id
@@ -53,7 +52,6 @@ type Item = {
   crop_focus_x?: number | null
   crop_focus_y?: number | null
 }
-
 
 function isVideoUrl(url?: string | null) {
   return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(url || ''))
@@ -89,7 +87,7 @@ function VideoOverlay() {
 
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null
-  const escaped = name.replace(/[-.$?*|{}()\[\]\\/\+^]/g, '\\$&')
+  const escaped = name.replace(/[-.$?*|{}()\[\]\\/+^]/g, '\\$&')
   const m = document.cookie.match(new RegExp('(^|; )' + escaped + '=([^;]*)'))
   return m ? decodeURIComponent(m[2]) : null
 }
@@ -152,7 +150,6 @@ async function ensureShortLinkForMedia(mediaItemId: string) {
 }
 
 async function fileToImageBitmap(file: File) {
-  // createImageBitmap is fast and widely supported
   return await createImageBitmap(file)
 }
 
@@ -162,13 +159,11 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
   const srcH = bmp.height
   const srcPixels = srcW * srcH
 
-  // Scale down to meet maxPixels (2MP) while preserving aspect ratio
   let scale = 1
   if (srcPixels > maxPixels) {
     scale = Math.sqrt(maxPixels / srcPixels)
   }
 
-  // Also cap the longest side (helps very tall/wide images)
   const maxLongSide = 2200
   const longSide = Math.max(srcW, srcH)
   if (longSide * scale > maxLongSide) {
@@ -185,18 +180,16 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
   if (!ctx) throw new Error('canvas not supported')
   ctx.drawImage(bmp, 0, 0, dstW, dstH)
 
-  // Try a few quality levels to stay under maxBytes
   const qualities = [0.86, 0.82, 0.78, 0.72, 0.66, 0.6]
   for (const q of qualities) {
     const blob: Blob = await new Promise((resolve, reject) =>
-      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', q)
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', q)
     )
     if (blob.size <= maxBytes) return blob
   }
 
-  // Last resort: return lowest quality blob
   const finalBlob: Blob = await new Promise((resolve, reject) =>
-    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', 0.55)
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', 0.55)
   )
   return finalBlob
 }
@@ -215,11 +208,14 @@ export default function GalleryClient({
       id: x.id,
       url: x.url || x.media_url || x.public_url || '',
       thumb_url: x.thumb_url || '',
+      kind: x.kind ?? null,
       created_at: x.created_at,
       editable_until: x.editable_until ?? null,
       uploader_device_id: x.uploader_device_id ?? null,
       is_approved: x.is_approved ?? true,
-      crop_position: x.crop_position ?? null
+      crop_position: x.crop_position ?? null,
+      crop_focus_x: x.crop_focus_x ?? null,
+      crop_focus_y: x.crop_focus_y ?? null,
     }))
   )
   const [files, setFiles] = useState<File[]>([])
@@ -256,25 +252,23 @@ export default function GalleryClient({
     return `${m}:${String(sec).padStart(2, '0')}`
   }
 
-  // Select + ZIP (client-side)
-    const DIRECT_MAX = 8
-    const ZIP_MAX = 20
+  const DIRECT_MAX = 8
+  const ZIP_MAX = 20
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [zipBusy, setZipBusy] = useState(false)
 
   const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
 
-    const isIOSSafari = useMemo(() => {
-      if (typeof navigator === 'undefined') return false
-      const ua = navigator.userAgent || ''
-      const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
-      const safari = /^((?!chrome|android).)*safari/i.test(ua)
-      return iOS && safari
-    }, [])
+  const isIOSSafari = useMemo(() => {
+    if (typeof navigator === 'undefined') return false
+    const ua = navigator.userAgent || ''
+    const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+    const safari = /^((?!chrome|android).)*safari/i.test(ua)
+    return iOS && safari
+  }, [])
 
-    const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
-
+  const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
 
   const clearSelected = () => {
     setSelected({})
@@ -355,13 +349,16 @@ export default function GalleryClient({
         id: j.id || j.path || crypto.randomUUID(),
         url: j.publicUrl || j.url || '',
         thumb_url: j.thumbUrl || j.thumb || '',
+        kind: j.kind ?? null,
         created_at: new Date().toISOString(),
         editable_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         uploader_device_id: deviceId,
         is_approved: !!j.is_approved,
+        crop_position: j.crop_position ?? null,
+        crop_focus_x: j.crop_focus_x ?? null,
+        crop_focus_y: j.crop_focus_y ?? null,
       }
 
-      // delete old (best-effort)
       await fetch('/api/public/media-delete', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
@@ -376,51 +373,49 @@ export default function GalleryClient({
     }
   }
 
-    const downloadSelectedDirect = async () => {
-      try {
-        setErr(null)
-        setMsg(null)
-        const ids = Object.keys(selected)
-        if (ids.length === 0) return
+  const downloadSelectedDirect = async () => {
+    try {
+      setErr(null)
+      setMsg(null)
+      const ids = Object.keys(selected)
+      if (ids.length === 0) return
 
-        setZipBusy(true)
+      setZipBusy(true)
 
-        // Direct download (1-8): fetch each file and force a short filename: activebar_01.jpg ...
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i]
-          const it = items.find(x => x.id === id)
-          if (!it?.url) continue
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const it = items.find(x => x.id === id)
+        if (!it?.url) continue
 
-          const res = await fetch(it.url)
-          if (!res.ok) throw new Error('download failed')
-          const blob = await res.blob()
-          const ext = blob.type === 'image/png' ? 'png' : 'jpg'
-          const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
+        const res = await fetch(it.url)
+        if (!res.ok) throw new Error('download failed')
+        const blob = await res.blob()
+        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+        const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
 
-          const href = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = href
-          a.download = name
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-          URL.revokeObjectURL(href)
+        const href = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = href
+        a.download = name
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(href)
 
-          // small delay so browsers don't block multiple downloads aggressively
-          await new Promise(r => setTimeout(r, 250))
-        }
-
-        setMsg('✅ ההורדות התחילו')
-        clearSelected()
-        setSelectMode(false)
-      } catch (e: any) {
-        setErr(e?.message || 'שגיאה בהורדה')
-      } finally {
-        setZipBusy(false)
+        await new Promise(r => setTimeout(r, 250))
       }
-    }
 
-    const downloadSelectedZip = async () => {
+      setMsg('✅ ההורדות התחילו')
+      clearSelected()
+      setSelectMode(false)
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בהורדה')
+    } finally {
+      setZipBusy(false)
+    }
+  }
+
+  const downloadSelectedZip = async () => {
     try {
       setErr(null)
       setMsg(null)
@@ -460,7 +455,6 @@ export default function GalleryClient({
     }
   }
 
-
   const pickerRef = useRef<HTMLInputElement | null>(null)
   const cameraRef = useRef<HTMLInputElement | null>(null)
 
@@ -474,7 +468,6 @@ export default function GalleryClient({
   function addFiles(list: FileList | null) {
     const arr = Array.from(list || []).filter(f => (f.type || '').startsWith('image/'))
     if (arr.length === 0) return
-    // If lightbox is open and user can edit, treat picking a single file as "replace"
     if (lightbox && arr.length === 1 && canEditMine(lightbox)) {
       replaceMine(lightbox, arr[0])
       return
@@ -492,7 +485,7 @@ export default function GalleryClient({
     setMsg(null)
     setBusy(true)
     try {
-            for (const f of files) {
+      for (const f of files) {
         const blob = await compressToJpeg2MP(f)
         const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
 
@@ -500,7 +493,7 @@ export default function GalleryClient({
         fd.append('file', out)
         fd.append('kind', 'gallery')
         fd.append('gallery_id', galleryId)
-      if (deviceId) fd.append('device_id', deviceId)
+        if (deviceId) fd.append('device_id', deviceId)
 
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
         const j = await res.json().catch(() => ({}))
@@ -511,10 +504,14 @@ export default function GalleryClient({
             id: j.id || j.path || crypto.randomUUID(),
             url: j.publicUrl,
             thumb_url: j.thumbUrl || j.thumb || '',
+            kind: j.kind ?? null,
             created_at: new Date().toISOString(),
             editable_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
             uploader_device_id: deviceId,
             is_approved: !!j.is_approved,
+            crop_position: j.crop_position ?? null,
+            crop_focus_x: j.crop_focus_x ?? null,
+            crop_focus_y: j.crop_focus_y ?? null,
           }
           if (j.is_approved) {
             setItems(prev => [created, ...prev])
@@ -574,7 +571,6 @@ export default function GalleryClient({
           </div>
         </div>
 
-        {/* Select + ZIP */}
         <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
           {!selectMode ? (
             <Button
@@ -718,4 +714,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-    }
+}
