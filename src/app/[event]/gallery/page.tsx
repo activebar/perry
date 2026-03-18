@@ -100,7 +100,7 @@ export default async function GalleryIndexPageForEvent({
       return { ...b, title, buttonLabel }
     })
 
-  const { data: mediaRows } = await srv
+  const { data: mediaRows, error: mErr } = await srv
     .from('media_items')
     .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,crop_position')
     .eq('event_id', eventId)
@@ -109,6 +109,8 @@ export default async function GalleryIndexPageForEvent({
     .in('gallery_id', galleryIds as any)
     .order('created_at', { ascending: false })
     .limit(1200)
+
+  if (mErr) throw mErr
 
   const mediaByGallery = new Map<string, any[]>()
   for (const m of mediaRows || []) {
@@ -158,56 +160,29 @@ export default async function GalleryIndexPageForEvent({
                 {shuffled.length > 0 && (
                   <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {shuffled.map((m: any) => {
-  const isVideo = isVideoItem(m)
-  const url = isVideo
-    ? (m.url || m.public_url || m.storage_path)
-    : (m.thumb_url || m.url || m.public_url || m.storage_path)
+                      const isVideo = isVideoItem(m)
+                      const url = isVideo
+                        ? m.url || m.public_url || m.storage_path
+                        : m.thumb_url || m.url || m.public_url || m.storage_path
 
-  return (
-    <Link
-      key={m.id}
-      href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(
-        String(g.galleryId)
-      )}`}
-      prefetch={false}
-      className="relative w-full overflow-hidden rounded-xl bg-zinc-100"
-      style={{ aspectRatio: '1 / 1' }}
-    >
-      {isVideo ? (
-        <>
-          <video
-            src={url}
-            className="absolute inset-0 h-full w-full object-cover"
-            style={{
-              objectPosition: m.crop_position === 'top' ? 'top' : 'center',
-            }}
-            muted
-            playsInline
-            preload="metadata"
-          />
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
-              ▶
-            </div>
-          </div>
-          <div className="pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
-            וידאו
-          </div>
-        </>
-      ) : (
-        <img
-          src={url}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-          style={{
-            objectPosition: m.crop_position === 'top' ? 'top' : 'center',
-          }}
-          loading="lazy"
-        />
-      )}
-    </Link>
-  )
-})}
+                      return (
+                        <Link
+                          key={m.id}
+                          href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(
+                            String(g.galleryId)
+                          )}`}
+                          prefetch={false}
+                          className="relative w-full overflow-hidden rounded-xl bg-zinc-100"
+                          style={{ aspectRatio: '1 / 1' }}
+                        >
+                          {isVideo ? (
+                            <>
+                              <video
+                                src={url}
+                                className="absolute inset-0 h-full w-full object-cover"
+                                style={{
+                                  objectPosition: m.crop_position === 'top' ? 'top' : 'center',
+                                }}
                                 muted
                                 playsInline
                                 preload="metadata"
