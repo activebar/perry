@@ -120,23 +120,9 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
             <div className="text-sm opacity-80">בחרו גלריה לצפייה בתמונות</div>
 
             {/* Sub galleries buttons */}
-            {enabledBlocks.length > 0 ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2 justify-end">
-                {enabledBlocks.map((g) => (
-                  <Link
-                    key={g.galleryId}
-                    href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(g.galleryId))}`}
-                    prefetch={false}
-                    className="px-3 py-1 rounded-full border border-zinc-200 text-sm bg-white hover:bg-zinc-50"
-                  >
-                    {g.title}
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-3 text-sm opacity-70">אין גלריות פעילות כרגע.</div>
-            )}
-          </div>
+            <div className="mt-3 text-sm text-red-600 font-bold">
+  TEST GALLERY PAGE
+</div>
         </Card>
 
         {/* Preview cards (optional) */}
