@@ -31,6 +31,10 @@ type BlockGalleryItem = {
   limit: number
 }
 
+function isVideoKind(kind: unknown) {
+  return String(kind || '').toLowerCase().includes('video')
+}
+
 export default async function GalleryIndexPageForEvent({
   params,
 }: {
@@ -118,10 +122,6 @@ export default async function GalleryIndexPageForEvent({
           <div className="space-y-2 text-right">
             <div className="text-xl font-semibold">גלריות</div>
             <div className="text-sm opacity-80">בחרו גלריה לצפייה בתמונות</div>
-
-            <div className="mt-3 rounded-xl bg-red-600 px-4 py-3 text-center font-bold text-white">
-              TEST GALLERY PAGE
-            </div>
           </div>
         </Card>
 
@@ -155,6 +155,8 @@ export default async function GalleryIndexPageForEvent({
                   <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {shuffled.map((m: any) => {
                       const url = m.thumb_url || m.url || m.public_url
+                      const isVideo = isVideoKind(m.kind)
+
                       return (
                         <Link
                           key={m.id}
@@ -165,13 +167,38 @@ export default async function GalleryIndexPageForEvent({
                           className="relative w-full overflow-hidden rounded-xl bg-zinc-100"
                           style={{ aspectRatio: '1 / 1' }}
                         >
-                          <img
-                            src={url}
-                            alt=""
-                            className="absolute inset-0 h-full w-full object-cover"
-                            style={{ objectPosition: m.crop_position === 'top' ? 'top' : 'center' }}
-                            loading="lazy"
-                          />
+                          {isVideo ? (
+                            <>
+                              <video
+                                src={url}
+                                className="absolute inset-0 h-full w-full object-cover"
+                                style={{
+                                  objectPosition: m.crop_position === 'top' ? 'top' : 'center',
+                                }}
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+                                  ▶
+                                </div>
+                              </div>
+                              <div className="pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
+                                וידאו
+                              </div>
+                            </>
+                          ) : (
+                            <img
+                              src={url}
+                              alt=""
+                              className="absolute inset-0 h-full w-full object-cover"
+                              style={{
+                                objectPosition: m.crop_position === 'top' ? 'top' : 'center',
+                              }}
+                              loading="lazy"
+                            />
+                          )}
                         </Link>
                       )
                     })}
