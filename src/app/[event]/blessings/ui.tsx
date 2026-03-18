@@ -783,12 +783,12 @@ async function saveEdit() {
                   return (
                     <div className="mt-3 flex justify-center">
                       <button
-                        type="button"
-                        className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
-                        style={{ width: mediaSize, height: mediaSize }}
-                        onClick={() => setLightbox({ url: mediaUrl, isVideo: video, post: p })}
-                        aria-label="פתח מדיה"
-                      >
+  type="button"
+  className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
+  style={{ width: mediaSize, height: mediaSize }}
+  onClick={() => setLightbox({ url: mediaUrl, isVideo: video, post: p })}
+  aria-label="פתח מדיה"
+>
                         {video ? (
                           <>
                             <video
