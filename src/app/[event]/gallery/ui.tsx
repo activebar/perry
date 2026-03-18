@@ -1,3 +1,8 @@
+// Path: src/app/[event]/gallery/ui.tsx
+// Version: V24.5
+// Updated: 2026-03-18 01:35
+// Note: show videos correctly in gallery preview grid + clickable play overlay
+
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
@@ -39,11 +44,47 @@ type Item = {
   id: string
   url: string
   thumb_url?: string
+  kind?: string | null
   created_at?: string
   editable_until?: string | null
   uploader_device_id?: string | null
   is_approved?: boolean
   crop_position?: string | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
+}
+
+
+function isVideoUrl(url?: string | null) {
+  return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(url || ''))
+}
+
+function objectPositionFromCrop(item: {
+  crop_position?: string | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
+}) {
+  const x = typeof item?.crop_focus_x === 'number' ? Math.max(0, Math.min(1, item.crop_focus_x)) : null
+  const y = typeof item?.crop_focus_y === 'number' ? Math.max(0, Math.min(1, item.crop_focus_y)) : null
+  if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
+  if (item?.crop_position === 'top') return '50% 12%'
+  if (item?.crop_position === 'bottom') return '50% 82%'
+  return '50% 50%'
+}
+
+function VideoOverlay() {
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+          ▶
+        </div>
+      </div>
+      <div className="pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
+        וידאו
+      </div>
+    </>
+  )
 }
 
 function getCookie(name: string): string | null {
@@ -594,7 +635,16 @@ export default function GalleryClient({
               </Button>
             </div>
 
-            <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
+            {isVideoUrl(lightbox.url) || String(lightbox.kind || '').toLowerCase().includes('video') ? (
+              <video src={lightbox.url} controls playsInline preload="metadata" className="w-full rounded-2xl bg-black" />
+            ) : (
+              <img
+                src={lightbox.url}
+                alt=""
+                className="w-full rounded-2xl bg-white"
+                style={{ objectPosition: objectPositionFromCrop(lightbox), objectFit: 'cover' }}
+              />
+            )}
 
             <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow" dir="rtl">
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -621,7 +671,26 @@ export default function GalleryClient({
               onClick={() => onThumbClick(it)}
               type="button"
             >
-              <img src={it.thumb_url || it.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: (it.crop_position || 'center') }} />
+              {isVideoUrl(it.url) || isVideoUrl(it.thumb_url) || String(it.kind || '').toLowerCase().includes('video') ? (
+                <>
+                  <video
+                    src={it.url}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{ objectPosition: objectPositionFromCrop(it) }}
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                  <VideoOverlay />
+                </>
+              ) : (
+                <img
+                  src={it.thumb_url || it.url}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{ objectPosition: objectPositionFromCrop(it) }}
+                />
+              )}
 
               {selectMode ? (
                 <div className="absolute left-2 top-2">
@@ -649,4 +718,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-}
+    }
