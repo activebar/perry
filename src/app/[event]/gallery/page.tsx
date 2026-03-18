@@ -97,7 +97,7 @@ export default async function GalleryIndexPageForEvent({
     .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,crop_position')
     .eq('event_id', eventId)
     .eq('is_approved', true)
-    .eq('kind', 'gallery')
+    .in('kind', ['gallery', 'video'])
     .in('gallery_id', galleryIds as any)
     .order('created_at', { ascending: false })
     .limit(1200)
