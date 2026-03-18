@@ -1,3 +1,8 @@
+// Path: src/app/gallery/ui.tsx
+// Version: V24.5
+// Updated: 2026-03-18 01:35
+// Note: better play overlay for videos in sub-gallery grid
+
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -1185,9 +1190,16 @@ async function directUploadVideoGallery(file: File, crop: { crop_position: 'top'
                 ) : null}
 
                 {video ? (
-                  <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white">
-                    🎥
-                  </div>
+                  <>
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+                        ▶
+                      </div>
+                    </div>
+                    <div className="pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
+                      וידאו
+                    </div>
+                  </>
                 ) : null}
 
                 {selectMode ? (
