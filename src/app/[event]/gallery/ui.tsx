@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V24.6
-// Updated: 2026-03-18 01:55
-// Note: preserve kind/crop fields in initialItems so video preview grid renders correctly
+// Version: V24.7
+// Updated: 2026-03-18 22:20
+// Note: restore clear download-selection button and use dedicated upload picker button
 
 'use client'
 
@@ -457,6 +457,7 @@ export default function GalleryClient({
 
   const pickerRef = useRef<HTMLInputElement | null>(null)
   const cameraRef = useRef<HTMLInputElement | null>(null)
+  const uploadPickRef = useRef<HTMLInputElement | null>(null)
 
   const feed = useMemo(() => (items || []).filter(i => i.url), [items])
 
@@ -466,7 +467,9 @@ export default function GalleryClient({
   }
 
   function addFiles(list: FileList | null) {
-    const arr = Array.from(list || []).filter(f => (f.type || '').startsWith('image/'))
+    const arr = Array.from(list || []).filter(f =>
+      (f.type || '').startsWith('image/') || (f.type || '').startsWith('video/')
+    )
     if (arr.length === 0) return
     if (lightbox && arr.length === 1 && canEditMine(lightbox)) {
       replaceMine(lightbox, arr[0])
@@ -486,6 +489,42 @@ export default function GalleryClient({
     setBusy(true)
     try {
       for (const f of files) {
+        const isVideo = (f.type || '').startsWith('video/')
+
+        if (isVideo) {
+          const fd = new FormData()
+          fd.append('file', f)
+          fd.append('kind', 'video')
+          fd.append('gallery_id', galleryId)
+          if (deviceId) fd.append('device_id', deviceId)
+
+          const res = await fetch('/api/upload', { method: 'POST', body: fd })
+          const j = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(j?.error || 'upload failed')
+
+          if (j?.publicUrl) {
+            const created: Item = {
+              id: j.id || j.path || crypto.randomUUID(),
+              url: j.publicUrl,
+              thumb_url: j.thumbUrl || j.thumb || '',
+              kind: j.kind ?? 'video',
+              created_at: new Date().toISOString(),
+              editable_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+              uploader_device_id: deviceId,
+              is_approved: !!j.is_approved,
+              crop_position: j.crop_position ?? null,
+              crop_focus_x: j.crop_focus_x ?? null,
+              crop_focus_y: j.crop_focus_y ?? null,
+            }
+            if (j.is_approved) {
+              setItems(prev => [created, ...prev])
+            } else {
+              setMsg('✅ הועלה וממתין לאישור מנהל')
+            }
+          }
+          continue
+        }
+
         const blob = await compressToJpeg2MP(f)
         const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
 
@@ -534,13 +573,20 @@ export default function GalleryClient({
         <div className="flex flex-col gap-3 sm:flex-row-reverse sm:items-center sm:justify-between">
           <div className="text-right">
             <h3 className="text-lg font-semibold">תמונות בגלריה</h3>
-            <p className="text-sm text-zinc-600">העלאה פתוחה רק אם מנהל פתח אותה.</p>
+            <p className="text-sm text-zinc-600">אפשר להעלות תמונות או סרטונים.</p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
-            <Button onClick={upload} disabled={busy || files.length === 0 || !uploadEnabled} className="sm:w-44">
-              {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => uploadPickRef.current?.click()}
+              disabled={!uploadEnabled}
+              className="sm:w-44"
+            >
+              בחר קבצים
             </Button>
+
             <Button
               type="button"
               variant="ghost"
@@ -550,15 +596,25 @@ export default function GalleryClient({
             >
               צלם תמונה
             </Button>
+
+            <Button
+              onClick={upload}
+              disabled={busy || files.length === 0 || !uploadEnabled}
+              className="sm:w-44"
+            >
+              {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
+            </Button>
+
             <input
-              ref={pickerRef}
+              ref={uploadPickRef}
               type="file"
-              accept="image/*"
+              accept="image/*,video/*"
               multiple
               onChange={e => addFiles(e.target.files)}
-              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
+              className="hidden"
               disabled={!uploadEnabled}
             />
+
             <input
               ref={cameraRef}
               type="file"
@@ -568,49 +624,79 @@ export default function GalleryClient({
               className="hidden"
               disabled={!uploadEnabled}
             />
+
+            <input
+              ref={pickerRef}
+              type="file"
+              accept="image/*"
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (file && lightbox) replaceMine(lightbox, file)
+                e.currentTarget.value = ''
+              }}
+              className="hidden"
+            />
           </div>
         </div>
 
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
-          {!selectMode ? (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setErr(null)
-                setMsg(null)
-                clearSelected()
-                setSelectMode(true)
-              }}
-              disabled={zipBusy}
-            >
-              בחר תמונות
-            </Button>
-          ) : (
-            <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
-              <Button onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip} disabled={zipBusy || selectedCount === 0}>
-                {zipBusy ? (useDirect ? 'מוריד…' : 'מכין ZIP…') : (selectedCount <= DIRECT_MAX ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})` : `הורד ZIP (${selectedCount}/${ZIP_MAX})`)}
-              </Button>
+        <div className="mt-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
+            {!selectMode ? (
               <Button
                 variant="ghost"
                 onClick={() => {
-                  setSelectMode(false)
-                  clearSelected()
                   setErr(null)
                   setMsg(null)
+                  clearSelected()
+                  setSelectMode(true)
                 }}
                 disabled={zipBusy}
               >
-                ביטול
+                בחר תמונות להורדה
               </Button>
-            </div>
-          )}
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+                <Button
+                  onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip}
+                  disabled={zipBusy || selectedCount === 0}
+                >
+                  {zipBusy
+                    ? useDirect
+                      ? 'מוריד…'
+                      : 'מכין ZIP…'
+                    : selectedCount <= DIRECT_MAX
+                      ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})`
+                      : `הורד ZIP (${selectedCount}/${ZIP_MAX})`}
+                </Button>
 
-          {selectMode ? (
-            <p className="text-xs text-zinc-500 text-right">סמן עד {ZIP_MAX} תמונות. 1–{DIRECT_MAX} יורד ישיר, {DIRECT_MAX + 1}–{ZIP_MAX} יורד ZIP. אחרי הורדה אפשר לבחור שוב.</p>
-          ) : (
-            <span />
-          )}
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setSelectMode(false)
+                    clearSelected()
+                    setErr(null)
+                    setMsg(null)
+                  }}
+                  disabled={zipBusy}
+                >
+                  ביטול
+                </Button>
+              </div>
+            )}
+
+            <p className="text-xs text-zinc-500 text-right">
+              {selectMode
+                ? `סמן עד ${ZIP_MAX} תמונות. 1–${DIRECT_MAX} יורד ישיר, ${DIRECT_MAX + 1}–${ZIP_MAX} יורד ZIP.`
+                : 'לבחירת כמה תמונות ולהורדה מרוכזת לחץ על "בחר תמונות להורדה".'}
+            </p>
+          </div>
         </div>
+
+        {files.length > 0 && (
+          <p className="mt-2 text-sm text-zinc-600 text-right">
+            נבחרו {files.length} קבצים
+          </p>
+        )}
 
         {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
         {msg && <p className="mt-2 text-sm text-zinc-700">{msg}</p>}
