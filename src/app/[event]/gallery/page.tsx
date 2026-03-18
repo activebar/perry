@@ -31,12 +31,14 @@ type BlockGalleryItem = {
   limit: number
 }
 
-export default async function GalleryIndexPageForEvent({ params }: { params: { event: string } }) {
+export default async function GalleryIndexPageForEvent({
+  params,
+}: {
+  params: { event: string }
+}) {
   const eventId = String(params?.event || '').trim()
   const srv = supabaseServiceRole()
 
-  // Source of truth for sub-galleries buttons is the blocks config (as used across the site).
-  // We still validate against galleries table to avoid showing inactive/missing galleries.
   const { data: blocks, error: bErr } = await srv
     .from('blocks')
     .select('id,type,order_index,is_visible,config,event_id')
@@ -54,7 +56,6 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
       if (!gid) return null
 
       const title = String(cfg?.title || '').trim() || 'גלריה'
-      // IMPORTANT: button label should follow the gallery name if not explicitly set.
       const buttonLabel = String(cfg?.button_label || '').trim() || title
       const limit = Number(cfg?.limit || 12)
 
@@ -64,7 +65,6 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
 
   const galleryIds = blockItems.map((g) => g.galleryId)
 
-  // Keep only active galleries (or those without explicit is_active=false)
   const { data: galleriesRows, error: gErr } = await srv
     .from('galleries')
     .select('id,is_active,title')
@@ -74,7 +74,9 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
   if (gErr) throw gErr
 
   const byId = new Map<string, any>()
-  for (const g of galleriesRows || []) byId.set(String((g as any).id), g)
+  for (const g of galleriesRows || []) {
+    byId.set(String((g as any).id), g)
+  }
 
   const enabledBlocks = blockItems
     .filter((b) => {
@@ -83,8 +85,6 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
       return (row as any).is_active !== false
     })
     .map((b) => {
-      // If gallery table has a better title and blocks title is generic, keep blocks title as truth.
-      // But if blocks title is missing (shouldn't), fallback to gallery title.
       const row = byId.get(String(b.galleryId))
       const fallbackTitle = String((row as any)?.title || '').trim()
       const title = String(b.title || '').trim() || fallbackTitle || 'גלריה'
@@ -119,17 +119,19 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
             <div className="text-xl font-semibold">גלריות</div>
             <div className="text-sm opacity-80">בחרו גלריה לצפייה בתמונות</div>
 
-            {/* Sub galleries buttons */}
-            <div className="mt-3 text-sm text-red-600 font-bold">
-  TEST GALLERY PAGE
-</div>
+            <div className="mt-3 rounded-xl bg-red-600 px-4 py-3 text-center font-bold text-white">
+              TEST GALLERY PAGE
+            </div>
+          </div>
         </Card>
 
-        {/* Preview cards (optional) */}
         <div className="mt-4 grid gap-3">
           {enabledBlocks.map((g) => {
             const list = (mediaByGallery.get(String(g.galleryId)) || []).slice(0, 60)
-            const shuffled = shuffleInPlace([...list]).slice(0, Math.max(0, Math.min(12, g.limit || 12)))
+            const shuffled = shuffleInPlace([...list]).slice(
+              0,
+              Math.max(0, Math.min(12, g.limit || 12))
+            )
 
             return (
               <Card key={g.galleryId}>
@@ -139,7 +141,9 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
                   </div>
 
                   <Link
-                    href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(g.galleryId))}`}
+                    href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(
+                      String(g.galleryId)
+                    )}`}
                     prefetch={false}
                     className="text-sm underline"
                   >
@@ -154,12 +158,13 @@ export default async function GalleryIndexPageForEvent({ params }: { params: { e
                       return (
                         <Link
                           key={m.id}
-                          href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(g.galleryId))}`}
+                          href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(
+                            String(g.galleryId)
+                          )}`}
                           prefetch={false}
                           className="relative w-full overflow-hidden rounded-xl bg-zinc-100"
                           style={{ aspectRatio: '1 / 1' }}
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={url}
                             alt=""
