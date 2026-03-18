@@ -1,3 +1,5 @@
+//src/app/[event]/gallery/[id]/page.tsx
+// Version: V24.6
 import Link from 'next/link'
 
 import { Container, Card } from '@/components/ui'
