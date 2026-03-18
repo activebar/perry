@@ -31,8 +31,12 @@ type BlockGalleryItem = {
   limit: number
 }
 
-function isVideoKind(kind: unknown) {
-  return String(kind || '').toLowerCase().includes('video')
+function isVideoItem(item: any) {
+  const kind = String(item?.kind || '').toLowerCase()
+  const url = String(item?.url || item?.public_url || item?.storage_path || '').toLowerCase()
+
+  if (kind.includes('video')) return true
+  return /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)(\?|$)/i.test(url)
 }
 
 export default async function GalleryIndexPageForEvent({
