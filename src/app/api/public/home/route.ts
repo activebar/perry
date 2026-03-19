@@ -1,7 +1,7 @@
 // Path: src/app/api/public/home/route.ts
-// Version: V24.6
-// Updated: 2026-03-18 01:10
-// Note: FIX wrong file (upload route). Restores correct home API + random blessings.
+// Version: V24.7
+// Updated: 2026-03-19 15:05
+// Note: add galleryPreviews to home API so sub-gallery previews render on event home page
 
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
@@ -111,6 +111,69 @@ async function fetchBlessingsPreview(eventId: string, limit: number, device_id?:
   })
 }
 
+async function fetchGalleryPreviews(eventId: string, blocks: any[]) {
+  const srv = supabaseServiceRole()
+
+  const galleryBlocks = (blocks || []).filter((b: any) => {
+    const type = String(b?.type || '')
+    return type === 'gallery' || type.startsWith('gallery_')
+  })
+
+  const galleryIds = galleryBlocks
+    .map((b: any) => String((b?.config || {}).gallery_id || '').trim())
+    .filter(Boolean)
+
+  if (galleryIds.length === 0) return {}
+
+  const { data: rows } = await srv
+    .from('media_items')
+    .select(
+      'id, gallery_id, url, thumb_url, kind, crop_position, crop_focus_x, crop_focus_y, created_at'
+    )
+    .eq('event_id', eventId)
+    .eq('is_approved', true)
+    .in('gallery_id', galleryIds as any)
+    .in('kind', ['gallery', 'video'])
+    .order('created_at', { ascending: false })
+    .limit(800)
+
+  const grouped: Record<string, any[]> = {}
+
+  for (const gid of galleryIds) {
+    grouped[gid] = []
+  }
+
+  for (const row of rows || []) {
+    const gid = String((row as any).gallery_id || '').trim()
+    if (!gid) continue
+    if (!grouped[gid]) grouped[gid] = []
+    grouped[gid].push({
+      id: row.id,
+      gallery_id: row.gallery_id,
+      url: row.url,
+      thumb_url: row.thumb_url,
+      kind: row.kind,
+      crop_position: row.crop_position ?? null,
+      crop_focus_x: row.crop_focus_x ?? null,
+      crop_focus_y: row.crop_focus_y ?? null,
+      created_at: row.created_at,
+    })
+  }
+
+  for (const block of galleryBlocks) {
+    const cfg = (block as any)?.config || {}
+    const gid = String(cfg.gallery_id || '').trim()
+    if (!gid) continue
+
+    const limit = Math.max(1, Number(cfg.limit || 6))
+    const items = grouped[gid] || []
+
+    grouped[gid] = shuffle(items).slice(0, limit)
+  }
+
+  return grouped
+}
+
 export async function GET(req: NextRequest) {
   try {
     const env = getServerEnv()
@@ -125,17 +188,17 @@ export async function GET(req: NextRequest) {
 
     const blessingsPreviewLimit = Number(settings?.blessings_preview_limit ?? 3)
 
-    const blessingsPreview = await fetchBlessingsPreview(
-      eventId,
-      blessingsPreviewLimit,
-      device_id
-    )
+    const [blessingsPreview, galleryPreviews] = await Promise.all([
+      fetchBlessingsPreview(eventId, blessingsPreviewLimit, device_id),
+      fetchGalleryPreviews(eventId, blocks || []),
+    ])
 
     return NextResponse.json({
       ok: true,
       settings,
       blocks,
       blessingsPreview,
+      galleryPreviews,
     })
   } catch (e: any) {
     return NextResponse.json(
