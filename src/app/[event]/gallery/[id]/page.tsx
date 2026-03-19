@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/[id]/page.tsx
-// Version: V24.7
-// Updated: 2026-03-19 00:20
-// Note: use event gallery client and load both gallery images and videos
+// Version: V25.1
+// Updated: 2026-03-19 13:10
+// Note: load gallery video limits from event_settings and pass them to GalleryClient
 
 import Link from 'next/link'
 
@@ -101,6 +101,16 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
 
   const nav = blockItems.filter((x) => activeSet.has(String(x.galleryId)))
 
+  const { data: eventSettings } = await sb
+    .from('event_settings')
+    .select('gallery_video_max_mb,gallery_video_max_seconds')
+    .eq('event_id', eventId)
+    .maybeSingle()
+
+  const galleryVideoMaxMb = Number((eventSettings as any)?.gallery_video_max_mb ?? 200)
+  const galleryVideoMaxSeconds = Number((eventSettings as any)?.gallery_video_max_seconds ?? 60)
+
+
   return (
     <main dir="rtl" className="text-right">
       <Container>
@@ -142,6 +152,8 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
             initialItems={items || []}
             galleryId={galleryId}
             uploadEnabled={uploadEnabled}
+            galleryVideoMaxMb={galleryVideoMaxMb}
+            galleryVideoMaxSeconds={galleryVideoMaxSeconds}
           />
         </div>
       </Container>
