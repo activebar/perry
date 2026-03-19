@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.0
-// Updated: 2026-03-19 00:35
-// Note: pre-validate gallery video size and duration before upload, and keep uploads under the correct event folder
+// Version: V25.1
+// Updated: 2026-03-19 13:10
+// Note: use admin-configured gallery video size/duration limits with safe fallbacks and keep uploads under the correct event folder
 
 'use client'
 
@@ -9,9 +9,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { usePathname } from 'next/navigation'
 import { Button, Card } from '@/components/ui'
-
-const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024
-const MAX_VIDEO_DURATION_SECONDS = 60
 
 function getLocalDeviceId(): string | null {
   if (typeof window === 'undefined') return null
@@ -103,20 +100,18 @@ async function getVideoDurationSeconds(file: File): Promise<number> {
   })
 }
 
-async function validateSelectedMedia(file: File): Promise<string> {
+async function validateSelectedMedia(file: File, maxVideoBytes: number, maxVideoSeconds: number): Promise<string> {
   if (!file) return ''
 
   if (isVideoFile(file)) {
-    if (file.size > MAX_VIDEO_UPLOAD_BYTES) {
-      return `הסרטון גדול מדי. המגבלה היא ${Math.round(
-        MAX_VIDEO_UPLOAD_BYTES / 1024 / 1024
-      )}MB.`
+    if (file.size > maxVideoBytes) {
+      return `הסרטון גדול מדי. המגבלה היא ${Math.round(maxVideoBytes / 1024 / 1024)}MB.`
     }
 
     try {
       const duration = await getVideoDurationSeconds(file)
-      if (duration > MAX_VIDEO_DURATION_SECONDS) {
-        return `הסרטון ארוך מדי. המגבלה היא ${MAX_VIDEO_DURATION_SECONDS} שניות.`
+      if (duration > maxVideoSeconds) {
+        return `הסרטון ארוך מדי. המגבלה היא ${maxVideoSeconds} שניות.`
       }
     } catch {
       return 'לא ניתן לבדוק את אורך הסרטון. נסה קובץ אחר.'
@@ -286,16 +281,24 @@ export default function GalleryClient({
   initialItems,
   galleryId,
   uploadEnabled,
+  galleryVideoMaxMb = 200,
+  galleryVideoMaxSeconds = 60,
 }: {
   initialItems: any[]
   galleryId: string
   uploadEnabled: boolean
+  galleryVideoMaxMb?: number
+  galleryVideoMaxSeconds?: number
 }) {
   const pathname = usePathname()
   const eventId = useMemo(() => {
     const part = String(pathname || '').split('/')[1] || ''
     return part.trim()
   }, [pathname])
+
+  const maxVideoMb = Number.isFinite(Number(galleryVideoMaxMb)) && Number(galleryVideoMaxMb) > 0 ? Number(galleryVideoMaxMb) : 200
+  const maxVideoSeconds = Number.isFinite(Number(galleryVideoMaxSeconds)) && Number(galleryVideoMaxSeconds) > 0 ? Number(galleryVideoMaxSeconds) : 60
+  const maxVideoBytes = Math.round(maxVideoMb * 1024 * 1024)
 
   const [items, setItems] = useState<Item[]>(
     (initialItems || []).map((x: any) => ({
@@ -588,7 +591,7 @@ export default function GalleryClient({
 
     const valid: File[] = []
     for (const file of arr) {
-      const mediaError = await validateSelectedMedia(file)
+      const mediaError = await validateSelectedMedia(file, maxVideoBytes, maxVideoSeconds)
       if (mediaError) {
         setErr(`"${file.name}": ${mediaError}`)
         continue
@@ -618,7 +621,7 @@ export default function GalleryClient({
 
     try {
       for (const f of files) {
-        const precheck = await validateSelectedMedia(f)
+        const precheck = await validateSelectedMedia(f, maxVideoBytes, maxVideoSeconds)
         if (precheck) {
           throw new Error(`"${f.name}": ${precheck}`)
         }
