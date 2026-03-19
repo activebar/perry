@@ -1,7 +1,7 @@
 // Path: src/app/[event]/blessings/ui.tsx
-// Version: V25.0
-// Updated: 2026-03-19 00:45
-// Note: pre-validate blessing video size and duration before upload and before edit upload
+// Version: V25.1
+// Updated: 2026-03-19 13:10
+// Note: use admin-configured blessings video size/duration limits with safe fallbacks and pre-validate before upload/edit
 
 'use client'
 
@@ -32,9 +32,6 @@ type Post = {
 }
 
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
-const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024
-const MAX_VIDEO_DURATION_SECONDS = 60
-
 async function jfetch(url: string, init?: RequestInit) {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
@@ -91,18 +88,18 @@ async function getVideoDurationSeconds(file: File): Promise<number> {
   })
 }
 
-async function validateSelectedMedia(file: File) {
+async function validateSelectedMedia(file: File, maxVideoBytes: number, maxVideoSeconds: number) {
   if (!file) return ''
 
   if (isVideoFile(file)) {
-    if (file.size > MAX_VIDEO_UPLOAD_BYTES) {
-      return `הסרטון גדול מדי. המגבלה היא ${Math.round(MAX_VIDEO_UPLOAD_BYTES / 1024 / 1024)}MB.`
+    if (file.size > maxVideoBytes) {
+      return `הסרטון גדול מדי. המגבלה היא ${Math.round(maxVideoBytes / 1024 / 1024)}MB.`
     }
 
     try {
       const duration = await getVideoDurationSeconds(file)
-      if (duration > MAX_VIDEO_DURATION_SECONDS) {
-        return `הסרטון ארוך מדי. המגבלה היא ${MAX_VIDEO_DURATION_SECONDS} שניות.`
+      if (duration > maxVideoSeconds) {
+        return `הסרטון ארוך מדי. המגבלה היא ${maxVideoSeconds} שניות.`
       }
     } catch {
       return 'לא ניתן לבדוק את אורך הסרטון. נסה קובץ אחר.'
@@ -418,7 +415,7 @@ export default function BlessingsClient({
       return
     }
 
-    const mediaError = await validateSelectedMedia(nextFile)
+    const mediaError = await validateSelectedMedia(nextFile, blessingsVideoMaxBytes, blessingsVideoMaxSeconds)
     if (mediaError) {
       setFile(null)
       setErr(mediaError)
@@ -438,7 +435,7 @@ export default function BlessingsClient({
       let video_url: string | null = null
 
       if (file) {
-        const mediaError = await validateSelectedMedia(file)
+        const mediaError = await validateSelectedMedia(file, blessingsVideoMaxBytes, blessingsVideoMaxSeconds)
         if (mediaError) throw new Error(mediaError)
 
         if (isVideoFile(file)) {
@@ -605,7 +602,7 @@ export default function BlessingsClient({
       }
 
       if (editFile) {
-        const mediaError = await validateSelectedMedia(editFile)
+        const mediaError = await validateSelectedMedia(editFile, blessingsVideoMaxBytes, blessingsVideoMaxSeconds)
         if (mediaError) throw new Error(mediaError)
 
         if (isVideoFile(editFile)) {
@@ -673,6 +670,10 @@ export default function BlessingsClient({
   const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו, צרפו תמונה, ותנו 👍') as string
   const rawMediaSize = Number(settings?.blessings_media_size ?? 140)
   const mediaSize = Math.max(60, Math.min(520, Number.isFinite(rawMediaSize) ? rawMediaSize : 140))
+
+  const blessingsVideoMaxMb = Number.isFinite(Number(settings?.blessings_video_max_mb)) && Number(settings?.blessings_video_max_mb) > 0 ? Number(settings?.blessings_video_max_mb) : 100
+  const blessingsVideoMaxSeconds = Number.isFinite(Number(settings?.blessings_video_max_seconds)) && Number(settings?.blessings_video_max_seconds) > 0 ? Number(settings?.blessings_video_max_seconds) : 30
+  const blessingsVideoMaxBytes = Math.round(blessingsVideoMaxMb * 1024 * 1024)
 
   const shareEnabled = settings?.share_enabled !== false
   const shareUsePermalink = settings?.share_use_permalink !== false
