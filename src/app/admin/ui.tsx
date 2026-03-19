@@ -1,3 +1,7 @@
+// Path: src/app/admin/ui.tsx
+// Version: V24.5
+// Updated: 2026-03-19 00:55
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -1597,6 +1601,44 @@ export default function AdminApp({
                 placeholder="למשל 96"
               />
 
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <label className="text-xs text-zinc-500 text-right">מקסימום גודל וידאו בברכות (MB)</label>
+                  <Input
+                    className="text-right"
+                    dir="rtl"
+                    type="number"
+                    value={String((settings as any).blessings_video_max_mb ?? 100)}
+                    onChange={e =>
+                      setSettings({
+                        ...settings,
+                        blessings_video_max_mb: Number(e.target.value || 0),
+                      })
+                    }
+                    placeholder="למשל 100"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-xs text-zinc-500 text-right">מקסימום אורך וידאו בברכות (שניות)</label>
+                  <Input
+                    className="text-right"
+                    dir="rtl"
+                    type="number"
+                    value={String((settings as any).blessings_video_max_seconds ?? 30)}
+                    onChange={e =>
+                      setSettings({
+                        ...settings,
+                        blessings_video_max_seconds: Number(e.target.value || 0),
+                      })
+                    }
+                    placeholder="למשל 30"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-500 text-right">ברירת מחדל: 100MB / 30 שניות</p>
+
               <label className="text-sm flex items-center gap-2 flex-row-reverse justify-end text-right">
                 <input
                   type="checkbox"
@@ -2528,6 +2570,40 @@ export default function AdminApp({
                 />
                 להציג כפתור “לכל התמונות” בגלריית מנהל
               </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <label className="text-xs text-zinc-500 text-right">מקסימום גודל וידאו בגלריה (MB)</label>
+                  <Input
+                    type="number"
+                    value={String((settings as any).gallery_video_max_mb ?? 200)}
+                    onChange={e =>
+                      setSettings({
+                        ...settings,
+                        gallery_video_max_mb: Number(e.target.value || 0),
+                      })
+                    }
+                    placeholder="למשל 200"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-xs text-zinc-500 text-right">מקסימום אורך וידאו בגלריה (שניות)</label>
+                  <Input
+                    type="number"
+                    value={String((settings as any).gallery_video_max_seconds ?? 60)}
+                    onChange={e =>
+                      setSettings({
+                        ...settings,
+                        gallery_video_max_seconds: Number(e.target.value || 0),
+                      })
+                    }
+                    placeholder="למשל 60"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-zinc-500 text-right">ברירת מחדל: 200MB / 60 שניות</p>
 
               <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-3">
                 <p className="mb-2 text-sm font-semibold text-zinc-700 text-right">פריוויו גלריות בדף הבית</p>
