@@ -1,11 +1,14 @@
-//src/app/[event]/gallery/[id]/page.tsx
-// Version: V24.6
+// Path: src/app/[event]/gallery/[id]/page.tsx
+// Version: V24.7
+// Updated: 2026-03-19 00:20
+// Note: use event gallery client and load both gallery images and videos
+
 import Link from 'next/link'
 
 import { Container, Card } from '@/components/ui'
 import { supabaseServiceRole } from '@/lib/supabase'
 
-import GalleryClient from '@/app/gallery/ui'
+import GalleryClient from '../ui'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -59,7 +62,9 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
       .map((g: any) => String(g.id))
   )
 
-  const uploadEnabled = Boolean((gRows || []).find((g: any) => String(g.id) === String(galleryId))?.upload_enabled)
+  const uploadEnabled = Boolean(
+    (gRows || []).find((g: any) => String(g.id) === String(galleryId))?.upload_enabled
+  )
 
   if (!activeSet.has(String(galleryId))) {
     return (
@@ -68,8 +73,11 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
           <Card>
             <div className="space-y-2 text-right">
               <div className="text-xl font-semibold">גלריה לא זמינה</div>
-              <Link prefetch={false}
-                className="underline" href={`/${encodeURIComponent(eventId)}/gallery`}>
+              <Link
+                prefetch={false}
+                className="underline"
+                href={`/${encodeURIComponent(eventId)}/gallery`}
+              >
                 חזרה לגלריות
               </Link>
             </div>
@@ -81,16 +89,16 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
 
   const { data: items } = await sb
     .from('media_items')
-    .select('id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,editable_until,is_approved,crop_position,uploader_device_id')
+    .select(
+      'id,url,thumb_url,public_url,storage_path,gallery_id,kind,created_at,editable_until,is_approved,crop_position,crop_focus_x,crop_focus_y,uploader_device_id'
+    )
     .eq('event_id', eventId)
-    // Keep server query consistent with the client self-heal API
-    .eq('kind', 'gallery')
+    .in('kind', ['gallery', 'video'])
     .eq('gallery_id', galleryId)
     .eq('is_approved', true)
     .order('created_at', { ascending: false })
     .limit(400)
 
-  // navigation pills
   const nav = blockItems.filter((x) => activeSet.has(String(x.galleryId)))
 
   return (
@@ -102,19 +110,24 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
               <div className="text-xl font-semibold">תמונות</div>
               <div className="text-sm opacity-80">בחרו גלריה</div>
             </div>
-            <Link prefetch={false}
-                className="underline" href={`/${encodeURIComponent(eventId)}/gallery`}>
+            <Link
+              prefetch={false}
+              className="underline"
+              href={`/${encodeURIComponent(eventId)}/gallery`}
+            >
               חזרה
             </Link>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2 justify-end">
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
             {nav.map((n) => (
               <Link
                 key={n.galleryId}
-                href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(String(n.galleryId))}`}
+                href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(
+                  String(n.galleryId)
+                )}`}
                 prefetch={false}
-                className={`px-3 py-1 rounded-full border text-sm ${
+                className={`rounded-full border px-3 py-1 text-sm ${
                   String(n.galleryId) === String(galleryId) ? 'bg-zinc-900 text-white' : 'bg-white'
                 }`}
               >
