@@ -569,7 +569,7 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                 )
               }
 
-              if (type.startsWith('gallery_')) {
+              if (type === 'gallery' || type.startsWith('gallery_')) {
                 const cfg = (b as any)?.config || {}
                 const galleryId = String(cfg.gallery_id || cfg.galleryId || b.id)
                 const title = String(cfg.title || b.title || cfg.label || cfg.name || b.type || 'גלריה')
