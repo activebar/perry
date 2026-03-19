@@ -1,12 +1,13 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V24.8
-// Updated: 2026-03-18 22:35
-// Note: upload gallery videos as kind=gallery so storage path and approval flow stay consistent
+// Version: V24.9
+// Updated: 2026-03-19 00:10
+// Note: derive event_id from pathname and send it on gallery uploads so files save under the correct event folder
 
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
+import { usePathname } from 'next/navigation'
 import { Button, Card } from '@/components/ui'
 
 function getLocalDeviceId(): string | null {
@@ -203,6 +204,12 @@ export default function GalleryClient({
   galleryId: string
   uploadEnabled: boolean
 }) {
+  const pathname = usePathname()
+  const eventId = useMemo(() => {
+    const part = String(pathname || '').split('/')[1] || ''
+    return part.trim()
+  }, [pathname])
+
   const [items, setItems] = useState<Item[]>(
     (initialItems || []).map((x: any) => ({
       id: x.id,
@@ -339,6 +346,7 @@ export default function GalleryClient({
       fd.append('file', out)
       fd.append('kind', 'gallery')
       fd.append('gallery_id', galleryId)
+      if (eventId) fd.append('event_id', eventId)
       if (deviceId) fd.append('device_id', deviceId)
 
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
@@ -483,6 +491,10 @@ export default function GalleryClient({
       setErr('העלאה סגורה כרגע ע״י מנהל')
       return
     }
+    if (!eventId) {
+      setErr('לא זוהה אירוע להעלאה')
+      return
+    }
     if (files.length === 0) return
     setErr(null)
     setMsg(null)
@@ -496,6 +508,7 @@ export default function GalleryClient({
           fd.append('file', f)
           fd.append('kind', 'gallery')
           fd.append('gallery_id', galleryId)
+          fd.append('event_id', eventId)
           if (deviceId) fd.append('device_id', deviceId)
 
           const res = await fetch('/api/upload', { method: 'POST', body: fd })
@@ -532,6 +545,7 @@ export default function GalleryClient({
         fd.append('file', out)
         fd.append('kind', 'gallery')
         fd.append('gallery_id', galleryId)
+        fd.append('event_id', eventId)
         if (deviceId) fd.append('device_id', deviceId)
 
         const res = await fetch('/api/upload', { method: 'POST', body: fd })
