@@ -127,11 +127,28 @@ export default async function GalleryIndexPageForEvent({
     <main dir="rtl" className="text-right">
       <Container>
         <Card>
-          <div className="space-y-2 text-right">
-            <div className="text-xl font-semibold">גלריות</div>
-            <div className="text-sm opacity-80">בחרו גלריה לצפייה בתמונות</div>
-          </div>
-        </Card>
+  <div className="space-y-2 text-right">
+    <div className="text-xl font-semibold">גלריות</div>
+    <div className="text-sm opacity-80">בחרו גלריה לצפייה בתמונות</div>
+
+    {enabledBlocks.length > 0 && (
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        {enabledBlocks.map((g) => (
+          <Link
+            key={g.galleryId}
+            href={`/${encodeURIComponent(eventId)}/gallery/${encodeURIComponent(
+              String(g.galleryId)
+            )}`}
+            prefetch={false}
+            className="rounded-full border px-3 py-1 text-sm bg-white hover:bg-zinc-50"
+          >
+            {g.title}
+          </Link>
+        ))}
+      </div>
+    )}
+  </div>
+</Card>
 
         <div className="mt-4 grid gap-3">
           {enabledBlocks.map((g) => {
