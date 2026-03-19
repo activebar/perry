@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V24.9
-// Updated: 2026-03-19 00:10
-// Note: derive event_id from pathname and send it on gallery uploads so files save under the correct event folder
+// Version: V25.0
+// Updated: 2026-03-19 00:35
+// Note: pre-validate gallery video size and duration before upload, and keep uploads under the correct event folder
 
 'use client'
 
@@ -9,6 +9,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { usePathname } from 'next/navigation'
 import { Button, Card } from '@/components/ui'
+
+const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024
+const MAX_VIDEO_DURATION_SECONDS = 60
 
 function getLocalDeviceId(): string | null {
   if (typeof window === 'undefined') return null
@@ -26,12 +29,16 @@ function ensureDeviceId(): string | null {
   if (existing) {
     try {
       if (!fromLocal) window.localStorage.setItem('device_id', existing)
-      if (!fromCookie) document.cookie = `device_id=${encodeURIComponent(existing)}; path=/; max-age=31536000; samesite=lax`
+      if (!fromCookie) {
+        document.cookie = `device_id=${encodeURIComponent(existing)}; path=/; max-age=31536000; samesite=lax`
+      }
     } catch {}
     return existing
   }
   try {
-    const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const id =
+      globalThis.crypto?.randomUUID?.() ||
+      `${Date.now()}_${Math.random().toString(36).slice(2)}`
     window.localStorage.setItem('device_id', id)
     document.cookie = `device_id=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`
     return id
@@ -58,13 +65,81 @@ function isVideoUrl(url?: string | null) {
   return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(url || ''))
 }
 
+function isVideoFile(file?: File | null) {
+  if (!file) return false
+  const type = String(file.type || '').toLowerCase()
+  const name = String(file.name || '').toLowerCase()
+  return (
+    type.startsWith('video/') ||
+    /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
+  )
+}
+
+async function getVideoDurationSeconds(file: File): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const video = document.createElement('video')
+
+    const cleanup = () => {
+      try {
+        video.pause()
+      } catch {}
+      video.removeAttribute('src')
+      video.load()
+      URL.revokeObjectURL(url)
+    }
+
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      const duration = Number(video.duration || 0)
+      cleanup()
+      resolve(duration)
+    }
+    video.onerror = () => {
+      cleanup()
+      reject(new Error('לא ניתן לקרוא את אורך הסרטון'))
+    }
+    video.src = url
+  })
+}
+
+async function validateSelectedMedia(file: File): Promise<string> {
+  if (!file) return ''
+
+  if (isVideoFile(file)) {
+    if (file.size > MAX_VIDEO_UPLOAD_BYTES) {
+      return `הסרטון גדול מדי. המגבלה היא ${Math.round(
+        MAX_VIDEO_UPLOAD_BYTES / 1024 / 1024
+      )}MB.`
+    }
+
+    try {
+      const duration = await getVideoDurationSeconds(file)
+      if (duration > MAX_VIDEO_DURATION_SECONDS) {
+        return `הסרטון ארוך מדי. המגבלה היא ${MAX_VIDEO_DURATION_SECONDS} שניות.`
+      }
+    } catch {
+      return 'לא ניתן לבדוק את אורך הסרטון. נסה קובץ אחר.'
+    }
+  }
+
+  return ''
+}
+
 function objectPositionFromCrop(item: {
   crop_position?: string | null
   crop_focus_x?: number | null
   crop_focus_y?: number | null
 }) {
-  const x = typeof item?.crop_focus_x === 'number' ? Math.max(0, Math.min(1, item.crop_focus_x)) : null
-  const y = typeof item?.crop_focus_y === 'number' ? Math.max(0, Math.min(1, item.crop_focus_y)) : null
+  const x =
+    typeof item?.crop_focus_x === 'number'
+      ? Math.max(0, Math.min(1, item.crop_focus_x))
+      : null
+  const y =
+    typeof item?.crop_focus_y === 'number'
+      ? Math.max(0, Math.min(1, item.crop_focus_y))
+      : null
+
   if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
   if (item?.crop_position === 'top') return '50% 12%'
   if (item?.crop_position === 'bottom') return '50% 82%'
@@ -154,7 +229,11 @@ async function fileToImageBitmap(file: File) {
   return await createImageBitmap(file)
 }
 
-async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2_500_000): Promise<Blob> {
+async function compressToJpeg2MP(
+  file: File,
+  maxPixels = 2_000_000,
+  maxBytes = 2_500_000
+): Promise<Blob> {
   const bmp = await fileToImageBitmap(file)
   const srcW = bmp.width
   const srcH = bmp.height
@@ -184,13 +263,21 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
   const qualities = [0.86, 0.82, 0.78, 0.72, 0.66, 0.6]
   for (const q of qualities) {
     const blob: Blob = await new Promise((resolve, reject) =>
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', q)
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error('encode failed'))),
+        'image/jpeg',
+        q
+      )
     )
     if (blob.size <= maxBytes) return blob
   }
 
   const finalBlob: Blob = await new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/jpeg', 0.55)
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('encode failed'))),
+      'image/jpeg',
+      0.55
+    )
   )
   return finalBlob
 }
@@ -198,7 +285,7 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
 export default function GalleryClient({
   initialItems,
   galleryId,
-  uploadEnabled
+  uploadEnabled,
 }: {
   initialItems: any[]
   galleryId: string
@@ -270,7 +357,9 @@ export default function GalleryClient({
   const isIOSSafari = useMemo(() => {
     if (typeof navigator === 'undefined') return false
     const ua = navigator.userAgent || ''
-    const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+    const iOS =
+      /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
     const safari = /^((?!chrome|android).)*safari/i.test(ua)
     return iOS && safari
   }, [])
@@ -284,7 +373,7 @@ export default function GalleryClient({
   const toggleSelected = (id: string) => {
     setErr(null)
     setMsg(null)
-    setSelected(prev => {
+    setSelected((prev) => {
       const next = { ...prev }
       if (next[id]) {
         delete next[id]
@@ -319,11 +408,11 @@ export default function GalleryClient({
       const res = await fetch('/api/public/media-delete', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: it.id, device_id: deviceId })
+        body: JSON.stringify({ id: it.id, device_id: deviceId }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j?.error || 'שגיאה במחיקה')
-      setItems(prev => prev.filter(x => x.id !== it.id))
+      setItems((prev) => prev.filter((x) => x.id !== it.id))
       setLightbox(null)
       setMsg('נמחק ✅')
     } catch (e: any) {
@@ -338,9 +427,17 @@ export default function GalleryClient({
       setErr('אפשר למחוק/לערוך רק בשעה הראשונה מאותו מכשיר.')
       return
     }
+
+    if (isVideoFile(file)) {
+      setErr('כרגע אפשר להחליף מתוך חלון העריכה רק לתמונה.')
+      return
+    }
+
     try {
       const blob = await compressToJpeg2MP(file)
-      const out = new File([blob], (file.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
+      const out = new File([blob], (file.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', {
+        type: 'image/jpeg',
+      })
 
       const fd = new FormData()
       fd.append('file', out)
@@ -370,10 +467,10 @@ export default function GalleryClient({
       await fetch('/api/public/media-delete', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: it.id, device_id: deviceId })
+        body: JSON.stringify({ id: it.id, device_id: deviceId }),
       }).catch(() => null)
 
-      setItems(prev => prev.map(x => (x.id === it.id ? created : x)))
+      setItems((prev) => prev.map((x) => (x.id === it.id ? created : x)))
       setLightbox(created)
       setMsg('עודכן ✅')
     } catch (e: any) {
@@ -392,7 +489,7 @@ export default function GalleryClient({
 
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i]
-        const it = items.find(x => x.id === id)
+        const it = items.find((x) => x.id === id)
         if (!it?.url) continue
 
         const res = await fetch(it.url)
@@ -410,7 +507,7 @@ export default function GalleryClient({
         a.remove()
         URL.revokeObjectURL(href)
 
-        await new Promise(r => setTimeout(r, 250))
+        await new Promise((r) => setTimeout(r, 250))
       }
 
       setMsg('✅ ההורדות התחילו')
@@ -435,7 +532,7 @@ export default function GalleryClient({
 
       for (let i = 0; i < ids.length; i++) {
         const id = ids[i]
-        const it = items.find(x => x.id === id)
+        const it = items.find((x) => x.id === id)
         if (!it?.url) continue
         const res = await fetch(it.url)
         const blob = await res.blob()
@@ -467,23 +564,41 @@ export default function GalleryClient({
   const cameraRef = useRef<HTMLInputElement | null>(null)
   const uploadPickRef = useRef<HTMLInputElement | null>(null)
 
-  const feed = useMemo(() => (items || []).filter(i => i.url), [items])
+  const feed = useMemo(() => (items || []).filter((i) => i.url), [items])
 
   async function shareItem(it: Item) {
     const short = await ensureShortLinkForMedia(it.id)
     await shareUrl(short || it.url)
   }
 
-  function addFiles(list: FileList | null) {
-    const arr = Array.from(list || []).filter(f =>
-      (f.type || '').startsWith('image/') || (f.type || '').startsWith('video/')
+  async function addFiles(list: FileList | null) {
+    const arr = Array.from(list || []).filter(
+      (f) =>
+        (f.type || '').startsWith('image/') || (f.type || '').startsWith('video/')
     )
     if (arr.length === 0) return
+
+    setErr(null)
+    setMsg(null)
+
     if (lightbox && arr.length === 1 && canEditMine(lightbox)) {
-      replaceMine(lightbox, arr[0])
+      await replaceMine(lightbox, arr[0])
       return
     }
-    setFiles(prev => [...prev, ...arr].slice(0, 50))
+
+    const valid: File[] = []
+    for (const file of arr) {
+      const mediaError = await validateSelectedMedia(file)
+      if (mediaError) {
+        setErr(`"${file.name}": ${mediaError}`)
+        continue
+      }
+      valid.push(file)
+    }
+
+    if (valid.length === 0) return
+    setFiles((prev) => [...prev, ...valid].slice(0, 50))
+    setMsg(`${valid.length} קבצים מוכנים להעלאה`)
   }
 
   async function upload() {
@@ -496,12 +611,19 @@ export default function GalleryClient({
       return
     }
     if (files.length === 0) return
+
     setErr(null)
     setMsg(null)
     setBusy(true)
+
     try {
       for (const f of files) {
-        const isVideo = (f.type || '').startsWith('video/')
+        const precheck = await validateSelectedMedia(f)
+        if (precheck) {
+          throw new Error(`"${f.name}": ${precheck}`)
+        }
+
+        const isVideo = isVideoFile(f)
 
         if (isVideo) {
           const fd = new FormData()
@@ -530,7 +652,7 @@ export default function GalleryClient({
               crop_focus_y: j.crop_focus_y ?? null,
             }
             if (j.is_approved) {
-              setItems(prev => [created, ...prev])
+              setItems((prev) => [created, ...prev])
             } else {
               setMsg('✅ הועלה וממתין לאישור מנהל')
             }
@@ -539,7 +661,9 @@ export default function GalleryClient({
         }
 
         const blob = await compressToJpeg2MP(f)
-        const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' })
+        const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', {
+          type: 'image/jpeg',
+        })
 
         const fd = new FormData()
         fd.append('file', out)
@@ -567,13 +691,15 @@ export default function GalleryClient({
             crop_focus_y: j.crop_focus_y ?? null,
           }
           if (j.is_approved) {
-            setItems(prev => [created, ...prev])
+            setItems((prev) => [created, ...prev])
           } else {
             setMsg('✅ הועלה וממתין לאישור מנהל')
           }
         }
       }
+
       setFiles([])
+      setMsg('✅ ההעלאה הושלמה')
     } catch (e: any) {
       setErr(e?.message || 'שגיאה בהעלאה')
     } finally {
@@ -624,7 +750,10 @@ export default function GalleryClient({
               type="file"
               accept="image/*,video/*"
               multiple
-              onChange={e => addFiles(e.target.files)}
+              onChange={async (e) => {
+                await addFiles(e.target.files)
+                e.currentTarget.value = ''
+              }}
               className="hidden"
               disabled={!uploadEnabled}
             />
@@ -634,7 +763,10 @@ export default function GalleryClient({
               type="file"
               accept="image/*"
               capture="environment"
-              onChange={e => addFiles(e.target.files)}
+              onChange={async (e) => {
+                await addFiles(e.target.files)
+                e.currentTarget.value = ''
+              }}
               className="hidden"
               disabled={!uploadEnabled}
             />
@@ -643,9 +775,9 @@ export default function GalleryClient({
               ref={pickerRef}
               type="file"
               accept="image/*"
-              onChange={e => {
+              onChange={async (e) => {
                 const file = e.target.files?.[0]
-                if (file && lightbox) replaceMine(lightbox, file)
+                if (file && lightbox) await replaceMine(lightbox, file)
                 e.currentTarget.value = ''
               }}
               className="hidden"
@@ -707,9 +839,7 @@ export default function GalleryClient({
         </div>
 
         {files.length > 0 && (
-          <p className="mt-2 text-sm text-zinc-600 text-right">
-            נבחרו {files.length} קבצים
-          </p>
+          <p className="mt-2 text-sm text-zinc-600 text-right">נבחרו {files.length} קבצים</p>
         )}
 
         {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
@@ -719,7 +849,7 @@ export default function GalleryClient({
 
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
-          <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
+          <div className="relative mx-auto max-w-4xl" onClick={(e) => e.stopPropagation()}>
             <div className="absolute top-2 left-2 z-10">
               <Button
                 variant="ghost"
@@ -731,8 +861,15 @@ export default function GalleryClient({
               </Button>
             </div>
 
-            {isVideoUrl(lightbox.url) || String(lightbox.kind || '').toLowerCase().includes('video') ? (
-              <video src={lightbox.url} controls playsInline preload="metadata" className="w-full rounded-2xl bg-black" />
+            {isVideoUrl(lightbox.url) ||
+            String(lightbox.kind || '').toLowerCase().includes('video') ? (
+              <video
+                src={lightbox.url}
+                controls
+                playsInline
+                preload="metadata"
+                className="w-full rounded-2xl bg-black"
+              />
             ) : (
               <img
                 src={lightbox.url}
@@ -744,13 +881,21 @@ export default function GalleryClient({
 
             <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow" dir="rtl">
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">שתף</Button>
-                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">הורד</Button>
+                <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">
+                  שתף
+                </Button>
+                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">
+                  הורד
+                </Button>
                 {canEditMine(lightbox) ? (
                   <>
                     <span className="text-xs text-zinc-600">⏳ {fmtMMSS(secondsLeft(lightbox))}</span>
-                    <Button variant="ghost" onClick={() => pickerRef.current?.click()} type="button">עריכה</Button>
-                    <Button variant="ghost" onClick={() => deleteMine(lightbox)} type="button">מחק</Button>
+                    <Button variant="ghost" onClick={() => pickerRef.current?.click()} type="button">
+                      עריכה
+                    </Button>
+                    <Button variant="ghost" onClick={() => deleteMine(lightbox)} type="button">
+                      מחק
+                    </Button>
                   </>
                 ) : null}
               </div>
@@ -760,14 +905,16 @@ export default function GalleryClient({
       )}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {feed.map(it => (
-          <div key={it.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
+        {feed.map((it) => (
+          <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
             <button
               className="relative block aspect-square w-full bg-zinc-50"
               onClick={() => onThumbClick(it)}
               type="button"
             >
-              {isVideoUrl(it.url) || isVideoUrl(it.thumb_url) || String(it.kind || '').toLowerCase().includes('video') ? (
+              {isVideoUrl(it.url) ||
+              isVideoUrl(it.thumb_url) ||
+              String(it.kind || '').toLowerCase().includes('video') ? (
                 <>
                   <video
                     src={it.url}
@@ -791,7 +938,9 @@ export default function GalleryClient({
               {selectMode ? (
                 <div className="absolute left-2 top-2">
                   <div
-                    className={`h-7 w-7 rounded-full border bg-white/90 flex items-center justify-center text-sm ${selected[it.id] ? 'font-bold' : ''}`}
+                    className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${
+                      selected[it.id] ? 'font-bold' : ''
+                    }`}
                     aria-hidden
                   >
                     {selected[it.id] ? '✓' : ''}
