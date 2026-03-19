@@ -1,3 +1,8 @@
+// Path: src/app/api/upload/route.ts
+// Version: V24.10
+// Updated: 2026-03-19 10:30
+// Note: validate event_id after resolving it, and keep gallery uploads scoped to the correct event/gallery
+
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import sharp from 'sharp'
@@ -47,10 +52,7 @@ export async function POST(req: NextRequest) {
         String(fd.get('galleryId') || '').trim()) || null
 
     if (!file) return jsonError('missing file', 400)
-    if (!event_id) {
-  return NextResponse.json({ error: 'missing event_id' }, { status: 400 })
-}
-    
+
     const srv = getServerEnv()
 
     // Resolve event_id robustly:
@@ -69,15 +71,24 @@ export async function POST(req: NextRequest) {
     try {
       const u = new URL(referer)
       const seg = (u.pathname.split('/').filter(Boolean)[0] || '').trim().toLowerCase()
-      // only accept simple slugs (avoid weird paths like /admin)
       if (/^[a-z0-9_-]{2,32}$/.test(seg) && seg !== 'admin') eventFromReferer = seg
     } catch {
       // ignore
     }
 
-    let event_id = (providedEventId || legacyEvent || eventFromQuery || eventFromReferer || (srv.EVENT_SLUG || 'ido'))
+    let event_id = (
+      providedEventId ||
+      legacyEvent ||
+      eventFromQuery ||
+      eventFromReferer ||
+      (srv.EVENT_SLUG || 'ido')
+    )
       .trim()
       .toLowerCase()
+
+    if (!event_id) {
+      return NextResponse.json({ error: 'missing event_id' }, { status: 400 })
+    }
 
     const sb = supabaseServiceRole()
 
@@ -154,7 +165,7 @@ export async function POST(req: NextRequest) {
     const baseName = `${Date.now()}_${randomUUID()}`
     const originalName = String(file.name || '').trim()
     const extMatch = originalName.match(/\.([a-zA-Z0-9]+)$/)
-    const safeExt = extMatch ? `.${extMatch[1].toLowerCase()}` : (isVideo ? '.mp4' : '')
+    const safeExt = extMatch ? `.${extMatch[1].toLowerCase()}` : isVideo ? '.mp4' : ''
     const path = isImage ? `${folder}/${baseName}.jpg` : `${folder}/${baseName}${safeExt}`
 
     let uploadBuf: Uint8Array | Buffer = bytes
@@ -164,24 +175,20 @@ export async function POST(req: NextRequest) {
     let thumbBuf: Buffer | null = null
 
     if (isImage) {
-      // Full JPG
       const fullJpg = await sharp(bytes).rotate().jpeg({ quality: 88, mozjpeg: true }).toBuffer()
       uploadBuf = fullJpg
       contentType = 'image/jpeg'
 
-      // Thumb WEBP
       thumbBuf = await sharp(bytes).rotate().resize(600).webp({ quality: 82 }).toBuffer()
       thumbPath = `${path}.thumb.webp`
     }
 
-    // Upload full/original
     const { error: uerr } = await sb.storage.from('uploads').upload(path, uploadBuf, {
       contentType,
       upsert: false
     })
     if (uerr) return jsonError(uerr.message, 500)
 
-    // Upload thumb if available
     let thumbUrl: string | null = null
     if (thumbPath && thumbBuf) {
       const { error: terr } = await sb.storage.from('uploads').upload(thumbPath, thumbBuf, {
@@ -194,31 +201,48 @@ export async function POST(req: NextRequest) {
 
     const publicUrl = getPublicUploadUrl(path)
 
-    const device_id = cookies().get('device_id')?.value || String(fd.get('device_id') || '').trim() || null
+    const device_id =
+      cookies().get('device_id')?.value ||
+      String(fd.get('device_id') || '').trim() ||
+      null
+
     const editable_until = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
-    const { data: inserted, error: ierr } = await sb.from('media_items').insert({
-      kind,
-      event_id,
-      gallery_id,
-      url: publicUrl,
-      thumb_url: thumbUrl || publicUrl,
-      width,
-      height,
-      crop_position: isImage ? crop_position : 'center',
-      storage_provider: 'supabase',
-      external_url: null,
-      storage_path: path,
-      is_approved,
-      editable_until,
-      source: kind === 'gallery' ? 'gallery' : 'admin',
-      uploaded_by: kind === 'gallery' ? 'guest' : 'admin',
-      uploader_device_id: device_id
-    } as any).select('id,editable_until').single()
+    const { data: inserted, error: ierr } = await sb
+      .from('media_items')
+      .insert({
+        kind,
+        event_id,
+        gallery_id,
+        url: publicUrl,
+        thumb_url: thumbUrl || publicUrl,
+        width,
+        height,
+        crop_position: isImage ? crop_position : 'center',
+        storage_provider: 'supabase',
+        external_url: null,
+        storage_path: path,
+        is_approved,
+        editable_until,
+        source: kind === 'gallery' ? 'gallery' : 'admin',
+        uploaded_by: kind === 'gallery' ? 'guest' : 'admin',
+        uploader_device_id: device_id
+      } as any)
+      .select('id,editable_until')
+      .single()
 
     if (ierr) return jsonError(ierr.message, 500)
 
-    return NextResponse.json({ ok: true, id: (inserted as any)?.id || null, path, publicUrl, thumbUrl, editable_until: (inserted as any)?.editable_until || editable_until, is_approved, autoApproveUntil })
+    return NextResponse.json({
+      ok: true,
+      id: (inserted as any)?.id || null,
+      path,
+      publicUrl,
+      thumbUrl,
+      editable_until: (inserted as any)?.editable_until || editable_until,
+      is_approved,
+      autoApproveUntil
+    })
   } catch (e: any) {
     return jsonError(e?.message || 'error', 500)
   }
@@ -266,7 +290,10 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: true, storageDeleted: false })
     }
 
-    const { error: derr } = await sb.storage.from('uploads').remove([storagePath, `${storagePath}.thumb.webp`])
+    const { error: derr } = await sb.storage.from('uploads').remove([
+      storagePath,
+      `${storagePath}.thumb.webp`
+    ])
     if (derr) return jsonError(`storage delete failed: ${derr.message}`, 500)
 
     const { error: uerr } = await sb
