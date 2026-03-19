@@ -47,7 +47,10 @@ export async function POST(req: NextRequest) {
         String(fd.get('galleryId') || '').trim()) || null
 
     if (!file) return jsonError('missing file', 400)
-
+    if (!event_id) {
+  return NextResponse.json({ error: 'missing event_id' }, { status: 400 })
+}
+    
     const srv = getServerEnv()
 
     // Resolve event_id robustly:
