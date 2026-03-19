@@ -1,7 +1,7 @@
 // Path: src/app/[event]/blessings/ui.tsx
-// Version: V24.4
-// Updated: 2026-03-18 00:55
-// Note: blessings video badge + duration badge on video cards
+// Version: V25.0
+// Updated: 2026-03-19 00:45
+// Note: pre-validate blessing video size and duration before upload and before edit upload
 
 'use client'
 
@@ -30,8 +30,10 @@ type Post = {
   reaction_counts: Record<string, number>
   my_reactions: string[]
 }
+
 const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 const MAX_VIDEO_UPLOAD_BYTES = 200 * 1024 * 1024
+const MAX_VIDEO_DURATION_SECONDS = 60
 
 async function jfetch(url: string, init?: RequestInit) {
   const res = await fetch(url, {
@@ -60,6 +62,56 @@ function isVideoFile(f: File) {
   const name = String(f.name || '').toLowerCase()
   return type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
 }
+
+async function getVideoDurationSeconds(file: File): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const video = document.createElement('video')
+
+    const cleanup = () => {
+      try {
+        video.pause()
+      } catch {}
+      video.removeAttribute('src')
+      video.load()
+      URL.revokeObjectURL(url)
+    }
+
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      const duration = Number(video.duration || 0)
+      cleanup()
+      resolve(duration)
+    }
+    video.onerror = () => {
+      cleanup()
+      reject(new Error('לא ניתן לקרוא את אורך הסרטון'))
+    }
+    video.src = url
+  })
+}
+
+async function validateSelectedMedia(file: File) {
+  if (!file) return ''
+
+  if (isVideoFile(file)) {
+    if (file.size > MAX_VIDEO_UPLOAD_BYTES) {
+      return `הסרטון גדול מדי. המגבלה היא ${Math.round(MAX_VIDEO_UPLOAD_BYTES / 1024 / 1024)}MB.`
+    }
+
+    try {
+      const duration = await getVideoDurationSeconds(file)
+      if (duration > MAX_VIDEO_DURATION_SECONDS) {
+        return `הסרטון ארוך מדי. המגבלה היא ${MAX_VIDEO_DURATION_SECONDS} שניות.`
+      }
+    } catch {
+      return 'לא ניתן לבדוק את אורך הסרטון. נסה קובץ אחר.'
+    }
+  }
+
+  return ''
+}
+
 function objectPositionFromCrop(item: {
   crop_position?: string | null
   crop_focus_x?: number | null
@@ -83,15 +135,6 @@ function objectPositionFromCrop(item: {
   if (item.crop_position === 'bottom') return '50% 82%'
   return '50% 50%'
 }
-
-function validateSelectedMedia(file: File) {
-  if (!file) return ''
-  if (isVideoFile(file) && file.size > MAX_VIDEO_UPLOAD_BYTES) {
-    return 'סרטון גדול מדי. כרגע ניתן לנסות direct upload לוידאו. אם ההעלאה נכשלה, נסה שוב או הקטן את הקובץ.'
-  }
-  return ''
-}
-
 
 function formatVideoTime(seconds?: number | null) {
   const s = Math.max(0, Math.floor(Number(seconds || 0)))
@@ -144,7 +187,7 @@ function VideoBadge({
           ▶
         </div>
       </div>
-      <div className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs font-medium text-white">
+      <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-xs font-medium text-white pointer-events-none">
         {typeof seconds === 'number' && seconds > 0 ? formatVideoTime(seconds) : 'וידאו'}
       </div>
     </>
@@ -154,7 +197,6 @@ function VideoBadge({
 async function fileToImageBitmap(file: File): Promise<ImageBitmap> {
   // @ts-ignore
   if (typeof createImageBitmap === 'function') return await createImageBitmap(file)
-  // Fallback for very old browsers
   const url = URL.createObjectURL(file)
   const img = new Image()
   img.src = url
@@ -210,14 +252,11 @@ async function compressToJpeg2MP(file: File, maxPixels = 2_000_000, maxBytes = 2
   return new File([blob], name, { type: 'image/jpeg' })
 }
 
-
 function firstHttpUrl(input: string) {
   const s = String(input || '')
   const m = s.match(/https?:\/\/[^\s]+/i)
   if (!m) return ''
   let u = m[0].trim()
-
-  // trim common trailing punctuation
   u = u.replace(/[\]\)\}\>,\.\!\?\:;]+$/g, '')
   return u
 }
@@ -240,30 +279,21 @@ export default function BlessingsClient({
   const [linkTouched, setLinkTouched] = useState(false)
   const [file, setFile] = useState<File | null>(null)
 
-
   const pathname = usePathname()
-
-  // URL pattern: /ido/blessings -> ["", "ido", "blessings"]
   const effectiveEventId = pathname?.split('/')[1] || null
-
   const eventQuery = effectiveEventId ? `?event=${encodeURIComponent(effectiveEventId)}` : ''
 
-  // media pickers (mobile-friendly)
   const pickRef = useRef<HTMLInputElement | null>(null)
   const cameraPhotoRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoRef = useRef<HTMLInputElement | null>(null)
 
-  // auto-detect link from the text (WhatsApp-style)
   useEffect(() => {
     if (linkTouched) return
     const u = firstHttpUrl(text)
     if (u && u !== linkUrl) setLinkUrl(u)
     if (!u && linkUrl) setLinkUrl('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text])
+  }, [text, linkTouched, linkUrl])
 
-
-// edit (mine, within 1h)
   const [editOpen, setEditOpen] = useState(false)
   const [editLoading, setEditLoading] = useState(false)
   const [editErr, setEditErr] = useState<string | null>(null)
@@ -271,15 +301,12 @@ export default function BlessingsClient({
   const [editFile, setEditFile] = useState<File | null>(null)
   const [editRemoveMedia, setEditRemoveMedia] = useState(false)
 
-  // full view for media
   const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean; post?: Post } | null>(null)
 
-  // share modal (desktop fallback)
   const [shareOpen, setShareOpen] = useState(false)
   const [sharePayload, setSharePayload] = useState<{ message: string; link: string } | null>(null)
 
   async function triggerDownload(url: string) {
-    // Mobile browsers and cross-origin assets often ignore <a download>. We try a blob download first.
     try {
       const res = await fetch(url)
       const blob = await res.blob()
@@ -294,7 +321,6 @@ export default function BlessingsClient({
       a.remove()
       setTimeout(() => URL.revokeObjectURL(blobUrl), 1500)
     } catch {
-      // Fallback: open in a new tab (user can long-press save on mobile)
       window.open(url, '_blank', 'noopener,noreferrer')
     }
   }
@@ -338,7 +364,6 @@ export default function BlessingsClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
-  // refresh list occasionally (helps when require_approval is on)
   useEffect(() => {
     let cancelled = false
 
@@ -348,12 +373,9 @@ export default function BlessingsClient({
         if (!res.ok) return
         const j = await res.json().catch(() => ({}))
         if (!cancelled && Array.isArray(j.items)) setItems(j.items)
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
 
-    // immediate pull (important when SSR returns empty for any reason)
     pull()
 
     const t = setInterval(pull, 15000)
@@ -361,32 +383,50 @@ export default function BlessingsClient({
       cancelled = true
       clearInterval(t)
     }
-  }, [])
+  }, [effectiveEventId])
 
+  async function directUploadVideo(file: File, kind: 'blessing' | 'gallery', galleryId?: string | null) {
+    const signRes = await fetch('/api/upload/sign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: file.type || 'video/mp4',
+        kind,
+        event_id: effectiveEventId,
+        gallery_id: galleryId || null,
+      }),
+    })
+    const signJson = await signRes.json().catch(() => ({}))
+    if (!signRes.ok) throw new Error(signJson?.error || 'שגיאה בהעלאת וידאו')
+    const sb = supabaseAnon()
+    const uploaded = await (sb.storage.from('uploads') as any).uploadToSignedUrl(
+      String(signJson.path || ''),
+      String(signJson.token || ''),
+      file
+    )
+    if (uploaded?.error) throw uploaded.error
+    return signJson
+  }
 
-async function directUploadVideo(file: File, kind: 'blessing' | 'gallery', galleryId?: string | null) {
-  const signRes = await fetch('/api/upload/sign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filename: file.name,
-      contentType: file.type || 'video/mp4',
-      kind,
-      event_id: effectiveEventId,
-      gallery_id: galleryId || null,
-    }),
-  })
-  const signJson = await signRes.json().catch(() => ({}))
-  if (!signRes.ok) throw new Error(signJson?.error || 'שגיאה בהעלאת וידאו')
-  const sb = supabaseAnon()
-  const uploaded = await (sb.storage.from('uploads') as any).uploadToSignedUrl(
-    String(signJson.path || ''),
-    String(signJson.token || ''),
-    file
-  )
-  if (uploaded?.error) throw uploaded.error
-  return signJson
-}
+  async function handleSelectedFile(nextFile: File | null) {
+    setErr(null)
+    setMsg(null)
+
+    if (!nextFile) {
+      setFile(null)
+      return
+    }
+
+    const mediaError = await validateSelectedMedia(nextFile)
+    if (mediaError) {
+      setFile(null)
+      setErr(mediaError)
+      return
+    }
+
+    setFile(nextFile)
+  }
 
   async function submitBlessing() {
     setErr(null)
@@ -398,8 +438,9 @@ async function directUploadVideo(file: File, kind: 'blessing' | 'gallery', galle
       let video_url: string | null = null
 
       if (file) {
-        const mediaError = validateSelectedMedia(file)
+        const mediaError = await validateSelectedMedia(file)
         if (mediaError) throw new Error(mediaError)
+
         if (isVideoFile(file)) {
           const upJson = await directUploadVideo(file, 'blessing')
           media_path = upJson.path
@@ -407,14 +448,12 @@ async function directUploadVideo(file: File, kind: 'blessing' | 'gallery', galle
           media_url = null
         } else {
           const fd = new FormData()
-
-          // Compress images client-side (2MP) to keep uploads fast & cheap (Supabase free tier)
           const outFile = await compressToJpeg2MP(file)
 
           fd.set('file', outFile)
-
           fd.set('kind', 'blessing')
           if (effectiveEventId) fd.append('event_id', effectiveEventId)
+
           const up = await fetch('/api/upload', { method: 'POST', body: fd })
           const upJson = await up.json().catch(() => ({}))
           if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
@@ -469,146 +508,153 @@ async function directUploadVideo(file: File, kind: 'blessing' | 'gallery', galle
   }
 
   async function editMine(id: string) {
-  const p = (items || []).find((x: any) => x.id === id)
-  if (!p) return
-  if (!canEditMine(p)) return
-  setEditErr(null)
-  setEditFile(null)
-  setEditRemoveMedia(false)
-  setEditLoading(true)
-  try {
-    const res = await jfetch(`/api/blessings/item?id=${encodeURIComponent(id)}`, { method: 'GET', headers: {} as any })
-    const item = res?.item || p
-    setEditDraft({
-      id: item.id,
-      author_name: item.author_name || '',
-      text: item.text || '',
-      link_url: item.link_url || '',
-      media_url: item.media_url || '',
-      media_path: item.media_path || ''
-    })
-    setEditOpen(true)
-  } catch (e: any) {
-    // fallback to local item
-    setEditDraft({
-      id: p.id,
-      author_name: p.author_name || '',
-      text: p.text || '',
-      link_url: p.link_url || '',
-      media_url: p.media_url || '',
-      media_path: p.media_path || ''
-    })
-    setEditOpen(true)
-  } finally {
-    setEditLoading(false)
-  }
-}
-
-
-async function saveFocusOnly() {
-  if (!focusDraft?.id) return
-  setFocusBusy(true)
-  setErr(null)
-  setMsg(null)
-  try {
-    const res = await jfetch(`/api/posts${eventQuery}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        id: focusDraft.id,
-        crop_position: focusDraft.crop_position || null,
-        crop_focus_x: focusDraft.crop_focus_x ?? null,
-        crop_focus_y: focusDraft.crop_focus_y ?? null,
-      }),
-    })
-
-    setItems((prev: any[]) =>
-      prev.map((p) =>
-        p.id === focusDraft.id
-          ? {
-              ...p,
-              ...(res?.post || {}),
-              crop_position: focusDraft.crop_position || null,
-              crop_focus_x: focusDraft.crop_focus_x ?? null,
-              crop_focus_y: focusDraft.crop_focus_y ?? null,
-            }
-          : p
-      )
-    )
-
-    setMsg('✅ המיקוד נשמר')
-    setFocusDraft(null)
-  } catch (e: any) {
-    setErr(friendlyError(e?.message || 'שגיאה בשמירת מיקוד'))
-  } finally {
-    setFocusBusy(false)
-  }
-}
-
-async function saveEdit() {
-  if (!editDraft?.id) return
-  setEditErr(null)
-  setEditBusy(true)
-  try {
-    let media_path = editDraft.media_path || null
-    let media_url = editDraft.media_url || null
-    let video_url = editDraft.video_url || null
-
-    // remove media (explicit)
-    if (editRemoveMedia) {
-      media_path = null
-      media_url = null
-    }
-
-    // replace media (upload new)
-    if (editFile) {
-      const mediaError = validateSelectedMedia(editFile)
-      if (mediaError) throw new Error(mediaError)
-      if (isVideoFile(editFile)) {
-        const upJson = await directUploadVideo(editFile, 'blessing')
-        media_path = upJson.path
-        video_url = upJson.publicUrl
-        media_url = null
-      } else {
-        const fd = new FormData()
-        fd.set('file', editFile)
-        fd.set('kind', 'blessing')
-        if (effectiveEventId) fd.append('event_id', effectiveEventId)
-
-        const up = await fetch('/api/upload', { method: 'POST', body: fd })
-        const upJson = await up.json()
-        if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
-
-        media_path = upJson.path
-        media_url = upJson.publicUrl
-        video_url = null
-      }
-    }
-
-    const patch = {
-      id: editDraft.id,
-      author_name: editDraft.author_name || null,
-      text: editDraft.text || null,
-      link_url: editDraft.link_url || null,
-      media_path,
-      media_url,
-      video_url,
-      crop_position: editDraft.crop_position || null,
-      crop_focus_x: editDraft.crop_focus_x ?? null,
-      crop_focus_y: editDraft.crop_focus_y ?? null,
-    }
-
-    const res = await jfetch(`/api/posts${eventQuery}`, { method: 'PUT', body: JSON.stringify(patch) })
-    setItems((prev: any[]) => prev.map(x => (x.id === res.post.id ? { ...x, ...res.post } : x)))
-    setEditOpen(false)
-    setEditDraft(null)
+    const p = (items || []).find((x: any) => x.id === id)
+    if (!p) return
+    if (!canEditMine(p)) return
+    setEditErr(null)
     setEditFile(null)
     setEditRemoveMedia(false)
-  } catch (e: any) {
-    setEditErr(String(e?.message || 'שגיאה'))
-  } finally {
-    setEditBusy(false)
+    setEditLoading(true)
+    try {
+      const res = await jfetch(`/api/blessings/item?id=${encodeURIComponent(id)}`, { method: 'GET', headers: {} as any })
+      const item = res?.item || p
+      setEditDraft({
+        id: item.id,
+        author_name: item.author_name || '',
+        text: item.text || '',
+        link_url: item.link_url || '',
+        media_url: item.media_url || '',
+        media_path: item.media_path || '',
+        video_url: item.video_url || '',
+        crop_position: item.crop_position || null,
+        crop_focus_x: item.crop_focus_x ?? null,
+        crop_focus_y: item.crop_focus_y ?? null,
+      })
+      setEditOpen(true)
+    } catch {
+      setEditDraft({
+        id: p.id,
+        author_name: p.author_name || '',
+        text: p.text || '',
+        link_url: p.link_url || '',
+        media_url: p.media_url || '',
+        media_path: p.media_path || '',
+        video_url: p.video_url || '',
+        crop_position: p.crop_position || null,
+        crop_focus_x: p.crop_focus_x ?? null,
+        crop_focus_y: p.crop_focus_y ?? null,
+      })
+      setEditOpen(true)
+    } finally {
+      setEditLoading(false)
+    }
   }
-}
+
+  async function saveFocusOnly() {
+    if (!focusDraft?.id) return
+    setFocusBusy(true)
+    setErr(null)
+    setMsg(null)
+    try {
+      const res = await jfetch(`/api/posts${eventQuery}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          id: focusDraft.id,
+          crop_position: focusDraft.crop_position || null,
+          crop_focus_x: focusDraft.crop_focus_x ?? null,
+          crop_focus_y: focusDraft.crop_focus_y ?? null,
+        }),
+      })
+
+      setItems((prev: any[]) =>
+        prev.map((p) =>
+          p.id === focusDraft.id
+            ? {
+                ...p,
+                ...(res?.post || {}),
+                crop_position: focusDraft.crop_position || null,
+                crop_focus_x: focusDraft.crop_focus_x ?? null,
+                crop_focus_y: focusDraft.crop_focus_y ?? null,
+              }
+            : p
+        )
+      )
+
+      setMsg('✅ המיקוד נשמר')
+      setFocusDraft(null)
+    } catch (e: any) {
+      setErr(friendlyError(e?.message || 'שגיאה בשמירת מיקוד'))
+    } finally {
+      setFocusBusy(false)
+    }
+  }
+
+  async function saveEdit() {
+    if (!editDraft?.id) return
+    setEditErr(null)
+    setEditBusy(true)
+    try {
+      let media_path = editDraft.media_path || null
+      let media_url = editDraft.media_url || null
+      let video_url = editDraft.video_url || null
+
+      if (editRemoveMedia) {
+        media_path = null
+        media_url = null
+        video_url = null
+      }
+
+      if (editFile) {
+        const mediaError = await validateSelectedMedia(editFile)
+        if (mediaError) throw new Error(mediaError)
+
+        if (isVideoFile(editFile)) {
+          const upJson = await directUploadVideo(editFile, 'blessing')
+          media_path = upJson.path
+          video_url = upJson.publicUrl
+          media_url = null
+        } else {
+          const fd = new FormData()
+          const outFile = await compressToJpeg2MP(editFile)
+          fd.set('file', outFile)
+          fd.set('kind', 'blessing')
+          if (effectiveEventId) fd.append('event_id', effectiveEventId)
+
+          const up = await fetch('/api/upload', { method: 'POST', body: fd })
+          const upJson = await up.json()
+          if (!up.ok) throw new Error(upJson?.error || 'שגיאה בהעלאה')
+
+          media_path = upJson.path
+          media_url = upJson.publicUrl
+          video_url = null
+        }
+      }
+
+      const patch = {
+        id: editDraft.id,
+        author_name: editDraft.author_name || null,
+        text: editDraft.text || null,
+        link_url: editDraft.link_url || null,
+        media_path,
+        media_url,
+        video_url,
+        crop_position: editDraft.crop_position || null,
+        crop_focus_x: editDraft.crop_focus_x ?? null,
+        crop_focus_y: editDraft.crop_focus_y ?? null,
+      }
+
+      const res = await jfetch(`/api/posts${eventQuery}`, { method: 'PUT', body: JSON.stringify(patch) })
+      setItems((prev: any[]) => prev.map(x => (x.id === res.post.id ? { ...x, ...res.post } : x)))
+      setEditOpen(false)
+      setEditDraft(null)
+      setEditFile(null)
+      setEditRemoveMedia(false)
+    } catch (e: any) {
+      setEditErr(String(e?.message || 'שגיאה'))
+    } finally {
+      setEditBusy(false)
+    }
+  }
 
   async function deleteMine(id: string) {
     if (!confirm('למחוק את הברכה?')) return
@@ -622,6 +668,7 @@ async function saveEdit() {
       setErr(friendlyError(e?.message || 'שגיאה'))
     }
   }
+
   const blessingTitle = (settings?.blessings_title || settings?.blessings_label || 'ברכות') as string
   const blessingSubtitle = (settings?.blessings_subtitle || 'כתבו, צרפו תמונה, ותנו 👍') as string
   const rawMediaSize = Number(settings?.blessings_media_size ?? 140)
@@ -646,7 +693,6 @@ async function saveEdit() {
   async function sharePost(p: Post) {
     if (!shareEnabled) return
     const code = (p.id || '').slice(0, 8)
-    // Ensure the short link exists in DB so /b/{code} can always be resolved
     try {
       await fetch(`/api/short-links${eventQuery}`, {
         method: 'POST',
@@ -657,9 +703,7 @@ async function saveEdit() {
           targetPath: `/blessings/p/${p.id}`,
         }),
       })
-    } catch {
-      // ignore; we can still share the URL
-    }
+    } catch {}
 
     const link = buildLinkForPost(p.id)
     const eventName = String(settings?.event_name || 'Event')
@@ -673,43 +717,44 @@ async function saveEdit() {
       DATE: p.created_at || ''
     }, noTextFallback)
 
-    // Mobile: native share (if enabled)
     const canNative = shareWebshareEnabled && typeof navigator !== 'undefined' && (navigator as any).share
     if (canNative) {
       try {
         const textOnly = message.split(link).join('').trim() || message
         await (navigator as any).share({ title: eventName, text: textOnly, url: link })
         return
-      } catch {
-        // fall back
-      }
+      } catch {}
     }
 
     setSharePayload({ message, link })
     setShareOpen(true)
   }
-  // Link Preview is controlled globally via event_settings (not per-block config)
+
   const linkPreviewEnabled = settings?.link_preview_enabled === true
   const showLinkDetails = settings?.link_preview_show_details === true
 
   return (
     <main dir="rtl" className="text-right">
       <Container>
-<Card id="blessing-form">
+        <Card id="blessing-form">
           <div className="space-y-2 text-right">
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
             <Input placeholder="קישור (אופציונלי)" value={linkUrl} onChange={e => { setLinkTouched(true); setLinkUrl(e.target.value) }} dir="ltr" />
             <LinkPreview url={linkUrl} />
+
             <div className="flex items-center justify-between gap-3">
               <div className="grid gap-2">
-                {/* hidden inputs */}
                 <input
                   ref={pickRef}
                   type="file"
                   accept="image/*,video/*"
                   className="hidden"
-                  onChange={e => setFile((e.target.files && e.target.files[0]) || null)}
+                  onChange={async e => {
+                    const picked = (e.target.files && e.target.files[0]) || null
+                    await handleSelectedFile(picked)
+                    e.currentTarget.value = ''
+                  }}
                 />
                 <input
                   ref={cameraPhotoRef}
@@ -717,7 +762,11 @@ async function saveEdit() {
                   accept="image/*"
                   capture="environment"
                   className="hidden"
-                  onChange={e => setFile((e.target.files && e.target.files[0]) || null)}
+                  onChange={async e => {
+                    const picked = (e.target.files && e.target.files[0]) || null
+                    await handleSelectedFile(picked)
+                    e.currentTarget.value = ''
+                  }}
                 />
                 <input
                   ref={cameraVideoRef}
@@ -725,7 +774,11 @@ async function saveEdit() {
                   accept="video/*"
                   capture="environment"
                   className="hidden"
-                  onChange={e => setFile((e.target.files && e.target.files[0]) || null)}
+                  onChange={async e => {
+                    const picked = (e.target.files && e.target.files[0]) || null
+                    await handleSelectedFile(picked)
+                    e.currentTarget.value = ''
+                  }}
                 />
 
                 <div className="flex flex-wrap gap-2">
@@ -747,6 +800,7 @@ async function saveEdit() {
 
                 {file && <p className="text-xs text-zinc-600">נבחר: {file.name}</p>}
               </div>
+
               <Button disabled={busy || (!text && !file && !linkUrl)} onClick={submitBlessing}>
                 {busy ? 'שולח...' : 'שלח ברכה'}
               </Button>
@@ -768,14 +822,12 @@ async function saveEdit() {
                   </p>
                 </div>
 
-                {/* link preview thumb (no media -> below name) */}
                 {linkPreviewEnabled && p.link_url && !(p.video_url || p.media_url) && (
                   <div className="mt-3 flex justify-center">
                     <LinkPreviewThumb url={p.link_url} size={mediaSize} />
                   </div>
                 )}
 
-                {/* media (centered) */}
                 {(() => {
                   const mediaUrl = (p.video_url || p.media_url) as string | null
                   if (!mediaUrl) return null
@@ -783,12 +835,12 @@ async function saveEdit() {
                   return (
                     <div className="mt-3 flex justify-center">
                       <button
-  type="button"
-  className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
-  style={{ width: mediaSize, height: mediaSize }}
-  onClick={() => setLightbox({ url: mediaUrl, isVideo: video, post: p })}
-  aria-label="פתח מדיה"
->
+                        type="button"
+                        className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50"
+                        style={{ width: mediaSize, height: mediaSize }}
+                        onClick={() => setLightbox({ url: mediaUrl, isVideo: video, post: p })}
+                        aria-label="פתח מדיה"
+                      >
                         {video ? (
                           <>
                             <video
@@ -809,24 +861,20 @@ async function saveEdit() {
                   )
                 })()}
 
-                {/* link preview thumb (centered) */}
-{p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
+                {p.text && <p className="mt-3 whitespace-pre-wrap text-sm text-right">{p.text}</p>}
 
-                {/* link preview thumb (has media -> below text; if no text -> will show below media) */}
                 {linkPreviewEnabled && p.link_url && (p.video_url || p.media_url) && (
                   <div className="mt-3 flex justify-center">
                     <LinkPreviewThumb url={p.link_url} size={mediaSize} />
                   </div>
                 )}
 
-                {/* link meta/details (single line, below text) */}
-                {/* When "show details" is ON we show the meta line (title/domain). */}
                 {p.link_url && linkPreviewEnabled && showLinkDetails && (
                   <div className="mt-2">
                     <LinkPreviewMeta url={p.link_url} force={false} />
                   </div>
                 )}
-                {/* reactions */}
+
                 <div className="mt-3 space-y-2" dir="rtl">
                   <div className="flex items-center justify-center gap-1 whitespace-nowrap" dir="ltr">
                     {EMOJIS.map(emo => {
@@ -876,7 +924,6 @@ async function saveEdit() {
                   </div>
                 </div>
 
-                {/* edit/delete (mine, within 1h) */}
                 {(canEditMine(p) || canRepositionMine(p)) && (
                   <div className="mt-3 flex flex-wrap items-center justify-end gap-2" dir="rtl">
                     {canEditMine(p) ? <span className="text-xs text-zinc-500">⏳ {fmtMMSS(secondsLeft(p))}</span> : null}
@@ -898,22 +945,28 @@ async function saveEdit() {
           ))}
         </div>
 
-        {/* LIGHTBOX */}
         {lightbox && (
           <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
             <div className="mx-auto flex h-full max-w-3xl items-center justify-center" onClick={e => e.stopPropagation()}>
-              <div className="absolute top-2 right-2 z-10 flex items-center gap-2" dir="rtl">{shareEnabled && lightbox?.post ? (
-  <Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => sharePost(lightbox.post!)} type="button">
-    {String(settings?.share_button_label || 'שתף')}
-  </Button>
-) : null}
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-2" dir="rtl">
+                {shareEnabled && lightbox?.post ? (
+                  <Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => sharePost(lightbox.post!)} type="button">
+                    {String(settings?.share_button_label || 'שתף')}
+                  </Button>
+                ) : null}
 
-{!lightbox.isVideo && (
-<Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => triggerDownload(lightbox.url)} type="button">הורד תמונה</Button>
-)}
-<Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => setLightbox(null)} type="button">סגור</Button>
-</div>
-<div className="w-full overflow-hidden rounded-2xl bg-black">
+                {!lightbox.isVideo && (
+                  <Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => triggerDownload(lightbox.url)} type="button">
+                    הורד תמונה
+                  </Button>
+                )}
+
+                <Button variant="ghost" className="bg-white/90 text-black shadow hover:bg-white" onClick={() => setLightbox(null)} type="button">
+                  סגור
+                </Button>
+              </div>
+
+              <div className="w-full overflow-hidden rounded-2xl bg-black">
                 {lightbox.isVideo ? (
                   <video src={lightbox.url} controls autoPlay playsInline className="max-h-[85vh] w-full object-contain" />
                 ) : (
@@ -935,117 +988,139 @@ async function saveEdit() {
           copyLabel={String(settings?.qr_btn_copy_label || 'העתק קישור')}
         />
 
-
-{focusDraft && (
-  <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setFocusDraft(null)}>
-    <div className="mx-auto max-w-xl" onClick={e => e.stopPropagation()}>
-      <Card>
-        <h3 className="font-semibold text-right">🎯 מיקוד תמונה</h3>
-        <div className="mt-3 grid gap-3 text-right">
-          <CropEditor
-            src={focusDraft.media_url}
-            x={focusDraft.crop_focus_x ?? 0.5}
-            y={focusDraft.crop_focus_y ?? 0.5}
-            onChange={(point) =>
-              setFocusDraft((d: any) => ({
-                ...d,
-                crop_focus_x: point.x,
-                crop_focus_y: point.y,
-                crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center',
-              }))
-            }
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setFocusDraft(null)}>ביטול</Button>
-            <Button onClick={saveFocusOnly} disabled={focusBusy}>
-              {focusBusy ? 'שומר...' : 'שמור מיקוד'}
-            </Button>
-          </div>
-        </div>
-      </Card>
-    </div>
-  </div>
-)}
-
-{/* EDIT MODAL */}
-{editOpen && editDraft && (
-  <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setEditOpen(false)}>
-    <div className="mx-auto max-w-xl" onClick={e => e.stopPropagation()}>
-      <Card>
-        <h3 className="font-semibold text-right">עריכת ברכה</h3>
-
-        <div className="mt-3 grid gap-2 text-right">
-          <Input
-            placeholder="שם"
-            value={editDraft.author_name ?? ""}
-            onChange={e => setEditDraft((d: any) => ({ ...d, author_name: e.target.value }))}
-          />
-          <Textarea
-            placeholder="הברכה"
-            value={editDraft.text ?? ""}
-            onChange={e => setEditDraft((d: any) => ({ ...d, text: e.target.value }))}
-            rows={5}
-          />
-          <Input
-            placeholder="קישור (אופציונלי)"
-            value={editDraft.link_url ?? ""}
-            onChange={e => setEditDraft((d: any) => ({ ...d, link_url: e.target.value }))}
-          />
-
-          <div className="rounded-xl border border-zinc-200 p-3">
-            <p className="text-sm text-zinc-700">מדיה</p>
-
-            {editDraft.media_url && !editRemoveMedia && !editFile && (
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className="h-16 w-16 overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
-                  <img src={editDraft.media_url} alt="" className="h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(editDraft) }} />
-                </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={editRemoveMedia}
-                    onChange={e => setEditRemoveMedia(e.target.checked)}
+        {focusDraft && (
+          <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setFocusDraft(null)}>
+            <div className="mx-auto max-w-xl" onClick={e => e.stopPropagation()}>
+              <Card>
+                <h3 className="font-semibold text-right">🎯 מיקוד תמונה</h3>
+                <div className="mt-3 grid gap-3 text-right">
+                  <CropEditor
+                    src={focusDraft.media_url}
+                    x={focusDraft.crop_focus_x ?? 0.5}
+                    y={focusDraft.crop_focus_y ?? 0.5}
+                    onChange={(point) =>
+                      setFocusDraft((d: any) => ({
+                        ...d,
+                        crop_focus_x: point.x,
+                        crop_focus_y: point.y,
+                        crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center',
+                      }))
+                    }
                   />
-                  מחק מדיה
-                </label>
-              </div>
-            )}
-
-            <div className="mt-2">
-              <input type="file" accept="image/*,video/*" onChange={e => setEditFile(e.target.files?.[0] || null)} />
-              <p className="mt-1 text-xs text-zinc-500">בחירת קובץ תחליף את המדיה הקיימת.</p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" onClick={() => setFocusDraft(null)}>ביטול</Button>
+                    <Button onClick={saveFocusOnly} disabled={focusBusy}>
+                      {focusBusy ? 'שומר...' : 'שמור מיקוד'}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
             </div>
           </div>
+        )}
 
-          {editErr && <p className="text-sm text-red-600">{editErr}</p>}
+        {editOpen && editDraft && (
+          <div className="fixed inset-0 z-50 bg-black/60 p-4" onClick={() => setEditOpen(false)}>
+            <div className="mx-auto max-w-xl" onClick={e => e.stopPropagation()}>
+              <Card>
+                <h3 className="font-semibold text-right">עריכת ברכה</h3>
 
-          {editDraft.media_url && !editRemoveMedia && !editFile && !editDraft.video_url && (
-            <div className="rounded-xl border border-zinc-200 p-3">
-              <p className="mb-2 text-sm font-medium text-right">🎯 מיקוד תמונה</p>
-              <CropEditor
-                src={editDraft.media_url}
-                x={editDraft.crop_focus_x ?? 0.5}
-                y={editDraft.crop_focus_y ?? 0.5}
-                onChange={(point) => setEditDraft((d: any) => ({ ...d, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' }))}
-              />
+                <div className="mt-3 grid gap-2 text-right">
+                  <Input
+                    placeholder="שם"
+                    value={editDraft.author_name ?? ''}
+                    onChange={e => setEditDraft((d: any) => ({ ...d, author_name: e.target.value }))}
+                  />
+                  <Textarea
+                    placeholder="הברכה"
+                    value={editDraft.text ?? ''}
+                    onChange={e => setEditDraft((d: any) => ({ ...d, text: e.target.value }))}
+                    rows={5}
+                  />
+                  <Input
+                    placeholder="קישור (אופציונלי)"
+                    value={editDraft.link_url ?? ''}
+                    onChange={e => setEditDraft((d: any) => ({ ...d, link_url: e.target.value }))}
+                  />
+
+                  <div className="rounded-xl border border-zinc-200 p-3">
+                    <p className="text-sm text-zinc-700">מדיה</p>
+
+                    {(editDraft.media_url || editDraft.video_url) && !editRemoveMedia && !editFile && (
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <div className="h-16 w-16 overflow-hidden rounded-xl bg-zinc-50 ring-1 ring-zinc-200">
+                          {editDraft.video_url ? (
+                            <video src={editDraft.video_url} className="h-full w-full object-cover" muted playsInline preload="metadata" />
+                          ) : (
+                            <img src={editDraft.media_url} alt="" className="h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(editDraft) }} />
+                          )}
+                        </div>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={editRemoveMedia}
+                            onChange={e => setEditRemoveMedia(e.target.checked)}
+                          />
+                          מחק מדיה
+                        </label>
+                      </div>
+                    )}
+
+                    <div className="mt-2">
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        onChange={async e => {
+                          const picked = e.target.files?.[0] || null
+                          if (!picked) {
+                            setEditFile(null)
+                            return
+                          }
+                          const mediaError = await validateSelectedMedia(picked)
+                          if (mediaError) {
+                            setEditErr(mediaError)
+                            setEditFile(null)
+                            e.currentTarget.value = ''
+                            return
+                          }
+                          setEditErr(null)
+                          setEditFile(picked)
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-zinc-500">בחירת קובץ תחליף את המדיה הקיימת.</p>
+                    </div>
+                  </div>
+
+                  {editErr && <p className="text-sm text-red-600">{editErr}</p>}
+
+                  {editDraft.media_url && !editRemoveMedia && !editFile && !editDraft.video_url && (
+                    <div className="rounded-xl border border-zinc-200 p-3">
+                      <p className="mb-2 text-sm font-medium text-right">🎯 מיקוד תמונה</p>
+                      <CropEditor
+                        src={editDraft.media_url}
+                        x={editDraft.crop_focus_x ?? 0.5}
+                        y={editDraft.crop_focus_y ?? 0.5}
+                        onChange={(point) => setEditDraft((d: any) => ({ ...d, crop_focus_x: point.x, crop_focus_y: point.y, crop_position: point.y < 0.34 ? 'top' : point.y > 0.66 ? 'bottom' : 'center' }))}
+                      />
+                    </div>
+                  )}
+
+                  <div className="mt-2 flex justify-end gap-2">
+                    <Button variant="ghost" onClick={() => setEditOpen(false)}>בטל</Button>
+                    <Button onClick={saveEdit} disabled={editBusy}>
+                      {editBusy ? 'שומר...' : 'שמור'}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
             </div>
-          )}
-
-          <div className="mt-2 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setEditOpen(false)}>בטל</Button>
-            <Button onClick={saveEdit} disabled={editBusy}>
-              {editBusy ? 'שומר...' : 'שמור'}
-            </Button>
           </div>
-        </div>
-      </Card>
-    </div>
-  </div>
-)}
-</Container>
+        )}
+      </Container>
     </main>
   )
 }
+
 type UnfurlData = { url: string; title: string; description: string; image: string; site_name: string }
 
 const unfurlCache = new Map<string, UnfurlData>()
@@ -1157,7 +1232,6 @@ function LinkPreviewMeta({ url, force }: { url?: string; force?: boolean }) {
 }
 
 function LinkPreview({ url }: { url?: string }) {
-  // composer preview: thumb + single-line meta
   if (!url) return null
   return (
     <div className="mt-2">
@@ -1169,4 +1243,4 @@ function LinkPreview({ url }: { url?: string }) {
       </div>
     </div>
   )
-                                                    }
+}
