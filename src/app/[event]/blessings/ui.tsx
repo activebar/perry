@@ -1,7 +1,7 @@
 // Path: src/app/[event]/blessings/ui.tsx
-// Version: V25.3
-// Updated: 2026-03-20 13:35
-// Note: keep public blessings pending-approval notice in sync immediately after submit without page refresh
+// Version: V25.4
+// Updated: 2026-03-20 13:50
+// Note: remove duplicate pending-approval badge inside blessings form and keep only the top page notice
 
 'use client'
 
@@ -771,11 +771,6 @@ export default function BlessingsClient({
       <Container>
         <Card id="blessing-form">
           <div className="space-y-2 text-right">
-            {localPendingCount > 0 && (
-              <div className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-                יש {localPendingCount} ברכות שממתינות לאישור מנהל
-              </div>
-            )}
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
             <Input placeholder="קישור (אופציונלי)" value={linkUrl} onChange={e => { setLinkTouched(true); setLinkUrl(e.target.value) }} dir="ltr" />
