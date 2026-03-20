@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/[id]/page.tsx
-// Version: V25.2
-// Updated: 2026-03-20 11:50
-// Note: enrich sub-gallery initialItems with reaction_counts, my_reactions, and top_reaction so reactions persist after refresh
+// Version: V25.3
+// Updated: 2026-03-20 13:20
+// Note: pass sub-gallery pending approval count into GalleryClient so the notice appears immediately for the current gallery
 
 import Link from 'next/link'
 import { cookies } from 'next/headers'
@@ -109,6 +109,14 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
   const uploadEnabled = Boolean(
     (gRows || []).find((g: any) => String(g.id) === String(galleryId))?.upload_enabled
   )
+
+  const { count: pendingCount } = await sb
+    .from('media_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('event_id', eventId)
+    .eq('gallery_id', galleryId)
+    .eq('is_approved', false)
+    .in('kind', ['gallery', 'video', 'galleries', 'gallery_video'])
 
   if (!activeSet.has(String(galleryId))) {
     return (
@@ -223,6 +231,7 @@ export default async function GalleryByIdForEventPage({ params }: PageProps) {
             initialItems={enrichedItems}
             galleryId={galleryId}
             uploadEnabled={uploadEnabled}
+            pendingCount={pendingCount || 0}
             galleryVideoMaxMb={galleryVideoMaxMb}
             galleryVideoMaxSeconds={galleryVideoMaxSeconds}
           />
