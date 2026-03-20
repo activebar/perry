@@ -1,6 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V24.5
-// Updated: 2026-03-19 00:55
+// Version: V24.6
+// Updated: 2026-03-19 15:40
+// Note: admin gallery and blessings show video preview with play overlay and open video correctly in lightbox
 
 'use client'
 
@@ -208,6 +209,10 @@ function isVideoUrl(url?: string | null) {
   return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url || '')
 }
 
+function isVideoItem(item: any) {
+  return !!item?.video_url || isVideoUrl(item?.url || '') || isVideoUrl(item?.thumb_url || '')
+}
+
 function objectPositionFromCrop(item: any) {
   const x = typeof item?.crop_focus_x === 'number' ? Math.max(0, Math.min(1, item.crop_focus_x)) : null
   const y = typeof item?.crop_focus_y === 'number' ? Math.max(0, Math.min(1, item.crop_focus_y)) : null
@@ -247,13 +252,21 @@ function MediaBox({
       title="פתח מדיה"
     >
       {isVid ? (
-        <video
-          src={url}
-          className="absolute inset-0 h-full w-full object-cover"
-          style={{ objectPosition: objectPositionFromCrop({ crop_position, crop_focus_x, crop_focus_y }) }}
-          muted
-          playsInline
-        />
+        <>
+          <video
+            src={url}
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: objectPositionFromCrop({ crop_position, crop_focus_x, crop_focus_y }) }}
+            muted
+            playsInline
+            preload="metadata"
+          />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+              ▶
+            </div>
+          </div>
+        </>
       ) : (
         <img
           src={url}
@@ -462,7 +475,7 @@ export default function AdminApp({
   const [adminFiles, setAdminFiles] = useState<File[]>([])
   const [adminBusy, setAdminBusy] = useState(false)
   const [adminMsg, setAdminMsg] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
   const [focusTarget, setFocusTarget] = useState<any | null>(null)
 
   const [galleries, setGalleries] = useState<any[]>([])
@@ -2777,10 +2790,64 @@ export default function AdminApp({
                         <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
                           <button
                             className="relative block aspect-square w-full bg-zinc-50"
-                            onClick={() => p.url && setLightbox(p.url)}
+                            onClick={() => p.url && setLightbox({ url: p.url, isVideo: isVideoItem(p) })}
                             type="button"
                           >
-                            <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
+                            {isVideoItem(p) ? (
+                              <>
+                                <video
+                                  src={p.url}
+                                  className="absolute inset-0 h-full w-full object-cover"
+                                  style={{ objectPosition: objectPositionFromCrop(p) }}
+                                  muted
+                                  playsInline
+                                  preload="metadata"
+                                />
+                                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+                                    ▶
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              {isVideoItem(p) ? (
+                              <>
+                                <video
+                                  src={p.url}
+                                  className="absolute inset-0 h-full w-full object-cover"
+                                  style={{ objectPosition: objectPositionFromCrop(p) }}
+                                  muted
+                                  playsInline
+                                  preload="metadata"
+                                />
+                                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+                                    ▶
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              {isVideoItem(p) ? (
+                                <>
+                                  <video
+                                    src={p.url}
+                                    className="absolute inset-0 h-full w-full object-cover"
+                                    style={{ objectPosition: objectPositionFromCrop(p) }}
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                  />
+                                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+                                      ▶
+                                    </div>
+                                  </div>
+                                </>
+                              ) : (
+                                <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
+                              )}
+                            )}
+                            )}
                           </button>
 
                           <div className="p-3 flex gap-2">
@@ -2866,7 +2933,7 @@ export default function AdminApp({
                               className="relative block aspect-square w-full bg-zinc-50"
                               onClick={() => {
                                 if (selectMode) return toggleSelected(p.id)
-                                if (p.url) setLightbox(p.url)
+                                if (p.url) setLightbox({ url: p.url, isVideo: isVideoItem(p) })
                               }}
                               type="button"
                             >
@@ -2903,15 +2970,21 @@ export default function AdminApp({
             <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
               <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
                 <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-                  <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="bg-white/90 text-black shadow hover:bg-white" type="button">
-                    הורד תמונה
-                  </Button>
+                  {!lightbox.isVideo && (
+                    <Button variant="ghost" onClick={() => triggerDownload(lightbox.url)} className="bg-white/90 text-black shadow hover:bg-white" type="button">
+                      הורד תמונה
+                    </Button>
+                  )}
                   <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white" type="button">
                     סגור
                   </Button>
                 </div>
 
-                <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
+                {lightbox.isVideo ? (
+                  <video src={lightbox.url} controls autoPlay playsInline className="w-full rounded-2xl bg-black" />
+                ) : (
+                  <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
+                )}
               </div>
             </div>
           )}
@@ -2932,4 +3005,4 @@ export default function AdminApp({
       )}
     </div>
   )
-}
+    }
