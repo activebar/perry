@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.9
-// Updated: 2026-03-20 11:05
-// Note: show gallery top reaction badge from API reaction data while keeping floating upload menu and mobile-safe lightbox
+// Version: V26.0
+// Updated: 2026-03-20 11:20
+// Note: add gallery reactions in preview/lightbox using media_item reactions API while keeping upload menu and mobile-safe layout
 
 'use client'
 
@@ -9,6 +9,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { usePathname } from 'next/navigation'
 import { Button, Card } from '@/components/ui'
+
+const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
 
 function getLocalDeviceId(): string | null {
   if (typeof window === 'undefined') return null
@@ -378,6 +380,57 @@ export default function GalleryClient({
 
     if (!bestEmoji || bestCount <= 0) return null
     return { emoji: bestEmoji, count: bestCount }
+  }
+
+  async function toggleReactionForItem(
+    item: Item,
+    emoji: string,
+    setItems: React.Dispatch<React.SetStateAction<Item[]>>,
+    setLightbox: React.Dispatch<React.SetStateAction<Item | null>>,
+    setErr: React.Dispatch<React.SetStateAction<string | null>>
+  ) {
+    setErr(null)
+    try {
+      const res = await fetch('/api/reactions/toggle', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ media_item_id: item.id, emoji }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'שגיאה בתגובה')
+
+      const counts = json?.counts || {}
+      const my = json?.my || []
+
+      const top = (() => {
+        let bestEmoji = ''
+        let bestCount = 0
+        for (const [em, raw] of Object.entries(counts)) {
+          const count = Number(raw || 0)
+          if (count > bestCount) {
+            bestEmoji = String(em)
+            bestCount = count
+          }
+        }
+        return bestEmoji && bestCount > 0 ? { emoji: bestEmoji, count: bestCount } : null
+      })()
+
+      setItems((prev) =>
+        prev.map((x) =>
+          x.id === item.id
+            ? { ...x, reaction_counts: counts, my_reactions: my, top_reaction: top }
+            : x
+        )
+      )
+
+      setLightbox((prev) =>
+        prev && prev.id === item.id
+          ? { ...prev, reaction_counts: counts, my_reactions: my, top_reaction: top }
+          : prev
+      )
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בתגובה')
+    }
   }
 
   const DIRECT_MAX = 8
@@ -998,6 +1051,32 @@ export default function GalleryClient({
                   </>
                 ) : null}
               </div>
+
+              <div className="mt-4 border-t border-zinc-200 pt-3">
+                <div className="mb-2 text-right text-base font-semibold">תגובות</div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {EMOJIS.map((emoji) => {
+                    const active = !!lightbox.my_reactions?.includes(emoji)
+                    const count = Number(lightbox.reaction_counts?.[emoji] || 0)
+
+                    return (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => void toggleReactionForItem(lightbox, emoji, setItems, setLightbox, setErr)}
+                        className={`flex min-w-[64px] items-center justify-center gap-2 rounded-full border px-3 py-2 text-lg transition ${
+                          active
+                            ? 'border-zinc-900 bg-zinc-900 text-white'
+                            : 'border-zinc-200 bg-white text-zinc-900'
+                        }`}
+                      >
+                        <span>{emoji}</span>
+                        <span className="text-sm">{count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1006,6 +1085,7 @@ export default function GalleryClient({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {feed.map((it) => {
           const topReaction = getTopReaction(it)
+          const topCount = Number(topReaction?.count || 0)
 
           return (
             <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
@@ -1040,7 +1120,7 @@ export default function GalleryClient({
                 {topReaction ? (
                   <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
                     <span>{topReaction.emoji}</span>
-                    <span>{topReaction.count}</span>
+                    <span>{topCount}</span>
                   </div>
                 ) : null}
 
@@ -1066,14 +1146,14 @@ export default function GalleryClient({
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        void shareItem(it)
+                        setLightbox(it)
                       }}
                       className="text-xl"
                       type="button"
-                      aria-label="שתף"
-                      title="שתף"
+                      aria-label="תגובות"
+                      title="תגובות"
                     >
-                      🔗
+                      {topReaction?.emoji || '😊'}
                     </button>
 
                     <button
@@ -1092,14 +1172,14 @@ export default function GalleryClient({
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        setLightbox(it)
+                        void shareItem(it)
                       }}
                       className="text-xl"
                       type="button"
-                      aria-label="פתח"
-                      title="פתח"
+                      aria-label="שתף"
+                      title="שתף"
                     >
-                      😊
+                      🔗
                     </button>
                   </>
                 )}
@@ -1116,4 +1196,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-}
+          }
