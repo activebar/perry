@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V26.4
-// Updated: 2026-03-20 12:35
-// Note: reduce mobile upload and bulk-download block height, with smaller blessings-style buttons and tighter spacing
+// Version: V26.5
+// Updated: 2026-03-20 13:20
+// Note: keep per-sub-gallery pending approval notice in sync immediately after uploads without page refresh
 
 'use client'
 
@@ -286,12 +286,14 @@ export default function GalleryClient({
   initialItems,
   galleryId,
   uploadEnabled,
+  pendingCount = 0,
   galleryVideoMaxMb = 200,
   galleryVideoMaxSeconds = 60,
 }: {
   initialItems: any[]
   galleryId: string
   uploadEnabled: boolean
+  pendingCount?: number
   galleryVideoMaxMb?: number
   galleryVideoMaxSeconds?: number
 }) {
@@ -324,6 +326,7 @@ export default function GalleryClient({
     }))
   )
   const [files, setFiles] = useState<File[]>([])
+  const [localPendingCount, setLocalPendingCount] = useState<number>(Number(pendingCount || 0))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -338,6 +341,10 @@ export default function GalleryClient({
     const t = window.setInterval(() => setNowTs(Date.now()), 1000)
     return () => window.clearInterval(t)
   }, [])
+
+  useEffect(() => {
+    setLocalPendingCount(Number(pendingCount || 0))
+  }, [pendingCount])
 
   function canEditMine(it: Item) {
     const until = it?.editable_until ? new Date(it.editable_until).getTime() : 0
@@ -592,9 +599,16 @@ export default function GalleryClient({
         body: JSON.stringify({ id: it.id, device_id: deviceId }),
       }).catch(() => null)
 
-      setItems((prev) => prev.map((x) => (x.id === it.id ? created : x)))
-      setLightbox(created)
-      setMsg('עודכן ✅')
+      if (j?.is_approved) {
+        setItems((prev) => prev.map((x) => (x.id === it.id ? created : x)))
+        setLightbox(created)
+        setMsg('עודכן ✅')
+      } else {
+        setItems((prev) => prev.filter((x) => x.id !== it.id))
+        setLightbox(null)
+        setLocalPendingCount((prev) => prev + 1)
+        setMsg('✅ עודכן וממתין לאישור מנהל')
+      }
     } catch (e: any) {
       setErr(e?.message || 'שגיאה בעריכה')
     }
@@ -760,6 +774,8 @@ export default function GalleryClient({
     setBusy(true)
 
     try {
+      let pendingAdded = 0
+
       for (const f of files) {
         const precheck = await validateSelectedMedia(f, maxVideoBytes, maxVideoSeconds)
         if (precheck) {
@@ -836,13 +852,22 @@ export default function GalleryClient({
           if (j.is_approved) {
             setItems((prev) => [created, ...prev])
           } else {
+            pendingAdded += 1
             setMsg('✅ הועלה וממתין לאישור מנהל')
           }
           }
       }
 
+      if (pendingAdded > 0) {
+        setLocalPendingCount((prev) => prev + pendingAdded)
+      }
+
       setFiles([])
-      setMsg('✅ ההעלאה הושלמה')
+      setMsg(
+        pendingAdded > 0
+          ? `✅ ההעלאה הושלמה. ${pendingAdded} פריטים ממתינים לאישור מנהל`
+          : '✅ ההעלאה הושלמה'
+      )
     } catch (e: any) {
       setErr(e?.message || 'שגיאה בהעלאה')
     } finally {
@@ -857,6 +882,11 @@ export default function GalleryClient({
           <div className="text-right">
             <h3 className="text-lg font-semibold">תמונות בגלריה</h3>
             <p className="text-sm text-zinc-600">אפשר להעלות תמונות או סרטונים.</p>
+            {localPendingCount > 0 && (
+              <div className="mt-2 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                יש {localPendingCount} תמונות שממתינות לאישור מנהל
+              </div>
+            )}
           </div>
 
           <div
@@ -1234,4 +1264,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-    }
+          }
