@@ -1,7 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V25.74
-// Updated: 2026-03-20 15:00
-// Note: replace pending gallery approve/delete text buttons with compact icon buttons to prevent mobile line breaks
+// Version: V25.75
+// Updated: 2026-03-20 15:10
+// Note: replace pending gallery approve/delete text buttons with compact icon buttons in the actual pendingMedia card block to prevent mobile line breaks
 
 'use client'
 
@@ -2900,12 +2900,24 @@ export default function AdminApp({
                             )}
                           </button>
 
-                          <div className="p-3 flex gap-2">
-                            <Button variant="ghost" onClick={() => approveMediaItem(p.id)}>
-                              אשר
+                          <div className="flex items-center justify-center gap-3 p-3">
+                            <Button
+                              variant="ghost"
+                              onClick={() => approveMediaItem(p.id)}
+                              className="h-10 w-10 rounded-full border border-emerald-200 bg-emerald-50 p-0 text-lg text-emerald-700"
+                              title="אשר"
+                              aria-label="אשר"
+                            >
+                              ✅
                             </Button>
-                            <Button variant="ghost" onClick={() => deleteMediaItem(p.id)}>
-                              מחק
+                            <Button
+                              variant="ghost"
+                              onClick={() => deleteMediaItem(p.id)}
+                              className="h-10 w-10 rounded-full border border-red-200 bg-red-50 p-0 text-lg text-red-700"
+                              title="מחק"
+                              aria-label="מחק"
+                            >
+                              🗑️
                             </Button>
                           </div>
                         </div>
@@ -3072,4 +3084,4 @@ export default function AdminApp({
       )}
     </div>
   )
-  }
+                                            }
