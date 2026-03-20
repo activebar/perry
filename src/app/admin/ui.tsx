@@ -1,7 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V25.7
-// Updated: 2026-03-20 14:25
-// Note: fix admin home-page editor mobile layout for hero image upload and share-logo upload controls
+// Version: V25.72
+// Updated: 2026-03-20 14:20
+// Note: fix admin home editor mobile layout for HERO rotating images and share logo upload sections without changing logic
 
 'use client'
 
@@ -1563,13 +1563,13 @@ export default function AdminApp({
               <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
                 <p className="text-sm font-medium">תמונות מתחלפות</p>
 
-                <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
                   <input
                     type="file"
                     accept="image/*"
                     multiple
                     onChange={e => setHeroFiles(Array.from(e.target.files || []))}
-                    className="block w-full min-w-0 text-sm file:ml-3 file:rounded-full file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:text-zinc-700"
+                    className="min-w-0 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
                   />
                   <Button
                     onClick={uploadHeroImages}
@@ -1580,7 +1580,7 @@ export default function AdminApp({
                   </Button>
                 </div>
 
-                {heroMsg && <p className="text-sm text-right text-zinc-700">{heroMsg}</p>}
+                {heroMsg && <p className="text-sm text-zinc-700 text-right">{heroMsg}</p>}
 
                 <div className="grid gap-2">
                   <label className="text-xs text-zinc-500">מהירות החלפה (שניות)</label>
@@ -1985,7 +1985,7 @@ export default function AdminApp({
                       type="file"
                       accept="image/*"
                       onChange={e => setShareLogoFile((e.target.files || [])[0] || null)}
-                      className="block w-full min-w-0 text-sm file:ml-3 file:rounded-full file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:text-zinc-700"
+                      className="min-w-0 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
                     />
                     {shareLogoPreview && (
                       <div className="grid gap-2">
@@ -1993,8 +1993,21 @@ export default function AdminApp({
                           <img src={shareLogoPreview} alt="share-logo-preview" className="max-h-20 ml-auto" />
                         </div>
                         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                          <Button onClick={uploadShareLogo} disabled={shareLogoUploading} className="w-full sm:w-auto">{shareLogoUploading ? 'מעלה…' : 'שמור לוגו'}</Button>
-                          <Button variant="ghost" onClick={() => setShareLogoFile(null)} disabled={shareLogoUploading} className="w-full sm:w-auto">ביטול</Button>
+                          <Button
+                            onClick={uploadShareLogo}
+                            disabled={shareLogoUploading}
+                            className="w-full sm:w-auto"
+                          >
+                            {shareLogoUploading ? 'מעלה…' : 'שמור לוגו'}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() => setShareLogoFile(null)}
+                            disabled={shareLogoUploading}
+                            className="w-full sm:w-auto"
+                          >
+                            ביטול
+                          </Button>
                         </div>
                         {shareLogoMsg && <p className="text-sm text-right">{shareLogoMsg}</p>}
                       </div>
@@ -3048,4 +3061,4 @@ export default function AdminApp({
       )}
     </div>
   )
-                 }
+}
