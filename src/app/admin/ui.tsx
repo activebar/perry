@@ -1,6 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V24.5
-// Updated: 2026-03-20 07:35
+// Version: V24.9
+// Updated: 2026-03-20 07:55
+// Note: add poster-based video previews in admin gallery, support video lightbox, and keep controls below gallery media
 
 'use client'
 
@@ -302,13 +303,14 @@ function MediaBox({
         <>
           <video
             src={url}
+            poster={!isVideoUrl(String(media_url || '')) ? (media_url || undefined) : undefined}
             className="absolute inset-0 h-full w-full object-cover"
             style={{ objectPosition: objectPositionFromCrop({ crop_position, crop_focus_x, crop_focus_y }) }}
             muted
             playsInline
             preload="metadata"
           />
-          <VideoBadge src={url} />
+          <VideoBadge src={url} duration={undefined} />
         </>
       ) : (
         <img
@@ -518,7 +520,7 @@ export default function AdminApp({
   const [adminFiles, setAdminFiles] = useState<File[]>([])
   const [adminBusy, setAdminBusy] = useState(false)
   const [adminMsg, setAdminMsg] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null)
   const [focusTarget, setFocusTarget] = useState<any | null>(null)
 
   const [galleries, setGalleries] = useState<any[]>([])
@@ -2833,13 +2835,14 @@ export default function AdminApp({
                         <div key={p.id} className="rounded-2xl border border-zinc-200 overflow-hidden">
                           <button
                             className="relative block aspect-square w-full bg-zinc-50"
-                            onClick={() => p.url && setLightbox(p.url)}
+                            onClick={() => p.url && setLightbox({ url: p.url, isVideo: isVideoItem(p) })}
                             type="button"
                           >
                             {isVideoItem(p) ? (
                               <>
                                 <video
                                   src={p.url}
+                                  poster={!isVideoUrl(p.thumb_url || '') ? (p.thumb_url || undefined) : undefined}
                                   className="absolute inset-0 h-full w-full object-cover"
                                   style={{ objectPosition: objectPositionFromCrop(p) }}
                                   muted
@@ -2941,7 +2944,7 @@ export default function AdminApp({
                               className="relative block aspect-square w-full bg-zinc-50"
                               onClick={() => {
                                 if (selectMode) return toggleSelected(p.id)
-                                if (p.url) setLightbox(p.url)
+                                if (p.url) setLightbox({ url: p.url, isVideo: isVideoItem(p) })
                               }}
                               type="button"
                             >
@@ -3026,4 +3029,4 @@ export default function AdminApp({
       )}
     </div>
   )
-          }
+    }
