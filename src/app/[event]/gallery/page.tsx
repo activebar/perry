@@ -1,5 +1,7 @@
-//src/app/[event]/gallery/page.tsx
-// Version: V24.6
+// Path: src/app/[event]/gallery/page.tsx
+// Version: V24.7
+// Updated: 2026-03-20 12:55
+// Note: show total pending media count on public gallery page so users know uploads await approval
 import Link from 'next/link'
 
 import { Container, Card } from '@/components/ui'
@@ -114,6 +116,15 @@ export default async function GalleryIndexPageForEvent({
 
   if (mErr) throw mErr
 
+  const { count: pendingMediaCount, error: pendingErr } = await srv
+    .from('media_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('event_id', eventId)
+    .eq('is_approved', false)
+    .in('kind', ['gallery', 'video', 'galleries', 'gallery_video'])
+
+  if (pendingErr) throw pendingErr
+
   const mediaByGallery = new Map<string, any[]>()
   for (const m of mediaRows || []) {
     const gid = String((m as any).gallery_id || '')
@@ -130,6 +141,11 @@ export default async function GalleryIndexPageForEvent({
   <div className="space-y-2 text-right">
     <div className="text-xl font-semibold">גלריות</div>
     <div className="text-sm opacity-80">בחרו גלריה לצפייה בתמונות</div>
+    {(pendingMediaCount || 0) > 0 && (
+      <div className="mt-2 inline-flex rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
+        יש {pendingMediaCount || 0} תמונות שממתינות לאישור מנהל
+      </div>
+    )}
 
     {enabledBlocks.length > 0 && (
       <div className="mt-4 flex flex-wrap justify-end gap-2">
