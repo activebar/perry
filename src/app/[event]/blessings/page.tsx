@@ -1,7 +1,7 @@
 // Path: src/app/[event]/blessings/page.tsx
-// Version: V25.2
-// Updated: 2026-03-20 13:35
-// Note: pass pending blessings count into BlessingsClient so pending notice updates immediately without refresh
+// Version: V25.3
+// Updated: 2026-03-20 14:05
+// Note: remove top pending notice from blessings page and keep pending indicator inside the form card only
 
 import type { Metadata } from 'next'
 
@@ -60,11 +60,6 @@ export default async function BlessingsPageForEvent({ params }: { params: { even
     <main className="py-6 sm:py-10">
       <div className="w-full">
         <BlessingsShareHeader settings={settings || {}} />
-        {(pendingBlessingsCount || 0) > 0 && (
-          <div className="mx-auto mb-4 max-w-3xl rounded-full bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-700">
-            יש {pendingBlessingsCount || 0} ברכות שממתינות לאישור מנהל
-          </div>
-        )}
         <BlessingsClient settings={settings || {}} blocks={blocks || []} initialFeed={(posts || []) as any} pendingCount={pendingBlessingsCount || 0} />
       </div>
     </main>
