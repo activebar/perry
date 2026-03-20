@@ -1,7 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V25.73
-// Updated: 2026-03-20 14:40
-// Note: fix admin mobile horizontal overflow in settings editor and keep top gallery pending chip synced across all tabs
+// Version: V25.74
+// Updated: 2026-03-20 15:00
+// Note: replace pending gallery approve/delete text buttons with compact icon buttons to prevent mobile line breaks
 
 'use client'
 
@@ -3072,4 +3072,4 @@ export default function AdminApp({
       )}
     </div>
   )
-      }
+  }
