@@ -1,3 +1,8 @@
+// Path: src/app/[event]/blessings/page.tsx
+// Version: V25.1
+// Updated: 2026-03-20 12:55
+// Note: show total pending blessings count on public blessings page so users know submissions await approval
+
 import type { Metadata } from 'next'
 
 import BlessingsClient from './ui'
@@ -44,10 +49,22 @@ export default async function BlessingsPageForEvent({ params }: { params: { even
     .order('created_at', { ascending: false })
     .limit(60)
 
+  const { count: pendingBlessingsCount } = await sb
+    .from('posts')
+    .select('*', { count: 'exact', head: true })
+    .eq('event_id', eventId)
+    .eq('kind', 'blessing')
+    .eq('status', 'pending')
+
   return (
     <main className="py-6 sm:py-10">
       <div className="w-full">
         <BlessingsShareHeader settings={settings || {}} />
+        {(pendingBlessingsCount || 0) > 0 && (
+          <div className="mx-auto mb-4 max-w-3xl rounded-full bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-700">
+            יש {pendingBlessingsCount || 0} ברכות שממתינות לאישור מנהל
+          </div>
+        )}
         <BlessingsClient settings={settings || {}} blocks={blocks || []} initialFeed={(posts || []) as any} />
       </div>
     </main>
