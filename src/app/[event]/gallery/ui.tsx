@@ -957,8 +957,6 @@ export default function GalleryClient({
             </button>
 
             <div className="p-3">
-              {selectMode ? <span className="text-xs text-zinc-500">מצב בחירה פעיל</span> : null}
-            </div>
           </div>
         ))}
       </div>
