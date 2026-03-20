@@ -1,7 +1,7 @@
 // Path: src/app/[event]/blessings/page.tsx
-// Version: V25.1
-// Updated: 2026-03-20 12:55
-// Note: show total pending blessings count on public blessings page so users know submissions await approval
+// Version: V25.2
+// Updated: 2026-03-20 13:35
+// Note: pass pending blessings count into BlessingsClient so pending notice updates immediately without refresh
 
 import type { Metadata } from 'next'
 
@@ -65,7 +65,7 @@ export default async function BlessingsPageForEvent({ params }: { params: { even
             יש {pendingBlessingsCount || 0} ברכות שממתינות לאישור מנהל
           </div>
         )}
-        <BlessingsClient settings={settings || {}} blocks={blocks || []} initialFeed={(posts || []) as any} />
+        <BlessingsClient settings={settings || {}} blocks={blocks || []} initialFeed={(posts || []) as any} pendingCount={pendingBlessingsCount || 0} />
       </div>
     </main>
   )
