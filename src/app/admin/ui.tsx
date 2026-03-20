@@ -1,7 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V25.72
-// Updated: 2026-03-20 14:20
-// Note: fix admin home editor mobile layout for HERO rotating images and share logo upload sections without changing logic
+// Version: V25.73
+// Updated: 2026-03-20 14:40
+// Note: fix admin mobile horizontal overflow in settings editor and keep top gallery pending chip synced across all tabs
 
 'use client'
 
@@ -525,6 +525,7 @@ export default function AdminApp({
 
   const [galleries, setGalleries] = useState<any[]>([])
   const galleriesTotalPending = useMemo(() => galleries.reduce((sum: number, g: any) => sum + (g?.pending_count || 0), 0), [galleries])
+  const [topGalleryPendingCount, setTopGalleryPendingCount] = useState(0)
   const [selectedGalleryId, setSelectedGalleryId] = useState<string>('')
   const [galleryBusy, setGalleryBusy] = useState(false)
   const [galleryMsg, setGalleryMsg] = useState<string | null>(null)
@@ -632,6 +633,10 @@ export default function AdminApp({
     }
   }
   const [hoursToOpen, setHoursToOpen] = useState<number>(8)
+
+  useEffect(() => {
+    setTopGalleryPendingCount(Number(galleriesTotalPending || 0))
+  }, [galleriesTotalPending])
 
   async function triggerDownload(url: string, filenameBase?: string) {
     try {
@@ -1005,17 +1010,20 @@ export default function AdminApp({
 
   async function fetchTopCounts() {
     try {
-      const [b, g, ga] = await Promise.all([
+      const [b, g, ga, galleriesRes] = await Promise.all([
         jfetch(`/api/admin/posts?status=pending&kind=blessing`, { method: 'GET', headers: {} as any }),
         jfetch(`/api/admin/posts?status=pending&kind=gallery`, { method: 'GET', headers: {} as any }),
-        jfetch(`/api/admin/posts?status=pending&kind=gallery_admin`, { method: 'GET', headers: {} as any })
+        jfetch(`/api/admin/posts?status=pending&kind=gallery_admin`, { method: 'GET', headers: {} as any }),
+        jfetch('/api/admin/galleries', { method: 'GET', headers: {} as any }).catch(() => ({ total_pending: 0 }))
       ])
 
       const bCount = (b.posts || []).length
       const pCount = (g.posts || []).length + (ga.posts || []).length
+      const topPending = Number((galleriesRes as any)?.total_pending || 0)
 
       setPendingBlessingsCount(bCount)
       setPendingCount(bCount + pCount)
+      setTopGalleryPendingCount(topPending)
     } catch {}
   }
 
@@ -1173,6 +1181,7 @@ export default function AdminApp({
       const res = await jfetch('/api/admin/galleries', { method: 'GET' })
       const rows = res.galleries || []
       setGalleries(rows)
+      setTopGalleryPendingCount(Number(res.total_pending || 0))
       if (!selectedGalleryId && rows[0]?.id) setSelectedGalleryId(rows[0].id)
     } catch (e: any) {
       setGalleryMsg(friendlyError(e?.message || 'שגיאה בטעינת גלריות'))
@@ -1416,17 +1425,17 @@ export default function AdminApp({
   }
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4 overflow-x-hidden [overflow-wrap:anywhere]" dir="rtl">
       {focusModal}
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-right">
-            <p className="text-sm text-zinc-600">מחובר: {admin.email}</p>
+            <p className="text-sm text-zinc-600 break-all">מחובר: {admin.email}</p>
             <p className="text-xs text-zinc-500">Role: {admin.role}</p>
             <p className="text-xs text-zinc-500">Event ID פעיל: <span className="font-semibold text-zinc-900">{activeEventId || 'IDO'}</span></p>
             <div className="mt-1 flex flex-wrap gap-2 text-xs">
               <span className={`rounded-full px-2 py-0.5 ${pendingBlessingsCount > 0 ? 'bg-amber-50 text-amber-800' : 'bg-zinc-100 text-zinc-600'}`}>ברכות ממתינות: {pendingBlessingsCount}</span>
-              <span className={`rounded-full px-2 py-0.5 ${galleriesTotalPending > 0 ? 'bg-amber-50 text-amber-800' : 'bg-zinc-100 text-zinc-600'}`}>ממתינות לאישור: {galleriesTotalPending}</span>
+              <span className={`rounded-full px-2 py-0.5 ${topGalleryPendingCount > 0 ? 'bg-amber-50 text-amber-800' : 'bg-zinc-100 text-zinc-600'}`}>ממתינות לאישור: {topGalleryPendingCount}</span>
             </div>
 
             {settings?.updated_at && <p className="text-xs text-zinc-500">עודכן לאחרונה: {fmt(settings.updated_at)}</p>}
@@ -1875,6 +1884,7 @@ export default function AdminApp({
                     type="file"
                     accept="image/*"
                     onChange={e => setOgFile((e.target.files || [])[0] || null)}
+                    className="min-w-0 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
                   />
 
                   {ogPreview && (
@@ -2538,7 +2548,7 @@ export default function AdminApp({
                   <div className="grid gap-2 rounded-xl border border-zinc-200 p-3">
                     <p className="text-sm font-medium">מדיה</p>
 
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <MediaBox media_url={editBlessing.media_url} video_url={editBlessing.video_url} crop_position={editBlessing.crop_position} crop_focus_x={editBlessing.crop_focus_x} crop_focus_y={editBlessing.crop_focus_y} size={safeBSize} />
                       {(editBlessing.media_url || editBlessing.video_url) && (
                         <a className="text-sm underline" href={(editBlessing.video_url || editBlessing.media_url) as string} target="_blank" rel="noreferrer">
@@ -2554,6 +2564,7 @@ export default function AdminApp({
                         const f = e.target.files?.[0]
                         if (f) replaceBlessingMedia(f)
                       }}
+                      className="min-w-0 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
                     />
 
                     <Button
@@ -3061,4 +3072,4 @@ export default function AdminApp({
       )}
     </div>
   )
-}
+      }
