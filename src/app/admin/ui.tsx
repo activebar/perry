@@ -1,7 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V24.9
-// Updated: 2026-03-20 07:55
-// Note: add poster-based video previews in admin gallery, support video lightbox, and keep controls below gallery media
+// Version: V24.10
+// Updated: 2026-03-20 08:50
+// Note: fix admin lightbox download handler after video preview/play overlay updates
 
 'use client'
 
@@ -3000,7 +3000,7 @@ export default function AdminApp({
             <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
               <div className="relative mx-auto max-w-4xl" onClick={e => e.stopPropagation()}>
                 <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
-                  <Button variant="ghost" onClick={() => triggerDownload(lightbox)} className="bg-white/90 text-black shadow hover:bg-white" type="button">
+                  <Button variant="ghost" onClick={() => triggerDownload(lightbox.url)} className="bg-white/90 text-black shadow hover:bg-white" type="button">
                     הורד תמונה
                   </Button>
                   <Button variant="ghost" onClick={() => setLightbox(null)} className="bg-white/90 text-black shadow hover:bg-white" type="button">
@@ -3029,4 +3029,4 @@ export default function AdminApp({
       )}
     </div>
   )
-    }
+        }
