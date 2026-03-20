@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.7
-// Updated: 2026-03-20 10:15
-// Note: add separate image/video capture buttons in sub-gallery while keeping existing gallery logic intact
+// Version: V25.8
+// Updated: 2026-03-20 10:35
+// Note: replace top upload buttons with a cleaner upload menu for files, camera photo, and camera video
 
 'use client'
 
@@ -320,6 +320,7 @@ export default function GalleryClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<Item | null>(null)
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false)
 
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const [nowTs, setNowTs] = useState<number>(Date.now())
@@ -566,8 +567,28 @@ export default function GalleryClient({
   const cameraRef = useRef<HTMLInputElement | null>(null)
   const videoCameraRef = useRef<HTMLInputElement | null>(null)
   const uploadPickRef = useRef<HTMLInputElement | null>(null)
+  const uploadMenuRef = useRef<HTMLDivElement | null>(null)
 
   const feed = useMemo(() => (items || []).filter((i) => i.url), [items])
+
+  useEffect(() => {
+    if (!uploadMenuOpen) return
+
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null
+      if (uploadMenuRef.current && target && !uploadMenuRef.current.contains(target)) {
+        setUploadMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [uploadMenuOpen])
 
   async function shareItem(it: Item) {
     const short = await ensureShortLinkForMedia(it.id)
@@ -719,35 +740,18 @@ export default function GalleryClient({
             <p className="text-sm text-zinc-600">אפשר להעלות תמונות או סרטונים.</p>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+          <div
+            ref={uploadMenuRef}
+            className="relative flex flex-col gap-2 sm:flex-row-reverse sm:items-center"
+          >
             <Button
               type="button"
               variant="ghost"
-              onClick={() => uploadPickRef.current?.click()}
+              onClick={() => setUploadMenuOpen((v) => !v)}
               disabled={!uploadEnabled}
               className="sm:w-44"
             >
-              בחר קבצים
-            </Button>
-
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => cameraRef.current?.click()}
-              disabled={!uploadEnabled}
-              className="sm:w-44"
-            >
-              צלם תמונה
-            </Button>
-
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => videoCameraRef.current?.click()}
-              disabled={!uploadEnabled}
-              className="sm:w-44"
-            >
-              צלם וידיאו
+              העלאה 📤
             </Button>
 
             <Button
@@ -758,6 +762,37 @@ export default function GalleryClient({
               {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
             </Button>
 
+            {uploadMenuOpen ? (
+              <div className="absolute left-0 top-full z-20 mt-2 min-w-[220px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl sm:left-auto sm:right-0">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                  onClick={() => uploadPickRef.current?.click()}
+                >
+                  <span>📂</span>
+                  <span>בחר קבצים</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="mt-1 flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                  onClick={() => cameraRef.current?.click()}
+                >
+                  <span>📸</span>
+                  <span>צלם תמונה</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="mt-1 flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                  onClick={() => videoCameraRef.current?.click()}
+                >
+                  <span>🎥</span>
+                  <span>צלם וידיאו</span>
+                </button>
+              </div>
+            ) : null}
+
             <input
               ref={uploadPickRef}
               type="file"
@@ -765,6 +800,7 @@ export default function GalleryClient({
               multiple
               onChange={async (e) => {
                 await addFiles(e.target.files)
+                setUploadMenuOpen(false)
                 e.currentTarget.value = ''
               }}
               className="hidden"
@@ -778,6 +814,7 @@ export default function GalleryClient({
               capture="environment"
               onChange={async (e) => {
                 await addFiles(e.target.files)
+                setUploadMenuOpen(false)
                 e.currentTarget.value = ''
               }}
               className="hidden"
@@ -791,6 +828,7 @@ export default function GalleryClient({
               capture="environment"
               onChange={async (e) => {
                 await addFiles(e.target.files)
+                setUploadMenuOpen(false)
                 e.currentTarget.value = ''
               }}
               className="hidden"
@@ -1036,4 +1074,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-      }
+        }
