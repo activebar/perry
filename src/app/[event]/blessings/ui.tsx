@@ -1,7 +1,7 @@
 // Path: src/app/[event]/blessings/ui.tsx
-// Version: V25.1
-// Updated: 2026-03-19 13:10
-// Note: use admin-configured blessings video size/duration limits with safe fallbacks and pre-validate before upload/edit
+// Version: V25.2
+// Updated: 2026-03-20 10:45
+// Note: replace blessings media buttons with a cleaner upload menu for files, camera photo, and camera video
 
 'use client'
 
@@ -283,6 +283,7 @@ export default function BlessingsClient({
   const pickRef = useRef<HTMLInputElement | null>(null)
   const cameraPhotoRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoRef = useRef<HTMLInputElement | null>(null)
+  const uploadMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (linkTouched) return
@@ -299,6 +300,7 @@ export default function BlessingsClient({
   const [editRemoveMedia, setEditRemoveMedia] = useState(false)
 
   const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean; post?: Post } | null>(null)
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false)
 
   const [shareOpen, setShareOpen] = useState(false)
   const [sharePayload, setSharePayload] = useState<{ message: string; link: string } | null>(null)
@@ -381,6 +383,25 @@ export default function BlessingsClient({
       clearInterval(t)
     }
   }, [effectiveEventId])
+
+  useEffect(() => {
+    if (!uploadMenuOpen) return
+
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null
+      if (uploadMenuRef.current && target && !uploadMenuRef.current.contains(target)) {
+        setUploadMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [uploadMenuOpen])
 
   async function directUploadVideo(file: File, kind: 'blessing' | 'gallery', galleryId?: string | null) {
     const signRes = await fetch('/api/upload/sign', {
@@ -754,6 +775,7 @@ export default function BlessingsClient({
                   onChange={async e => {
                     const picked = (e.target.files && e.target.files[0]) || null
                     await handleSelectedFile(picked)
+                    setUploadMenuOpen(false)
                     e.currentTarget.value = ''
                   }}
                 />
@@ -766,6 +788,7 @@ export default function BlessingsClient({
                   onChange={async e => {
                     const picked = (e.target.files && e.target.files[0]) || null
                     await handleSelectedFile(picked)
+                    setUploadMenuOpen(false)
                     e.currentTarget.value = ''
                   }}
                 />
@@ -778,25 +801,52 @@ export default function BlessingsClient({
                   onChange={async e => {
                     const picked = (e.target.files && e.target.files[0]) || null
                     await handleSelectedFile(picked)
+                    setUploadMenuOpen(false)
                     e.currentTarget.value = ''
                   }}
                 />
 
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="ghost" type="button" onClick={() => pickRef.current?.click()}>
-                    בחר מדיה
+                <div ref={uploadMenuRef} className="relative flex flex-wrap gap-2">
+                  <Button variant="ghost" type="button" onClick={() => setUploadMenuOpen(v => !v)}>
+                    העלאת מדיה 📤
                   </Button>
-                  <Button variant="ghost" type="button" onClick={() => cameraPhotoRef.current?.click()}>
-                    צלם תמונה
-                  </Button>
-                  <Button variant="ghost" type="button" onClick={() => cameraVideoRef.current?.click()}>
-                    צלם וידאו
-                  </Button>
+
                   {file && (
                     <Button variant="ghost" type="button" onClick={() => setFile(null)}>
                       הסר מדיה
                     </Button>
                   )}
+
+                  {uploadMenuOpen ? (
+                    <div className="absolute right-0 top-full z-20 mt-2 min-w-[240px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                        onClick={() => pickRef.current?.click()}
+                      >
+                        <span>📂</span>
+                        <span>בחר קבצים</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="mt-1 flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                        onClick={() => cameraPhotoRef.current?.click()}
+                      >
+                        <span>📸</span>
+                        <span>צלם תמונה</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="mt-1 flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                        onClick={() => cameraVideoRef.current?.click()}
+                      >
+                        <span>🎥</span>
+                        <span>צלם וידאו</span>
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
                 {file && <p className="text-xs text-zinc-600">נבחר: {file.name}</p>}
@@ -1244,4 +1294,4 @@ function LinkPreview({ url }: { url?: string }) {
       </div>
     </div>
   )
-}
+    }
