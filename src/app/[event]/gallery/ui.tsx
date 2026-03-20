@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.6
-// Updated: 2026-03-20 10:05
-// Note: restore direct camera capture and add separate video capture button in sub-gallery while keeping file picker button
+// Version: V25.7
+// Updated: 2026-03-20 10:15
+// Note: add separate image/video capture buttons in sub-gallery while keeping existing gallery logic intact
 
 'use client'
 
@@ -348,7 +348,6 @@ export default function GalleryClient({
     const sec = total % 60
     return `${m}:${String(sec).padStart(2, '0')}`
   }
-
   const DIRECT_MAX = 8
   const ZIP_MAX = 20
   const [selectMode, setSelectMode] = useState(false)
@@ -699,7 +698,7 @@ export default function GalleryClient({
           } else {
             setMsg('✅ הועלה וממתין לאישור מנהל')
           }
-        }
+          }
       }
 
       setFiles([])
@@ -742,6 +741,16 @@ export default function GalleryClient({
             </Button>
 
             <Button
+              type="button"
+              variant="ghost"
+              onClick={() => videoCameraRef.current?.click()}
+              disabled={!uploadEnabled}
+              className="sm:w-44"
+            >
+              צלם וידיאו
+            </Button>
+
+            <Button
               onClick={upload}
               disabled={busy || files.length === 0 || !uploadEnabled}
               className="sm:w-44"
@@ -765,7 +774,21 @@ export default function GalleryClient({
             <input
               ref={cameraRef}
               type="file"
-              accept="image/*,video/*"
+              accept="image/*"
+              capture="environment"
+              onChange={async (e) => {
+                await addFiles(e.target.files)
+                e.currentTarget.value = ''
+              }}
+              className="hidden"
+              disabled={!uploadEnabled}
+            />
+
+            <input
+              ref={videoCameraRef}
+              type="file"
+              accept="video/*"
+              capture="environment"
               onChange={async (e) => {
                 await addFiles(e.target.files)
                 e.currentTarget.value = ''
@@ -1013,4 +1036,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-  }
+      }
