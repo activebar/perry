@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V26.1
-// Updated: 2026-03-20 11:35
-// Note: speed up gallery reactions with optimistic updates, active dark state, and top-left white reaction badge
+// Version: V26.3
+// Updated: 2026-03-20 12:20
+// Note: rename gallery upload controls to clearer labels "בחר מדיה" and "העלה" while keeping compact blessings-style layout
 
 'use client'
 
@@ -861,28 +861,28 @@ export default function GalleryClient({
 
           <div
             ref={uploadMenuRef}
-            className="relative flex flex-col gap-2 sm:flex-row-reverse sm:items-center"
+            className="relative mx-auto flex w-full max-w-md items-center justify-center gap-3"
           >
             <Button
               type="button"
               variant="ghost"
               onClick={() => setUploadMenuOpen((v) => !v)}
               disabled={!uploadEnabled}
-              className="sm:w-44"
+              className="h-14 flex-1 rounded-full border border-zinc-200 bg-white text-lg shadow-sm hover:bg-zinc-50"
             >
-              העלאה 📤
+              בחר מדיה 📤
             </Button>
 
             <Button
               onClick={upload}
               disabled={busy || files.length === 0 || !uploadEnabled}
-              className="sm:w-44"
+              className="h-14 flex-1 rounded-full text-lg"
             >
-              {busy ? 'מעלה...' : `העלה ${files.length || ''}`}
+              {busy ? 'מעלה...' : 'העלה'}
             </Button>
 
             {uploadMenuOpen ? (
-              <div className="absolute left-0 top-full z-20 mt-2 min-w-[220px] rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl sm:left-auto sm:right-0">
+              <div className="absolute left-0 top-full z-20 mt-2 w-full min-w-[220px] rounded-3xl border border-zinc-200 bg-white p-2 shadow-xl">
                 <button
                   type="button"
                   className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
@@ -1231,4 +1231,1237 @@ export default function GalleryClient({
       )}
     </div>
   )
-                          }
+    }// Path: src/app/[event]/gallery/ui.tsx
+// Version: V26.3
+// Updated: 2026-03-20 12:20
+// Note: rename gallery upload controls to clearer labels "בחר מדיה" and "העלה" while keeping compact blessings-style layout
+
+'use client'
+
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import JSZip from 'jszip'
+import { usePathname } from 'next/navigation'
+import { Button, Card } from '@/components/ui'
+
+const EMOJIS = ['👍', '😍', '🔥', '🙏'] as const
+
+function getLocalDeviceId(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage.getItem('device_id')
+  } catch {
+    return null
+  }
+}
+
+function ensureDeviceId(): string | null {
+  const fromCookie = getCookie('device_id')
+  const fromLocal = getLocalDeviceId()
+  const existing = fromCookie || fromLocal
+  if (existing) {
+    try {
+      if (!fromLocal) window.localStorage.setItem('device_id', existing)
+      if (!fromCookie) {
+        document.cookie = `device_id=${encodeURIComponent(existing)}; path=/; max-age=31536000; samesite=lax`
+      }
+    } catch {}
+    return existing
+  }
+  try {
+    const id =
+      globalThis.crypto?.randomUUID?.() ||
+      `${Date.now()}_${Math.random().toString(36).slice(2)}`
+    window.localStorage.setItem('device_id', id)
+    document.cookie = `device_id=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`
+    return id
+  } catch {
+    return null
+  }
+}
+
+type Item = {
+  id: string
+  url: string
+  thumb_url?: string
+  kind?: string | null
+  created_at?: string
+  editable_until?: string | null
+  uploader_device_id?: string | null
+  is_approved?: boolean
+  crop_position?: string | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
+  reaction_counts?: Record<string, number>
+  my_reactions?: string[]
+  top_reaction?: { emoji: string; count: number } | null
+}
+
+function isVideoUrl(url?: string | null) {
+  return /\.(mp4|mov|webm|m4v)(\?|$)/i.test(String(url || ''))
+}
+
+function isVideoFile(file?: File | null) {
+  if (!file) return false
+  const type = String(file.type || '').toLowerCase()
+  const name = String(file.name || '').toLowerCase()
+  return (
+    type.startsWith('video/') ||
+    /\.(mp4|mov|webm|m4v|avi|mpeg|mpg|3gp)$/i.test(name)
+  )
+}
+
+async function getVideoDurationSeconds(file: File): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const video = document.createElement('video')
+
+    const cleanup = () => {
+      try {
+        video.pause()
+      } catch {}
+      video.removeAttribute('src')
+      video.load()
+      URL.revokeObjectURL(url)
+    }
+
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      const duration = Number(video.duration || 0)
+      cleanup()
+      resolve(duration)
+    }
+    video.onerror = () => {
+      cleanup()
+      reject(new Error('לא ניתן לקרוא את אורך הסרטון'))
+    }
+    video.src = url
+  })
+}
+
+async function validateSelectedMedia(file: File, maxVideoBytes: number, maxVideoSeconds: number): Promise<string> {
+  if (!file) return ''
+
+  if (isVideoFile(file)) {
+    if (file.size > maxVideoBytes) {
+      return `הסרטון גדול מדי. המגבלה היא ${Math.round(maxVideoBytes / 1024 / 1024)}MB.`
+    }
+
+    try {
+      const duration = await getVideoDurationSeconds(file)
+      if (duration > maxVideoSeconds) {
+        return `הסרטון ארוך מדי. המגבלה היא ${maxVideoSeconds} שניות.`
+      }
+    } catch {
+      return 'לא ניתן לבדוק את אורך הסרטון. נסה קובץ אחר.'
+    }
+  }
+
+  return ''
+}
+
+function objectPositionFromCrop(item: {
+  crop_position?: string | null
+  crop_focus_x?: number | null
+  crop_focus_y?: number | null
+}) {
+  const x =
+    typeof item?.crop_focus_x === 'number'
+      ? Math.max(0, Math.min(1, item.crop_focus_x))
+      : null
+  const y =
+    typeof item?.crop_focus_y === 'number'
+      ? Math.max(0, Math.min(1, item.crop_focus_y))
+      : null
+
+  if (x != null && y != null) return `${Math.round(x * 100)}% ${Math.round(y * 100)}%`
+  if (item?.crop_position === 'top') return '50% 12%'
+  if (item?.crop_position === 'bottom') return '50% 82%'
+  return '50% 50%'
+}
+
+function VideoOverlay() {
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+          ▶
+        </div>
+      </div>
+      <div className="pointer-events-none absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
+        וידאו
+      </div>
+    </>
+  )
+}
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const escaped = name.replace(/[-.$?*|{}()\[\]\\/+^]/g, '\\$&')
+  const m = document.cookie.match(new RegExp('(^|; )' + escaped + '=([^;]*)'))
+  return m ? decodeURIComponent(m[2]) : null
+}
+
+async function downloadUrl(url: string) {
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const fileName = (url.split('/').pop() || 'image').split('?')[0] || 'image'
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1500)
+  } catch {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+}
+
+async function shareUrl(url: string) {
+  const clean = String(url || '').trim()
+  if (!clean) return
+  try {
+    if ((navigator as any).share) {
+      await (navigator as any).share({ url: clean })
+      return
+    }
+  } catch {}
+  try {
+    await navigator.clipboard.writeText(clean)
+    alert('הקישור הועתק ✅')
+  } catch {
+    window.open(clean, '_blank', 'noopener,noreferrer')
+  }
+}
+
+async function ensureShortLinkForMedia(mediaItemId: string) {
+  const id = String(mediaItemId || '').trim()
+  if (!id) return null
+  const code = id.slice(0, 8)
+  try {
+    await fetch('/api/short-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'gl',
+        mediaItemId: id,
+        code,
+        targetPath: `/media/${id}`,
+      }),
+    })
+  } catch {
+    // ignore
+  }
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return origin ? `${origin}/gl/${code}` : `/gl/${code}`
+}
+
+async function fileToImageBitmap(file: File) {
+  return await createImageBitmap(file)
+}
+
+async function compressToJpeg2MP(
+  file: File,
+  maxPixels = 2_000_000,
+  maxBytes = 2_500_000
+): Promise<Blob> {
+  const bmp = await fileToImageBitmap(file)
+  const srcW = bmp.width
+  const srcH = bmp.height
+  const srcPixels = srcW * srcH
+
+  let scale = 1
+  if (srcPixels > maxPixels) {
+    scale = Math.sqrt(maxPixels / srcPixels)
+  }
+
+  const maxLongSide = 2200
+  const longSide = Math.max(srcW, srcH)
+  if (longSide * scale > maxLongSide) {
+    scale = maxLongSide / longSide
+  }
+
+  const dstW = Math.max(1, Math.round(srcW * scale))
+  const dstH = Math.max(1, Math.round(srcH * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = dstW
+  canvas.height = dstH
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas not supported')
+  ctx.drawImage(bmp, 0, 0, dstW, dstH)
+
+  const qualities = [0.86, 0.82, 0.78, 0.72, 0.66, 0.6]
+  for (const q of qualities) {
+    const blob: Blob = await new Promise((resolve, reject) =>
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error('encode failed'))),
+        'image/jpeg',
+        q
+      )
+    )
+    if (blob.size <= maxBytes) return blob
+  }
+
+  const finalBlob: Blob = await new Promise((resolve, reject) =>
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('encode failed'))),
+      'image/jpeg',
+      0.55
+    )
+  )
+  return finalBlob
+}
+
+export default function GalleryClient({
+  initialItems,
+  galleryId,
+  uploadEnabled,
+  galleryVideoMaxMb = 200,
+  galleryVideoMaxSeconds = 60,
+}: {
+  initialItems: any[]
+  galleryId: string
+  uploadEnabled: boolean
+  galleryVideoMaxMb?: number
+  galleryVideoMaxSeconds?: number
+}) {
+  const pathname = usePathname()
+  const eventId = useMemo(() => {
+    const part = String(pathname || '').split('/')[1] || ''
+    return part.trim()
+  }, [pathname])
+
+  const maxVideoMb = Number.isFinite(Number(galleryVideoMaxMb)) && Number(galleryVideoMaxMb) > 0 ? Number(galleryVideoMaxMb) : 200
+  const maxVideoSeconds = Number.isFinite(Number(galleryVideoMaxSeconds)) && Number(galleryVideoMaxSeconds) > 0 ? Number(galleryVideoMaxSeconds) : 60
+  const maxVideoBytes = Math.round(maxVideoMb * 1024 * 1024)
+
+  const [items, setItems] = useState<Item[]>(
+    (initialItems || []).map((x: any) => ({
+      id: x.id,
+      url: x.url || x.media_url || x.public_url || '',
+      thumb_url: x.thumb_url || '',
+      kind: x.kind ?? null,
+      created_at: x.created_at,
+      editable_until: x.editable_until ?? null,
+      uploader_device_id: x.uploader_device_id ?? null,
+      is_approved: x.is_approved ?? true,
+      crop_position: x.crop_position ?? null,
+      crop_focus_x: x.crop_focus_x ?? null,
+      crop_focus_y: x.crop_focus_y ?? null,
+      reaction_counts: x.reaction_counts || {},
+      my_reactions: x.my_reactions || [],
+      top_reaction: x.top_reaction || null,
+    }))
+  )
+  const [files, setFiles] = useState<File[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<Item | null>(null)
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false)
+
+  const [deviceId, setDeviceId] = useState<string | null>(null)
+  const [nowTs, setNowTs] = useState<number>(Date.now())
+
+  useEffect(() => {
+    setDeviceId(ensureDeviceId())
+    const t = window.setInterval(() => setNowTs(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
+
+  function canEditMine(it: Item) {
+    const until = it?.editable_until ? new Date(it.editable_until).getTime() : 0
+    if (!until) return false
+    if (nowTs > until) return false
+    if (!deviceId) return false
+    return !!(it.uploader_device_id && it.uploader_device_id === deviceId)
+  }
+
+  function secondsLeft(it: Item) {
+    const until = it?.editable_until ? new Date(it.editable_until).getTime() : 0
+    return Math.max(0, Math.floor((until - nowTs) / 1000))
+  }
+
+  function fmtMMSS(total: number) {
+    const m = Math.floor(total / 60)
+    const sec = total % 60
+    return `${m}:${String(sec).padStart(2, '0')}`
+  }
+
+  function getTopReaction(it: Item): { emoji: string; count: number } | null {
+    if (it.top_reaction?.emoji && Number(it.top_reaction?.count || 0) > 0) {
+      return {
+        emoji: String(it.top_reaction.emoji),
+        count: Number(it.top_reaction.count || 0),
+      }
+    }
+
+    const counts = it.reaction_counts || {}
+    let bestEmoji = ''
+    let bestCount = 0
+
+    for (const [emoji, raw] of Object.entries(counts)) {
+      const count = Number(raw || 0)
+      if (count > bestCount) {
+        bestEmoji = emoji
+        bestCount = count
+      }
+    }
+
+    if (!bestEmoji || bestCount <= 0) return null
+    return { emoji: bestEmoji, count: bestCount }
+  }
+
+  async function toggleReactionForItem(
+    item: Item,
+    emoji: string,
+    setItems: React.Dispatch<React.SetStateAction<Item[]>>,
+    setLightbox: React.Dispatch<React.SetStateAction<Item | null>>,
+    setErr: React.Dispatch<React.SetStateAction<string | null>>
+  ) {
+    setErr(null)
+
+    const currentMy = Array.isArray(item.my_reactions) ? item.my_reactions : []
+    const previousEmoji = currentMy[0] || null
+    const nextMy = previousEmoji === emoji ? [] : [emoji]
+
+    const nextCounts: Record<string, number> = { ...(item.reaction_counts || {}) }
+    if (previousEmoji) {
+      nextCounts[previousEmoji] = Math.max(0, Number(nextCounts[previousEmoji] || 0) - 1)
+      if (nextCounts[previousEmoji] <= 0) delete nextCounts[previousEmoji]
+    }
+    if (nextMy[0]) {
+      nextCounts[nextMy[0]] = Number(nextCounts[nextMy[0]] || 0) + 1
+    }
+
+    let nextTop: { emoji: string; count: number } | null = null
+    for (const [em, raw] of Object.entries(nextCounts)) {
+      const count = Number(raw || 0)
+      if (!nextTop || count > nextTop.count) {
+        nextTop = { emoji: String(em), count }
+      }
+    }
+
+    setItems((prev) =>
+      prev.map((x) =>
+        x.id === item.id
+          ? { ...x, reaction_counts: nextCounts, my_reactions: nextMy, top_reaction: nextTop }
+          : x
+      )
+    )
+
+    setLightbox((prev) =>
+      prev && prev.id === item.id
+        ? { ...prev, reaction_counts: nextCounts, my_reactions: nextMy, top_reaction: nextTop }
+        : prev
+    )
+
+    try {
+      const res = await fetch('/api/reactions/toggle', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ media_item_id: item.id, emoji }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'שגיאה בתגובה')
+
+      const counts = json?.counts || {}
+      const my = Array.isArray(json?.my)
+        ? json.my
+        : json?.selected_emoji
+          ? [String(json.selected_emoji)]
+          : []
+
+      let top: { emoji: string; count: number } | null = null
+      for (const [em, raw] of Object.entries(counts)) {
+        const count = Number(raw || 0)
+        if (!top || count > top.count) {
+          top = { emoji: String(em), count }
+        }
+      }
+
+      setItems((prev) =>
+        prev.map((x) =>
+          x.id === item.id
+            ? { ...x, reaction_counts: counts, my_reactions: my, top_reaction: top }
+            : x
+        )
+      )
+
+      setLightbox((prev) =>
+        prev && prev.id === item.id
+          ? { ...prev, reaction_counts: counts, my_reactions: my, top_reaction: top }
+          : prev
+      )
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בתגובה')
+    }
+  }
+
+  const DIRECT_MAX = 8
+  const ZIP_MAX = 20
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [zipBusy, setZipBusy] = useState(false)
+
+  const selectedCount = useMemo(() => Object.keys(selected).length, [selected])
+
+  const isIOSSafari = useMemo(() => {
+    if (typeof navigator === 'undefined') return false
+    const ua = navigator.userAgent || ''
+    const iOS =
+      /iPad|iPhone|iPod/.test(ua) ||
+      (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1)
+    const safari = /^((?!chrome|android).)*safari/i.test(ua)
+    return iOS && safari
+  }, [])
+
+  const useDirect = selectedCount > 0 && selectedCount <= DIRECT_MAX && !isIOSSafari
+
+  const clearSelected = () => {
+    setSelected({})
+  }
+
+  const toggleSelected = (id: string) => {
+    setErr(null)
+    setMsg(null)
+    setSelected((prev) => {
+      const next = { ...prev }
+      if (next[id]) {
+        delete next[id]
+        return next
+      }
+      if (Object.keys(next).length >= ZIP_MAX) {
+        setErr(`אפשר לבחור עד ${ZIP_MAX} תמונות`)
+        return next
+      }
+      next[id] = true
+      return next
+    })
+  }
+
+  const onThumbClick = (it: Item) => {
+    if (selectMode) {
+      toggleSelected(it.id)
+      return
+    }
+    setLightbox(it)
+  }
+
+  async function deleteMine(it: Item) {
+    setErr(null)
+    setMsg(null)
+    if (!canEditMine(it)) {
+      setErr('אפשר למחוק/לערוך רק בשעה הראשונה מאותו מכשיר.')
+      return
+    }
+    if (!confirm('למחוק את התמונה?')) return
+    try {
+      const res = await fetch('/api/public/media-delete', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: it.id, device_id: deviceId }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || 'שגיאה במחיקה')
+      setItems((prev) => prev.filter((x) => x.id !== it.id))
+      setLightbox(null)
+      setMsg('נמחק ✅')
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה במחיקה')
+    }
+  }
+
+  async function replaceMine(it: Item, file: File) {
+    setErr(null)
+    setMsg(null)
+    if (!canEditMine(it)) {
+      setErr('אפשר למחוק/לערוך רק בשעה הראשונה מאותו מכשיר.')
+      return
+    }
+
+    if (isVideoFile(file)) {
+      setErr('כרגע אפשר להחליף מתוך חלון העריכה רק לתמונה.')
+      return
+    }
+
+    try {
+      const blob = await compressToJpeg2MP(file)
+      const out = new File([blob], (file.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', {
+        type: 'image/jpeg',
+      })
+
+      const fd = new FormData()
+      fd.append('file', out)
+      fd.append('kind', 'gallery')
+      fd.append('gallery_id', galleryId)
+      if (eventId) fd.append('event_id', eventId)
+      if (deviceId) fd.append('device_id', deviceId)
+
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || 'upload failed')
+
+      const created: Item = {
+        id: j.id || j.path || crypto.randomUUID(),
+        url: j.publicUrl || j.url || '',
+        thumb_url: j.thumbUrl || j.thumb || '',
+        kind: j.kind ?? null,
+        created_at: new Date().toISOString(),
+        editable_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        uploader_device_id: deviceId,
+        is_approved: !!j.is_approved,
+        crop_position: j.crop_position ?? null,
+        crop_focus_x: j.crop_focus_x ?? null,
+        crop_focus_y: j.crop_focus_y ?? null,
+      }
+
+      await fetch('/api/public/media-delete', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: it.id, device_id: deviceId }),
+      }).catch(() => null)
+
+      setItems((prev) => prev.map((x) => (x.id === it.id ? created : x)))
+      setLightbox(created)
+      setMsg('עודכן ✅')
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בעריכה')
+    }
+  }
+
+  const downloadSelectedDirect = async () => {
+    try {
+      setErr(null)
+      setMsg(null)
+      const ids = Object.keys(selected)
+      if (ids.length === 0) return
+
+      setZipBusy(true)
+
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const it = items.find((x) => x.id === id)
+        if (!it?.url) continue
+
+        const res = await fetch(it.url)
+        if (!res.ok) throw new Error('download failed')
+        const blob = await res.blob()
+        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+        const name = `activebar_${String(i + 1).padStart(2, '0')}.${ext}`
+
+        const href = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = href
+        a.download = name
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(href)
+
+        await new Promise((r) => setTimeout(r, 250))
+      }
+
+      setMsg('✅ ההורדות התחילו')
+      clearSelected()
+      setSelectMode(false)
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בהורדה')
+    } finally {
+      setZipBusy(false)
+    }
+  }
+
+  const downloadSelectedZip = async () => {
+    try {
+      setErr(null)
+      setMsg(null)
+      const ids = Object.keys(selected)
+      if (ids.length === 0) return
+
+      setZipBusy(true)
+      const zip = new JSZip()
+
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i]
+        const it = items.find((x) => x.id === id)
+        if (!it?.url) continue
+        const res = await fetch(it.url)
+        const blob = await res.blob()
+        const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+        zip.file(`activebar_${String(i + 1).padStart(2, '0')}.${ext}`, blob)
+      }
+
+      const out = await zip.generateAsync({ type: 'blob' })
+      const href = URL.createObjectURL(out)
+      const a = document.createElement('a')
+      a.href = href
+      a.download = `activebar_${(galleryId || '').slice(0, 6)}.zip`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(href)
+
+      setMsg('הורדת ZIP התחילה')
+      clearSelected()
+      setSelectMode(false)
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בהורדת ZIP')
+    } finally {
+      setZipBusy(false)
+    }
+  }
+
+  const pickerRef = useRef<HTMLInputElement | null>(null)
+  const cameraRef = useRef<HTMLInputElement | null>(null)
+  const videoCameraRef = useRef<HTMLInputElement | null>(null)
+  const uploadPickRef = useRef<HTMLInputElement | null>(null)
+  const uploadMenuRef = useRef<HTMLDivElement | null>(null)
+
+  const feed = useMemo(() => (items || []).filter((i) => i.url), [items])
+
+  useEffect(() => {
+    if (!uploadMenuOpen) return
+
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null
+      if (uploadMenuRef.current && target && !uploadMenuRef.current.contains(target)) {
+        setUploadMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
+  }, [uploadMenuOpen])
+
+  async function shareItem(it: Item) {
+    const short = await ensureShortLinkForMedia(it.id)
+    await shareUrl(short || it.url)
+  }
+
+  async function addFiles(list: FileList | null) {
+    const arr = Array.from(list || []).filter(
+      (f) =>
+        (f.type || '').startsWith('image/') || (f.type || '').startsWith('video/')
+    )
+    if (arr.length === 0) return
+
+    setErr(null)
+    setMsg(null)
+
+    if (lightbox && arr.length === 1 && canEditMine(lightbox)) {
+      await replaceMine(lightbox, arr[0])
+      return
+    }
+
+    const valid: File[] = []
+    for (const file of arr) {
+      const mediaError = await validateSelectedMedia(file, maxVideoBytes, maxVideoSeconds)
+      if (mediaError) {
+        setErr(`"${file.name}": ${mediaError}`)
+        continue
+      }
+      valid.push(file)
+    }
+
+    if (valid.length === 0) return
+    setFiles((prev) => [...prev, ...valid].slice(0, 50))
+    setMsg(`${valid.length} קבצים מוכנים להעלאה`)
+  }
+
+  async function upload() {
+    if (!uploadEnabled) {
+      setErr('העלאה סגורה כרגע ע״י מנהל')
+      return
+    }
+    if (!eventId) {
+      setErr('לא זוהה אירוע להעלאה')
+      return
+    }
+    if (files.length === 0) return
+
+    setErr(null)
+    setMsg(null)
+    setBusy(true)
+
+    try {
+      for (const f of files) {
+        const precheck = await validateSelectedMedia(f, maxVideoBytes, maxVideoSeconds)
+        if (precheck) {
+          throw new Error(`"${f.name}": ${precheck}`)
+        }
+
+        const isVideo = isVideoFile(f)
+
+        if (isVideo) {
+          const fd = new FormData()
+          fd.append('file', f)
+          fd.append('kind', 'gallery')
+          fd.append('gallery_id', galleryId)
+          fd.append('event_id', eventId)
+          if (deviceId) fd.append('device_id', deviceId)
+
+          const res = await fetch('/api/upload', { method: 'POST', body: fd })
+          const j = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(j?.error || 'upload failed')
+
+          if (j?.publicUrl) {
+            const created: Item = {
+              id: j.id || j.path || crypto.randomUUID(),
+              url: j.publicUrl,
+              thumb_url: j.thumbUrl || j.thumb || '',
+              kind: j.kind ?? 'gallery',
+              created_at: new Date().toISOString(),
+              editable_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+              uploader_device_id: deviceId,
+              is_approved: !!j.is_approved,
+              crop_position: j.crop_position ?? null,
+              crop_focus_x: j.crop_focus_x ?? null,
+              crop_focus_y: j.crop_focus_y ?? null,
+            }
+            if (j.is_approved) {
+              setItems((prev) => [created, ...prev])
+            } else {
+              setMsg('✅ הועלה וממתין לאישור מנהל')
+            }
+          }
+          continue
+        }
+
+        const blob = await compressToJpeg2MP(f)
+        const out = new File([blob], (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg', {
+          type: 'image/jpeg',
+        })
+
+        const fd = new FormData()
+        fd.append('file', out)
+        fd.append('kind', 'gallery')
+        fd.append('gallery_id', galleryId)
+        fd.append('event_id', eventId)
+        if (deviceId) fd.append('device_id', deviceId)
+
+        const res = await fetch('/api/upload', { method: 'POST', body: fd })
+        const j = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(j?.error || 'upload failed')
+
+        if (j?.publicUrl) {
+          const created: Item = {
+            id: j.id || j.path || crypto.randomUUID(),
+            url: j.publicUrl,
+            thumb_url: j.thumbUrl || j.thumb || '',
+            kind: j.kind ?? null,
+            created_at: new Date().toISOString(),
+            editable_until: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            uploader_device_id: deviceId,
+            is_approved: !!j.is_approved,
+            crop_position: j.crop_position ?? null,
+            crop_focus_x: j.crop_focus_x ?? null,
+            crop_focus_y: j.crop_focus_y ?? null,
+          }
+          if (j.is_approved) {
+            setItems((prev) => [created, ...prev])
+          } else {
+            setMsg('✅ הועלה וממתין לאישור מנהל')
+          }
+          }
+      }
+
+      setFiles([])
+      setMsg('✅ ההעלאה הושלמה')
+    } catch (e: any) {
+      setErr(e?.message || 'שגיאה בהעלאה')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div dir="rtl" className="grid gap-4">
+      <Card>
+        <div className="flex flex-col gap-3 sm:flex-row-reverse sm:items-center sm:justify-between">
+          <div className="text-right">
+            <h3 className="text-lg font-semibold">תמונות בגלריה</h3>
+            <p className="text-sm text-zinc-600">אפשר להעלות תמונות או סרטונים.</p>
+          </div>
+
+          <div
+            ref={uploadMenuRef}
+            className="relative mx-auto flex w-full max-w-md items-center justify-center gap-3"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setUploadMenuOpen((v) => !v)}
+              disabled={!uploadEnabled}
+              className="h-14 flex-1 rounded-full border border-zinc-200 bg-white text-lg shadow-sm hover:bg-zinc-50"
+            >
+              בחר מדיה 📤
+            </Button>
+
+            <Button
+              onClick={upload}
+              disabled={busy || files.length === 0 || !uploadEnabled}
+              className="h-14 flex-1 rounded-full text-lg"
+            >
+              {busy ? 'מעלה...' : 'העלה'}
+            </Button>
+
+            {uploadMenuOpen ? (
+              <div className="absolute left-0 top-full z-20 mt-2 w-full min-w-[220px] rounded-3xl border border-zinc-200 bg-white p-2 shadow-xl">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                  onClick={() => uploadPickRef.current?.click()}
+                >
+                  <span>📂</span>
+                  <span>בחר קבצים</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="mt-1 flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                  onClick={() => cameraRef.current?.click()}
+                >
+                  <span>📸</span>
+                  <span>צלם תמונה</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="mt-1 flex w-full items-center justify-between rounded-xl px-4 py-3 text-right text-base hover:bg-zinc-50"
+                  onClick={() => videoCameraRef.current?.click()}
+                >
+                  <span>🎥</span>
+                  <span>צלם וידיאו</span>
+                </button>
+              </div>
+            ) : null}
+
+            <input
+              ref={uploadPickRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              onChange={async (e) => {
+                await addFiles(e.target.files)
+                setUploadMenuOpen(false)
+                e.currentTarget.value = ''
+              }}
+              className="hidden"
+              disabled={!uploadEnabled}
+            />
+
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={async (e) => {
+                await addFiles(e.target.files)
+                setUploadMenuOpen(false)
+                e.currentTarget.value = ''
+              }}
+              className="hidden"
+              disabled={!uploadEnabled}
+            />
+
+            <input
+              ref={videoCameraRef}
+              type="file"
+              accept="video/*"
+              capture="environment"
+              onChange={async (e) => {
+                await addFiles(e.target.files)
+                setUploadMenuOpen(false)
+                e.currentTarget.value = ''
+              }}
+              className="hidden"
+              disabled={!uploadEnabled}
+            />
+
+            <input
+              ref={pickerRef}
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (file && lightbox) await replaceMine(lightbox, file)
+                e.currentTarget.value = ''
+              }}
+              className="hidden"
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
+            {!selectMode ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setErr(null)
+                  setMsg(null)
+                  clearSelected()
+                  setSelectMode(true)
+                }}
+                disabled={zipBusy}
+              >
+                בחר תמונות להורדה
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center">
+                <Button
+                  onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip}
+                  disabled={zipBusy || selectedCount === 0}
+                >
+                  {zipBusy
+                    ? useDirect
+                      ? 'מוריד…'
+                      : 'מכין ZIP…'
+                    : selectedCount <= DIRECT_MAX
+                      ? `הורד ישיר (${selectedCount}/${DIRECT_MAX})`
+                      : `הורד ZIP (${selectedCount}/${ZIP_MAX})`}
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setSelectMode(false)
+                    clearSelected()
+                    setErr(null)
+                    setMsg(null)
+                  }}
+                  disabled={zipBusy}
+                >
+                  ביטול
+                </Button>
+              </div>
+            )}
+
+            <p className="text-xs text-zinc-500 text-right">
+              {selectMode
+                ? `סמן עד ${ZIP_MAX} תמונות. 1–${DIRECT_MAX} יורד ישיר, ${DIRECT_MAX + 1}–${ZIP_MAX} יורד ZIP.`
+                : 'לבחירת כמה תמונות ולהורדה מרוכזת לחץ על "בחר תמונות להורדה".'}
+            </p>
+          </div>
+        </div>
+
+        {files.length > 0 && (
+          <p className="mt-2 text-sm text-zinc-600 text-right">נבחרו {files.length} קבצים</p>
+        )}
+
+        {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+        {msg && <p className="mt-2 text-sm text-zinc-700">{msg}</p>}
+        {!uploadEnabled && <p className="mt-2 text-xs text-zinc-500">העלאה סגורה כעת.</p>}
+      </Card>
+
+      {lightbox && (
+        <div className="fixed inset-0 z-50 bg-black/70 p-3 sm:p-4" onClick={() => setLightbox(null)}>
+          <div
+            className="relative mx-auto flex max-h-[calc(100dvh-24px)] max-w-4xl flex-col overflow-hidden rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative min-h-0 flex-1 overflow-auto rounded-2xl bg-transparent">
+              <div className="absolute left-2 top-2 z-10">
+                <Button
+                  variant="ghost"
+                  onClick={() => setLightbox(null)}
+                  className="bg-white/90 text-black shadow hover:bg-white"
+                  type="button"
+                >
+                  סגור
+                </Button>
+              </div>
+
+              {isVideoUrl(lightbox.url) || String(lightbox.kind || '').toLowerCase().includes('video') ? (
+                <video
+                  src={lightbox.url}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="max-h-[72dvh] w-full rounded-2xl bg-black object-contain"
+                />
+              ) : (
+                <img
+                  src={lightbox.url}
+                  alt=""
+                  className="max-h-[72dvh] w-full rounded-2xl bg-white object-contain"
+                  style={{ objectPosition: objectPositionFromCrop(lightbox) }}
+                />
+              )}
+            </div>
+
+            <div className="sticky bottom-0 mt-3 rounded-2xl bg-white/95 p-3 shadow backdrop-blur" dir="rtl">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">
+                  שתף
+                </Button>
+                <Button variant="ghost" onClick={() => downloadUrl(lightbox.url)} type="button">
+                  הורד
+                </Button>
+                {canEditMine(lightbox) ? (
+                  <>
+                    <span className="text-xs text-zinc-600">⏳ {fmtMMSS(secondsLeft(lightbox))}</span>
+                    <Button variant="ghost" onClick={() => pickerRef.current?.click()} type="button">
+                      עריכה
+                    </Button>
+                    <Button variant="ghost" onClick={() => deleteMine(lightbox)} type="button">
+                      מחק
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="mt-4 border-t border-zinc-200 pt-3">
+                <div className="mb-2 text-right text-base font-semibold">תגובות</div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {EMOJIS.map((emoji) => {
+                    const active = !!lightbox.my_reactions?.includes(emoji)
+                    const count = Number(lightbox.reaction_counts?.[emoji] || 0)
+
+                    return (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => void toggleReactionForItem(lightbox, emoji, setItems, setLightbox, setErr)}
+                        className={`flex min-w-[64px] items-center justify-center gap-2 rounded-full border px-3 py-2 text-lg transition ${
+                          active
+                            ? 'border-zinc-900 bg-zinc-900 text-white'
+                            : 'border-zinc-200 bg-white text-zinc-900'
+                        }`}
+                      >
+                        <span>{emoji}</span>
+                        <span className="text-sm">{count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {feed.map((it) => {
+          const topReaction = getTopReaction(it)
+          const topCount = Number(topReaction?.count || 0)
+
+          return (
+            <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
+              <button
+                className="relative block aspect-square w-full bg-zinc-50"
+                onClick={() => onThumbClick(it)}
+                type="button"
+              >
+                {isVideoUrl(it.url) ||
+                isVideoUrl(it.thumb_url) ||
+                String(it.kind || '').toLowerCase().includes('video') ? (
+                  <>
+                    <video
+                      src={it.url}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      style={{ objectPosition: objectPositionFromCrop(it) }}
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                    <VideoOverlay />
+                  </>
+                ) : (
+                  <img
+                    src={it.thumb_url || it.url}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{ objectPosition: objectPositionFromCrop(it) }}
+                  />
+                )}
+
+                {topReaction ? (
+                  <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-xs text-zinc-900 shadow">
+                    <span>{topReaction.emoji}</span>
+                    <span>{topCount}</span>
+                  </div>
+                ) : null}
+
+                {selectMode ? (
+                  <div className="absolute right-2 top-2">
+                    <div
+                      className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${
+                        selected[it.id] ? 'font-bold' : ''
+                      }`}
+                      aria-hidden
+                    >
+                      {selected[it.id] ? '✓' : ''}
+                    </div>
+                  </div>
+                ) : null}
+              </button>
+
+              <div className="p-2 flex items-center justify-center gap-4">
+                {selectMode ? (
+                  <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setLightbox(it)
+                      }}
+                      className="text-xl"
+                      type="button"
+                      aria-label="תגובות"
+                      title="תגובות"
+                    >
+                      {topReaction?.emoji || '😊'}
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void downloadUrl(it.url)
+                      }}
+                      className="text-xl"
+                      type="button"
+                      aria-label="הורד"
+                      title="הורד"
+                    >
+                      💾
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void shareItem(it)
+                      }}
+                      className="text-xl"
+                      type="button"
+                      aria-label="שתף"
+                      title="שתף"
+                    >
+                      🔗
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {feed.length === 0 && (
+        <Card>
+          <p className="text-sm text-zinc-600">אין עדיין תמונות מאושרות.</p>
+        </Card>
+      )}
+    </div>
+  )
+  }
