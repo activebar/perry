@@ -1,7 +1,7 @@
 // Path: src/app/[event]/blessings/ui.tsx
-// Version: V25.2
-// Updated: 2026-03-20 10:45
-// Note: replace blessings media buttons with a cleaner upload menu for files, camera photo, and camera video
+// Version: V25.3
+// Updated: 2026-03-20 13:35
+// Note: keep public blessings pending-approval notice in sync immediately after submit without page refresh
 
 'use client'
 
@@ -263,13 +263,16 @@ export default function BlessingsClient({
   settings,
   blocks,
   showHeader = true,
+  pendingCount = 0,
 }: {
   initialFeed: Post[]
   settings?: any
   blocks?: any[]
   showHeader?: boolean
+  pendingCount?: number
 }) {
   const [items, setItems] = useState<Post[]>(initialFeed || [])
+  const [localPendingCount, setLocalPendingCount] = useState<number>(Number(pendingCount || 0))
   const [author, setAuthor] = useState('')
   const [text, setText] = useState('')
   const [linkUrl, setLinkUrl] = useState('')
@@ -362,6 +365,10 @@ export default function BlessingsClient({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLocalPendingCount(Number(pendingCount || 0))
+  }, [pendingCount])
 
   useEffect(() => {
     let cancelled = false
@@ -500,6 +507,10 @@ export default function BlessingsClient({
       setLinkUrl('')
       setLinkTouched(false)
       setFile(null)
+
+      if (res.status === 'pending') {
+        setLocalPendingCount(prev => prev + 1)
+      }
 
       setMsg(res.status === 'pending' ? '✅ נשלח לאישור מנהל' : '✅ נשמר!')
     } catch (e: any) {
@@ -760,6 +771,11 @@ export default function BlessingsClient({
       <Container>
         <Card id="blessing-form">
           <div className="space-y-2 text-right">
+            {localPendingCount > 0 && (
+              <div className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                יש {localPendingCount} ברכות שממתינות לאישור מנהל
+              </div>
+            )}
             <Input placeholder="שם (אופציונלי)" value={author} onChange={e => setAuthor(e.target.value)} />
             <Textarea placeholder="הברכה שלך..." value={text} onChange={e => setText(e.target.value)} />
             <Input placeholder="קישור (אופציונלי)" value={linkUrl} onChange={e => { setLinkTouched(true); setLinkUrl(e.target.value) }} dir="ltr" />
