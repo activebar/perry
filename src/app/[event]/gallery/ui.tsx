@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V26.3
-// Updated: 2026-03-20 12:20
-// Note: rename gallery upload controls to clearer labels "בחר מדיה" and "העלה" while keeping compact blessings-style layout
+// Version: V26.4
+// Updated: 2026-03-20 12:35
+// Note: reduce mobile upload and bulk-download block height, with smaller blessings-style buttons and tighter spacing
 
 'use client'
 
@@ -861,22 +861,22 @@ export default function GalleryClient({
 
           <div
             ref={uploadMenuRef}
-            className="relative mx-auto flex w-full max-w-md items-center justify-center gap-3"
+            className="relative mx-auto flex w-full max-w-sm items-center justify-center gap-2"
           >
             <Button
               type="button"
               variant="ghost"
               onClick={() => setUploadMenuOpen((v) => !v)}
               disabled={!uploadEnabled}
-              className="h-14 flex-1 rounded-full border border-zinc-200 bg-white text-lg shadow-sm hover:bg-zinc-50"
+              className="h-10 rounded-full border border-zinc-200 bg-white px-4 text-[13px] shadow-sm hover:bg-zinc-50"
             >
-              בחר מדיה 📤
+              📂 בחר מדיה
             </Button>
 
             <Button
               onClick={upload}
               disabled={busy || files.length === 0 || !uploadEnabled}
-              className="h-14 flex-1 rounded-full text-lg"
+              className="h-10 rounded-full px-5 text-[13px]"
             >
               {busy ? 'מעלה...' : 'העלה'}
             </Button>
@@ -968,8 +968,8 @@ export default function GalleryClient({
           </div>
         </div>
 
-        <div className="mt-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
-          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:items-center sm:justify-between">
+        <div className="mt-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-2">
+          <div className="flex flex-col gap-1.5 sm:flex-row-reverse sm:items-center sm:justify-between">
             {!selectMode ? (
               <Button
                 variant="ghost"
@@ -980,6 +980,7 @@ export default function GalleryClient({
                   setSelectMode(true)
                 }}
                 disabled={zipBusy}
+                className="h-9 rounded-full px-4 text-[13px]"
               >
                 בחר תמונות להורדה
               </Button>
@@ -988,6 +989,7 @@ export default function GalleryClient({
                 <Button
                   onClick={useDirect ? downloadSelectedDirect : downloadSelectedZip}
                   disabled={zipBusy || selectedCount === 0}
+                  className="h-9 rounded-full px-4 text-[13px]"
                 >
                   {zipBusy
                     ? useDirect
@@ -1007,6 +1009,7 @@ export default function GalleryClient({
                     setMsg(null)
                   }}
                   disabled={zipBusy}
+                  className="h-9 rounded-full px-4 text-[13px]"
                 >
                   ביטול
                 </Button>
@@ -1015,14 +1018,14 @@ export default function GalleryClient({
 
             <p className="text-xs text-zinc-500 text-right">
               {selectMode
-                ? `סמן עד ${ZIP_MAX} תמונות. 1–${DIRECT_MAX} יורד ישיר, ${DIRECT_MAX + 1}–${ZIP_MAX} יורד ZIP.`
-                : 'לבחירת כמה תמונות ולהורדה מרוכזת לחץ על "בחר תמונות להורדה".'}
+                ? `עד ${ZIP_MAX} תמונות. ${DIRECT_MAX} ראשונות ישיר, מעבר לזה ZIP.`
+                : 'אפשר לבחור כמה תמונות ולהוריד יחד.'}
             </p>
           </div>
         </div>
 
         {files.length > 0 && (
-          <p className="mt-2 text-sm text-zinc-600 text-right">נבחרו {files.length} קבצים</p>
+          <p className="mt-1 text-xs text-zinc-600 text-right">נבחרו {files.length} קבצים</p>
         )}
 
         {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
@@ -1231,4 +1234,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-              }
+    }
