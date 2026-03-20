@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.4
-// Updated: 2026-03-20 09:40
-// Note: restore gallery item reaction badge/emoji trigger while keeping mobile lightbox controls accessible
+// Version: V25.5
+// Updated: 2026-03-20 09:55
+// Note: allow camera button in sub-gallery to open image or video chooser instead of image-only capture
 
 'use client'
 
@@ -348,30 +348,6 @@ export default function GalleryClient({
     const sec = total % 60
     return `${m}:${String(sec).padStart(2, '0')}`
   }
-
-  function getTopReaction(it: any): { emoji: string; count: number } | null {
-    const direct = it?.top_reaction
-    if (direct && direct.emoji && Number(direct.count || 0) > 0) {
-      return { emoji: String(direct.emoji), count: Number(direct.count || 0) }
-    }
-
-    const counts = it?.reaction_counts
-    if (!counts || typeof counts !== 'object') return null
-
-    let bestEmoji = ''
-    let bestCount = 0
-    for (const [emoji, raw] of Object.entries(counts)) {
-      const count = Number(raw || 0)
-      if (count > bestCount) {
-        bestEmoji = String(emoji)
-        bestCount = count
-      }
-    }
-
-    if (!bestEmoji || bestCount <= 0) return null
-    return { emoji: bestEmoji, count: bestCount }
-  }
-
 
   const DIRECT_MAX = 8
   const ZIP_MAX = 20
@@ -788,8 +764,7 @@ export default function GalleryClient({
             <input
               ref={cameraRef}
               type="file"
-              accept="image/*"
-              capture="environment"
+              accept="image/*,video/*"
               onChange={async (e) => {
                 await addFiles(e.target.files)
                 e.currentTarget.value = ''
@@ -936,109 +911,98 @@ export default function GalleryClient({
       )}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {feed.map((it) => {
-          const topReaction = getTopReaction(it)
-
-          return (
-            <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
-              <button
-                className="relative block aspect-square w-full bg-zinc-50"
-                onClick={() => onThumbClick(it)}
-                type="button"
-              >
-                {isVideoUrl(it.url) ||
-                isVideoUrl(it.thumb_url) ||
-                String(it.kind || '').toLowerCase().includes('video') ? (
-                  <>
-                    <video
-                      src={it.url}
-                      className="absolute inset-0 h-full w-full object-cover"
-                      style={{ objectPosition: objectPositionFromCrop(it) }}
-                      muted
-                      playsInline
-                      preload="metadata"
-                    />
-                    <VideoOverlay />
-                  </>
-                ) : (
-                  <img
-                    src={it.thumb_url || it.url}
-                    alt=""
+        {feed.map((it) => (
+          <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
+            <button
+              className="relative block aspect-square w-full bg-zinc-50"
+              onClick={() => onThumbClick(it)}
+              type="button"
+            >
+              {isVideoUrl(it.url) ||
+              isVideoUrl(it.thumb_url) ||
+              String(it.kind || '').toLowerCase().includes('video') ? (
+                <>
+                  <video
+                    src={it.url}
                     className="absolute inset-0 h-full w-full object-cover"
                     style={{ objectPosition: objectPositionFromCrop(it) }}
+                    muted
+                    playsInline
+                    preload="metadata"
                   />
-                )}
+                  <VideoOverlay />
+                </>
+              ) : (
+                <img
+                  src={it.thumb_url || it.url}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{ objectPosition: objectPositionFromCrop(it) }}
+                />
+              )}
 
-                {topReaction ? (
-                  <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
-                    <span>{topReaction.emoji}</span>
-                    <span>{topReaction.count}</span>
+              {selectMode ? (
+                <div className="absolute left-2 top-2">
+                  <div
+                    className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${
+                      selected[it.id] ? 'font-bold' : ''
+                    }`}
+                    aria-hidden
+                  >
+                    {selected[it.id] ? '✓' : ''}
                   </div>
-                ) : null}
+                </div>
+              ) : null}
+            </button>
 
-                {selectMode ? (
-                  <div className="absolute left-2 top-2">
-                    <div
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${
-                        selected[it.id] ? 'font-bold' : ''
-                      }`}
-                      aria-hidden
-                    >
-                      {selected[it.id] ? '✓' : ''}
-                    </div>
-                  </div>
-                ) : null}
-              </button>
+            <div className="p-2 flex items-center justify-center gap-4">
+              {selectMode ? (
+                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+              ) : (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void shareItem(it)
+                    }}
+                    className="text-xl"
+                    type="button"
+                    aria-label="שתף"
+                    title="שתף"
+                  >
+                    🔗
+                  </button>
 
-              <div className="p-2 flex items-center justify-center gap-4">
-                {selectMode ? (
-                  <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
-                ) : (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void shareItem(it)
-                      }}
-                      className="text-xl"
-                      type="button"
-                      aria-label="שתף"
-                      title="שתף"
-                    >
-                      🔗
-                    </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void downloadUrl(it.url)
+                    }}
+                    className="text-xl"
+                    type="button"
+                    aria-label="הורד"
+                    title="הורד"
+                  >
+                    💾
+                  </button>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void downloadUrl(it.url)
-                      }}
-                      className="text-xl"
-                      type="button"
-                      aria-label="הורד"
-                      title="הורד"
-                    >
-                      💾
-                    </button>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setLightbox(it)
-                      }}
-                      className="text-xl"
-                      type="button"
-                      aria-label="תגובות"
-                      title="תגובות"
-                    >
-                      😍
-                    </button>
-                  </>
-                )}
-              </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setLightbox(it)
+                    }}
+                    className="text-xl"
+                    type="button"
+                    aria-label="פתח"
+                    title="פתח"
+                  >
+                    😊
+                  </button>
+                </>
+              )}
             </div>
-          )
-        })}
+          </div>
+        ))}
       </div>
 
       {feed.length === 0 && (
@@ -1048,4 +1012,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-        }
+      }
