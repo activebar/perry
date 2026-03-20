@@ -1,3 +1,8 @@
+// Path: src/app/api/reactions/toggle/route.ts
+// Version: V25.1
+// Updated: 2026-03-20 11:35
+// Note: return selected reactions array for gallery/blessings reaction UI and keep one reaction per device per target
+
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServiceRole } from '@/lib/supabase'
 
@@ -88,6 +93,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       counts,
+      my: selectedEmoji ? [selectedEmoji] : [],
       selected_emoji: selectedEmoji,
       active: !!selectedEmoji,
       emoji,
