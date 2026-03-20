@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.3
-// Updated: 2026-03-20 09:25
-// Note: restore action buttons under gallery items without breaking select mode or mobile video lightbox
+// Version: V25.4
+// Updated: 2026-03-20 09:45
+// Note: restore gallery reaction badge/count overlay using public gallery-items reactions API without breaking event gallery video/upload flow
 
 'use client'
 
@@ -320,6 +320,8 @@ export default function GalleryClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<Item | null>(null)
+  const [reactionsByItem, setReactionsByItem] = useState<Record<string, Record<string, number>>>({})
+  const [myReactionsByItem, setMyReactionsByItem] = useState<Record<string, string[]>>({})
 
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const [nowTs, setNowTs] = useState<number>(Date.now())
@@ -568,6 +570,55 @@ export default function GalleryClient({
   const uploadPickRef = useRef<HTMLInputElement | null>(null)
 
   const feed = useMemo(() => (items || []).filter((i) => i.url), [items])
+
+  function getTopReaction(itemId: string) {
+    const reactions = reactionsByItem[itemId] || {}
+    let topEmoji: string | null = null
+    let topCount = 0
+
+    for (const [emoji, count] of Object.entries(reactions)) {
+      const n = Number(count || 0)
+      if (n > topCount) {
+        topEmoji = emoji
+        topCount = n
+      }
+    }
+
+    if (!topEmoji || topCount <= 0) return null
+    return { emoji: topEmoji, count: topCount }
+  }
+
+  useEffect(() => {
+    const ids = feed.map((i) => i.id).filter(Boolean)
+    if (ids.length === 0) {
+      setReactionsByItem({})
+      setMyReactionsByItem({})
+      return
+    }
+
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const qs = ids.map((id) => `media_item_id=${encodeURIComponent(id)}`).join('&')
+        const res = await fetch(`/api/public/gallery-items?${qs}`, { cache: 'no-store' })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || cancelled) return
+
+        setReactionsByItem((json as any)?.reactionsByItem || {})
+        setMyReactionsByItem((json as any)?.myReactionsByItem || {})
+      } catch {
+        if (!cancelled) {
+          setReactionsByItem({})
+          setMyReactionsByItem({})
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [feed])
 
   async function shareItem(it: Item) {
     const short = await ensureShortLinkForMedia(it.id)
@@ -941,6 +992,18 @@ export default function GalleryClient({
                   style={{ objectPosition: objectPositionFromCrop(it) }}
                 />
               )}
+
+              {!selectMode && (() => {
+                const top = getTopReaction(it.id)
+                if (!top) return null
+
+                return (
+                  <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
+                    <span>{top.emoji}</span>
+                    <span>{top.count}</span>
+                  </div>
+                )
+              })()}
 
               {selectMode ? (
                 <div className="absolute left-2 top-2">
