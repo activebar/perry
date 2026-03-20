@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.2
-// Updated: 2026-03-20 07:55
-// Note: keep long-video lightbox controls accessible on mobile with sticky footer and scroll-safe modal layout
+// Version: V25.3
+// Updated: 2026-03-20 09:25
+// Note: restore action buttons under gallery items without breaking select mode or mobile video lightbox
 
 'use client'
 
@@ -956,7 +956,52 @@ export default function GalleryClient({
               ) : null}
             </button>
 
-            <div className="p-3">
+            <div className="p-2 flex items-center justify-center gap-4">
+              {selectMode ? (
+                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+              ) : (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void shareItem(it)
+                    }}
+                    className="text-xl"
+                    type="button"
+                    aria-label="שתף"
+                    title="שתף"
+                  >
+                    🔗
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void downloadUrl(it.url)
+                    }}
+                    className="text-xl"
+                    type="button"
+                    aria-label="הורד"
+                    title="הורד"
+                  >
+                    💾
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setLightbox(it)
+                    }}
+                    className="text-xl"
+                    type="button"
+                    aria-label="פתח"
+                    title="פתח"
+                  >
+                    😊
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -968,4 +1013,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-    }
+}
