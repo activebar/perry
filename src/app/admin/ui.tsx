@@ -1,7 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V24.6
-// Updated: 2026-03-19 15:40
-// Note: admin gallery and blessings show video preview with play overlay and open video correctly in lightbox
+// Version: V24.7
+// Updated: 2026-03-20 07:20
+// Note: fix admin gallery video preview JSX and add play overlay for pending/approved gallery items and blessings media
 
 'use client'
 
@@ -2810,43 +2810,12 @@ export default function AdminApp({
                                 </div>
                               </>
                             ) : (
-                              {isVideoItem(p) ? (
-                              <>
-                                <video
-                                  src={p.url}
-                                  className="absolute inset-0 h-full w-full object-cover"
-                                  style={{ objectPosition: objectPositionFromCrop(p) }}
-                                  muted
-                                  playsInline
-                                  preload="metadata"
-                                />
-                                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
-                                    ▶
-                                  </div>
-                                </div>
-                              </>
-                            ) : (
-                              {isVideoItem(p) ? (
-                                <>
-                                  <video
-                                    src={p.url}
-                                    className="absolute inset-0 h-full w-full object-cover"
-                                    style={{ objectPosition: objectPositionFromCrop(p) }}
-                                    muted
-                                    playsInline
-                                    preload="metadata"
-                                  />
-                                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
-                                      ▶
-                                    </div>
-                                  </div>
-                                </>
-                              ) : (
-                                <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
-                              )}
-                            )}
+                              <img
+                                src={p.thumb_url || p.url}
+                                alt=""
+                                className="absolute inset-0 h-full w-full object-cover"
+                                style={{ objectPosition: objectPositionFromCrop(p) }}
+                              />
                             )}
                           </button>
 
@@ -2937,7 +2906,30 @@ export default function AdminApp({
                               }}
                               type="button"
                             >
-                              <img src={p.thumb_url || p.url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: objectPositionFromCrop(p) }} />
+                              {isVideoItem(p) ? (
+                                <>
+                                  <video
+                                    src={p.url}
+                                    className="absolute inset-0 h-full w-full object-cover"
+                                    style={{ objectPosition: objectPositionFromCrop(p) }}
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                  />
+                                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/45 text-xl text-white shadow">
+                                      ▶
+                                    </div>
+                                  </div>
+                                </>
+                              ) : (
+                                <img
+                                  src={p.thumb_url || p.url}
+                                  alt=""
+                                  className="absolute inset-0 h-full w-full object-cover"
+                                  style={{ objectPosition: objectPositionFromCrop(p) }}
+                                />
+                              )}
 
                               {selectMode ? (
                                 <div className="absolute left-2 top-2">
@@ -3005,4 +2997,4 @@ export default function AdminApp({
       )}
     </div>
   )
-    }
+  }
