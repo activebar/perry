@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V26.0
-// Updated: 2026-03-20 11:20
-// Note: add gallery reactions in preview/lightbox using media_item reactions API while keeping upload menu and mobile-safe layout
+// Version: V26.1
+// Updated: 2026-03-20 11:35
+// Note: speed up gallery reactions with optimistic updates, active dark state, and top-left white reaction badge
 
 'use client'
 
@@ -390,6 +390,42 @@ export default function GalleryClient({
     setErr: React.Dispatch<React.SetStateAction<string | null>>
   ) {
     setErr(null)
+
+    const currentMy = Array.isArray(item.my_reactions) ? item.my_reactions : []
+    const previousEmoji = currentMy[0] || null
+    const nextMy = previousEmoji === emoji ? [] : [emoji]
+
+    const nextCounts: Record<string, number> = { ...(item.reaction_counts || {}) }
+    if (previousEmoji) {
+      nextCounts[previousEmoji] = Math.max(0, Number(nextCounts[previousEmoji] || 0) - 1)
+      if (nextCounts[previousEmoji] <= 0) delete nextCounts[previousEmoji]
+    }
+    if (nextMy[0]) {
+      nextCounts[nextMy[0]] = Number(nextCounts[nextMy[0]] || 0) + 1
+    }
+
+    let nextTop: { emoji: string; count: number } | null = null
+    for (const [em, raw] of Object.entries(nextCounts)) {
+      const count = Number(raw || 0)
+      if (!nextTop || count > nextTop.count) {
+        nextTop = { emoji: String(em), count }
+      }
+    }
+
+    setItems((prev) =>
+      prev.map((x) =>
+        x.id === item.id
+          ? { ...x, reaction_counts: nextCounts, my_reactions: nextMy, top_reaction: nextTop }
+          : x
+      )
+    )
+
+    setLightbox((prev) =>
+      prev && prev.id === item.id
+        ? { ...prev, reaction_counts: nextCounts, my_reactions: nextMy, top_reaction: nextTop }
+        : prev
+    )
+
     try {
       const res = await fetch('/api/reactions/toggle', {
         method: 'POST',
@@ -400,20 +436,19 @@ export default function GalleryClient({
       if (!res.ok) throw new Error(json?.error || 'שגיאה בתגובה')
 
       const counts = json?.counts || {}
-      const my = json?.my || []
+      const my = Array.isArray(json?.my)
+        ? json.my
+        : json?.selected_emoji
+          ? [String(json.selected_emoji)]
+          : []
 
-      const top = (() => {
-        let bestEmoji = ''
-        let bestCount = 0
-        for (const [em, raw] of Object.entries(counts)) {
-          const count = Number(raw || 0)
-          if (count > bestCount) {
-            bestEmoji = String(em)
-            bestCount = count
-          }
+      let top: { emoji: string; count: number } | null = null
+      for (const [em, raw] of Object.entries(counts)) {
+        const count = Number(raw || 0)
+        if (!top || count > top.count) {
+          top = { emoji: String(em), count }
         }
-        return bestEmoji && bestCount > 0 ? { emoji: bestEmoji, count: bestCount } : null
-      })()
+      }
 
       setItems((prev) =>
         prev.map((x) =>
@@ -1118,14 +1153,14 @@ export default function GalleryClient({
                 )}
 
                 {topReaction ? (
-                  <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
+                  <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-xs text-zinc-900 shadow">
                     <span>{topReaction.emoji}</span>
                     <span>{topCount}</span>
                   </div>
                 ) : null}
 
                 {selectMode ? (
-                  <div className="absolute left-2 top-2">
+                  <div className="absolute right-2 top-2">
                     <div
                       className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${
                         selected[it.id] ? 'font-bold' : ''
@@ -1196,4 +1231,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-          }
+                          }
