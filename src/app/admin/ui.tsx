@@ -1,7 +1,7 @@
 // Path: src/app/admin/ui.tsx
-// Version: V24.10
-// Updated: 2026-03-20 08:50
-// Note: fix admin lightbox download handler after video preview/play overlay updates
+// Version: V24.11
+// Updated: 2026-03-20 08:56
+// Note: fix admin lightbox media rendering for object-based lightbox state with image/video support
 
 'use client'
 
@@ -3008,7 +3008,11 @@ export default function AdminApp({
                   </Button>
                 </div>
 
-                <img src={lightbox} alt="" className="w-full rounded-2xl bg-white" />
+                {lightbox.isVideo ? (
+                  <video src={lightbox.url} controls autoPlay playsInline className="w-full rounded-2xl bg-black" />
+                ) : (
+                  <img src={lightbox.url} alt="" className="w-full rounded-2xl bg-white" />
+                )}
               </div>
             </div>
           )}
@@ -3029,4 +3033,4 @@ export default function AdminApp({
       )}
     </div>
   )
-        }
+}
