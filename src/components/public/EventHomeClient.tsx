@@ -1,7 +1,7 @@
 // Path: src/components/public/EventHomeClient.tsx
-// Version: V24.3
-// Updated: 2026-03-18 00:40
-// Note: home video duration badge reads metadata instead of showing 00:00
+// Version: V24.4
+// Updated: 2026-03-19 15:20
+// Note: render home gallery video previews with <video> instead of broken <img> thumbnails
 
 'use client'
 
@@ -23,8 +23,6 @@ type HomePayload = {
   blessingsPreview: any[]
   galleryPreviews?: Record<string, any[]>
 }
-
-
 
 function formatVideoTime(seconds?: number | null) {
   const s = Math.max(0, Math.floor(Number(seconds || 0)))
@@ -108,6 +106,18 @@ function objectPositionFromCrop(item: {
   if (item?.crop_position === 'top') return '50% 12%'
   if (item?.crop_position === 'bottom') return '50% 82%'
   return '50% 50%'
+}
+
+function isVideoItem(item: any) {
+  const kind = String(item?.kind || '').toLowerCase()
+  const url = String(item?.url || '')
+  const thumb = String(item?.thumb_url || '')
+
+  return (
+    kind.includes('video') ||
+    /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url) ||
+    /\.(mp4|mov|webm|m4v)(\?|$)/i.test(thumb)
+  )
 }
 
 function fmt(dt: string) {
@@ -607,15 +617,33 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
                         {previews
                           .slice(0, Math.max(1, Number(settings?.home_gallery_preview_limit || 6)))
                           .map((it: any) => {
-                            const url = String(it.thumb_url || it.url || '')
+                            const video = isVideoItem(it)
+                            const imageUrl = String(it?.thumb_url || it?.url || '')
+                            const videoUrl = String(it?.url || '')
+
                             return (
                               <div
                                 key={String(it.id)}
                                 className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-200"
                               >
-                                {url ? (
+                                {video ? (
+                                  <>
+                                    <video
+                                      src={videoUrl}
+                                      className="absolute inset-0 h-full w-full object-cover"
+                                      style={{ objectPosition: objectPositionFromCrop(it) }}
+                                      muted
+                                      playsInline
+                                      preload="metadata"
+                                    />
+                                    <VideoBadge
+                                      src={videoUrl}
+                                      duration={(it as any).video_duration_sec ?? (it as any).duration_sec ?? 0}
+                                    />
+                                  </>
+                                ) : imageUrl ? (
                                   <img
-                                    src={url}
+                                    src={imageUrl}
                                     alt=""
                                     className="absolute inset-0 h-full w-full object-cover"
                                     style={{ objectPosition: objectPositionFromCrop(it) }}
@@ -831,4 +859,4 @@ export default function EventHomeClient({ eventId }: { eventId: string }) {
       </Container>
     </main>
   )
-            }
+      }
