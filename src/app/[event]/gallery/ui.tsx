@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
 // Version: V25.4
-// Updated: 2026-03-20 09:45
-// Note: restore gallery reaction badge/count overlay using public gallery-items reactions API without breaking event gallery video/upload flow
+// Updated: 2026-03-20 09:40
+// Note: restore gallery item reaction badge/emoji trigger while keeping mobile lightbox controls accessible
 
 'use client'
 
@@ -320,8 +320,6 @@ export default function GalleryClient({
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<Item | null>(null)
-  const [reactionsByItem, setReactionsByItem] = useState<Record<string, Record<string, number>>>({})
-  const [myReactionsByItem, setMyReactionsByItem] = useState<Record<string, string[]>>({})
 
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const [nowTs, setNowTs] = useState<number>(Date.now())
@@ -350,6 +348,30 @@ export default function GalleryClient({
     const sec = total % 60
     return `${m}:${String(sec).padStart(2, '0')}`
   }
+
+  function getTopReaction(it: any): { emoji: string; count: number } | null {
+    const direct = it?.top_reaction
+    if (direct && direct.emoji && Number(direct.count || 0) > 0) {
+      return { emoji: String(direct.emoji), count: Number(direct.count || 0) }
+    }
+
+    const counts = it?.reaction_counts
+    if (!counts || typeof counts !== 'object') return null
+
+    let bestEmoji = ''
+    let bestCount = 0
+    for (const [emoji, raw] of Object.entries(counts)) {
+      const count = Number(raw || 0)
+      if (count > bestCount) {
+        bestEmoji = String(emoji)
+        bestCount = count
+      }
+    }
+
+    if (!bestEmoji || bestCount <= 0) return null
+    return { emoji: bestEmoji, count: bestCount }
+  }
+
 
   const DIRECT_MAX = 8
   const ZIP_MAX = 20
@@ -570,55 +592,6 @@ export default function GalleryClient({
   const uploadPickRef = useRef<HTMLInputElement | null>(null)
 
   const feed = useMemo(() => (items || []).filter((i) => i.url), [items])
-
-  function getTopReaction(itemId: string) {
-    const reactions = reactionsByItem[itemId] || {}
-    let topEmoji: string | null = null
-    let topCount = 0
-
-    for (const [emoji, count] of Object.entries(reactions)) {
-      const n = Number(count || 0)
-      if (n > topCount) {
-        topEmoji = emoji
-        topCount = n
-      }
-    }
-
-    if (!topEmoji || topCount <= 0) return null
-    return { emoji: topEmoji, count: topCount }
-  }
-
-  useEffect(() => {
-    const ids = feed.map((i) => i.id).filter(Boolean)
-    if (ids.length === 0) {
-      setReactionsByItem({})
-      setMyReactionsByItem({})
-      return
-    }
-
-    let cancelled = false
-
-    ;(async () => {
-      try {
-        const qs = ids.map((id) => `media_item_id=${encodeURIComponent(id)}`).join('&')
-        const res = await fetch(`/api/public/gallery-items?${qs}`, { cache: 'no-store' })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || cancelled) return
-
-        setReactionsByItem((json as any)?.reactionsByItem || {})
-        setMyReactionsByItem((json as any)?.myReactionsByItem || {})
-      } catch {
-        if (!cancelled) {
-          setReactionsByItem({})
-          setMyReactionsByItem({})
-        }
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [feed])
 
   async function shareItem(it: Item) {
     const short = await ensureShortLinkForMedia(it.id)
@@ -963,110 +936,109 @@ export default function GalleryClient({
       )}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {feed.map((it) => (
-          <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
-            <button
-              className="relative block aspect-square w-full bg-zinc-50"
-              onClick={() => onThumbClick(it)}
-              type="button"
-            >
-              {isVideoUrl(it.url) ||
-              isVideoUrl(it.thumb_url) ||
-              String(it.kind || '').toLowerCase().includes('video') ? (
-                <>
-                  <video
-                    src={it.url}
+        {feed.map((it) => {
+          const topReaction = getTopReaction(it)
+
+          return (
+            <div key={it.id} className="overflow-hidden rounded-2xl border border-zinc-200">
+              <button
+                className="relative block aspect-square w-full bg-zinc-50"
+                onClick={() => onThumbClick(it)}
+                type="button"
+              >
+                {isVideoUrl(it.url) ||
+                isVideoUrl(it.thumb_url) ||
+                String(it.kind || '').toLowerCase().includes('video') ? (
+                  <>
+                    <video
+                      src={it.url}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      style={{ objectPosition: objectPositionFromCrop(it) }}
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                    <VideoOverlay />
+                  </>
+                ) : (
+                  <img
+                    src={it.thumb_url || it.url}
+                    alt=""
                     className="absolute inset-0 h-full w-full object-cover"
                     style={{ objectPosition: objectPositionFromCrop(it) }}
-                    muted
-                    playsInline
-                    preload="metadata"
                   />
-                  <VideoOverlay />
-                </>
-              ) : (
-                <img
-                  src={it.thumb_url || it.url}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover"
-                  style={{ objectPosition: objectPositionFromCrop(it) }}
-                />
-              )}
+                )}
 
-              {!selectMode && (() => {
-                const top = getTopReaction(it.id)
-                if (!top) return null
-
-                return (
+                {topReaction ? (
                   <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-xs text-white shadow">
-                    <span>{top.emoji}</span>
-                    <span>{top.count}</span>
+                    <span>{topReaction.emoji}</span>
+                    <span>{topReaction.count}</span>
                   </div>
-                )
-              })()}
+                ) : null}
 
-              {selectMode ? (
-                <div className="absolute left-2 top-2">
-                  <div
-                    className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${
-                      selected[it.id] ? 'font-bold' : ''
-                    }`}
-                    aria-hidden
-                  >
-                    {selected[it.id] ? '✓' : ''}
+                {selectMode ? (
+                  <div className="absolute left-2 top-2">
+                    <div
+                      className={`flex h-7 w-7 items-center justify-center rounded-full border bg-white/90 text-sm ${
+                        selected[it.id] ? 'font-bold' : ''
+                      }`}
+                      aria-hidden
+                    >
+                      {selected[it.id] ? '✓' : ''}
+                    </div>
                   </div>
-                </div>
-              ) : null}
-            </button>
+                ) : null}
+              </button>
 
-            <div className="p-2 flex items-center justify-center gap-4">
-              {selectMode ? (
-                <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
-              ) : (
-                <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void shareItem(it)
-                    }}
-                    className="text-xl"
-                    type="button"
-                    aria-label="שתף"
-                    title="שתף"
-                  >
-                    🔗
-                  </button>
+              <div className="p-2 flex items-center justify-center gap-4">
+                {selectMode ? (
+                  <span className="text-xs text-zinc-500">מצב בחירה פעיל</span>
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void shareItem(it)
+                      }}
+                      className="text-xl"
+                      type="button"
+                      aria-label="שתף"
+                      title="שתף"
+                    >
+                      🔗
+                    </button>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void downloadUrl(it.url)
-                    }}
-                    className="text-xl"
-                    type="button"
-                    aria-label="הורד"
-                    title="הורד"
-                  >
-                    💾
-                  </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void downloadUrl(it.url)
+                      }}
+                      className="text-xl"
+                      type="button"
+                      aria-label="הורד"
+                      title="הורד"
+                    >
+                      💾
+                    </button>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setLightbox(it)
-                    }}
-                    className="text-xl"
-                    type="button"
-                    aria-label="פתח"
-                    title="פתח"
-                  >
-                    😊
-                  </button>
-                </>
-              )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setLightbox(it)
+                      }}
+                      className="text-xl"
+                      type="button"
+                      aria-label="תגובות"
+                      title="תגובות"
+                    >
+                      😍
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {feed.length === 0 && (
@@ -1076,4 +1048,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-}
+        }
