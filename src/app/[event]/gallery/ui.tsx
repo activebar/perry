@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.5
-// Updated: 2026-03-20 09:55
-// Note: allow camera button in sub-gallery to open image or video chooser instead of image-only capture
+// Version: V25.6
+// Updated: 2026-03-20 10:05
+// Note: restore direct camera capture and add separate video capture button in sub-gallery while keeping file picker button
 
 'use client'
 
@@ -565,6 +565,7 @@ export default function GalleryClient({
 
   const pickerRef = useRef<HTMLInputElement | null>(null)
   const cameraRef = useRef<HTMLInputElement | null>(null)
+  const videoCameraRef = useRef<HTMLInputElement | null>(null)
   const uploadPickRef = useRef<HTMLInputElement | null>(null)
 
   const feed = useMemo(() => (items || []).filter((i) => i.url), [items])
@@ -1012,4 +1013,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-      }
+  }
