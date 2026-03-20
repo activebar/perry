@@ -1,7 +1,7 @@
 // Path: src/app/[event]/gallery/ui.tsx
-// Version: V25.1
-// Updated: 2026-03-19 13:10
-// Note: use admin-configured gallery video size/duration limits with safe fallbacks and keep uploads under the correct event folder
+// Version: V25.2
+// Updated: 2026-03-20 07:55
+// Note: keep long-video lightbox controls accessible on mobile with sticky footer and scroll-safe modal layout
 
 'use client'
 
@@ -851,38 +851,42 @@ export default function GalleryClient({
       </Card>
 
       {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => setLightbox(null)}>
-          <div className="relative mx-auto max-w-4xl" onClick={(e) => e.stopPropagation()}>
-            <div className="absolute top-2 left-2 z-10">
-              <Button
-                variant="ghost"
-                onClick={() => setLightbox(null)}
-                className="bg-white/90 text-black shadow hover:bg-white"
-                type="button"
-              >
-                סגור
-              </Button>
+        <div className="fixed inset-0 z-50 bg-black/70 p-3 sm:p-4" onClick={() => setLightbox(null)}>
+          <div
+            className="relative mx-auto flex max-h-[calc(100dvh-24px)] max-w-4xl flex-col overflow-hidden rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative min-h-0 flex-1 overflow-auto rounded-2xl bg-transparent">
+              <div className="absolute left-2 top-2 z-10">
+                <Button
+                  variant="ghost"
+                  onClick={() => setLightbox(null)}
+                  className="bg-white/90 text-black shadow hover:bg-white"
+                  type="button"
+                >
+                  סגור
+                </Button>
+              </div>
+
+              {isVideoUrl(lightbox.url) || String(lightbox.kind || '').toLowerCase().includes('video') ? (
+                <video
+                  src={lightbox.url}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="max-h-[72dvh] w-full rounded-2xl bg-black object-contain"
+                />
+              ) : (
+                <img
+                  src={lightbox.url}
+                  alt=""
+                  className="max-h-[72dvh] w-full rounded-2xl bg-white object-contain"
+                  style={{ objectPosition: objectPositionFromCrop(lightbox) }}
+                />
+              )}
             </div>
 
-            {isVideoUrl(lightbox.url) ||
-            String(lightbox.kind || '').toLowerCase().includes('video') ? (
-              <video
-                src={lightbox.url}
-                controls
-                playsInline
-                preload="metadata"
-                className="w-full rounded-2xl bg-black"
-              />
-            ) : (
-              <img
-                src={lightbox.url}
-                alt=""
-                className="w-full rounded-2xl bg-white"
-                style={{ objectPosition: objectPositionFromCrop(lightbox), objectFit: 'cover' }}
-              />
-            )}
-
-            <div className="mt-3 rounded-2xl bg-white/95 p-3 shadow" dir="rtl">
+            <div className="sticky bottom-0 mt-3 rounded-2xl bg-white/95 p-3 shadow backdrop-blur" dir="rtl">
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button variant="ghost" onClick={() => shareItem(lightbox)} type="button">
                   שתף
@@ -966,4 +970,4 @@ export default function GalleryClient({
       )}
     </div>
   )
-}
+    }
