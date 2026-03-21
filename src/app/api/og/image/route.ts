@@ -1,6 +1,7 @@
 // src/app/api/og/image/route.ts
-// Version: V26.0
-// Updated: 2026-03-21 17:05
+// Path: src/app/api/og/image/route.ts
+// Version: V26.1
+// Updated: 2026-03-21 18:20
 
 import { NextResponse } from 'next/server'
 import sharp from 'sharp'
@@ -151,7 +152,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const settings = await fetchSettings(eventSlug || undefined)
+    const settings = await fetchSettings(eventSlug || undefined).catch(() => null)
     eventName = String((settings as any)?.event_name || eventSlug)
 
     const defaultUrl =
@@ -175,6 +176,8 @@ export async function GET(req: Request) {
       headers: {
         'content-type': 'image/jpeg',
         'cache-control': 'public, max-age=3600, stale-while-revalidate=86400',
+        'content-disposition': 'inline; filename=og-image.jpg',
+        'x-content-type-options': 'nosniff',
       },
     })
   } catch (err) {

@@ -1,7 +1,8 @@
 // Path: src/app/media/[id]/page.tsx
-// Version: V25.9
-// Updated: 2026-03-21 16:35
+// Version: V26.1
+// Updated: 2026-03-21 18:20
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
@@ -12,19 +13,32 @@ import { fetchSettings } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+function baseUrlFromHeaders() {
+  const h = headers()
+  const host = h.get('x-forwarded-host') ?? h.get('host')
+  const proto = h.get('x-forwarded-proto') ?? 'https'
+  return host ? `${proto}://${host}`.replace(/\/$/, '') : ''
+}
+
 function baseUrl() {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL
   if (explicit) return explicit.replace(/\/$/, '')
   const vercel = process.env.VERCEL_URL
   if (vercel) return `https://${vercel}`.replace(/\/$/, '')
-  return ''
+  return baseUrlFromHeaders()
+}
+
+function absoluteUrl(path: string) {
+  const b = baseUrl()
+  if (!b) return path
+  return `${b}${path.startsWith('/') ? path : `/${path}`}`
 }
 
 async function getMedia(id: string) {
   const sb = supabaseServiceRole()
   const { data } = await sb
     .from('media_items')
-    .select('id, public_url, url, thumb_url, storage_path, gallery_id, kind, is_approved, event_id')
+    .select('id, public_url, url, thumb_url, storage_path, gallery_id, kind, is_approved, event_id, updated_at, created_at')
     .eq('id', id)
     .maybeSingle()
   return data as any
@@ -47,18 +61,25 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
   const title = `${eventName} · תמונה`
   const description = String((settings as any)?.share_gallery_description || 'לחצו לצפייה בתמונה')
-
+  const pageUrl = absoluteUrl(`/media/${encodeURIComponent(String(mi.id))}`)
+  const versionKey = encodeURIComponent(String(mi.updated_at || mi.created_at || mi.id))
+  const ogImage = absoluteUrl(
+    `/api/og/image?media=${encodeURIComponent(String(mi.id))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}&v=${versionKey}`
+  )
   const b = baseUrl()
-  const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}`
 
   return {
+    metadataBase: b ? new URL(b) : undefined,
     title,
     description,
+    alternates: { canonical: pageUrl },
     openGraph: {
       title,
       description,
+      url: pageUrl,
       type: 'website',
-      images: [{ url: ogImage, width: 630, height: 630 }],
+      locale: 'he_IL',
+      images: [{ url: ogImage, width: 630, height: 630, alt: title }],
     },
     twitter: {
       card: 'summary_large_image',
