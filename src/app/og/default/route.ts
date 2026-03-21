@@ -1,9 +1,11 @@
 // Path: src/app/og/default/route.ts
-// Version: V26.7
-// Updated: 2026-03-21 20:45
-// Note: stable default OG image route that serves admin-configured default image or falls back to /api/og/image?default=1
+// Version: V26.8
+// Updated: 2026-03-21 21:05
+// Note: stable default OG route that always returns a real image and falls back to local /og/default.jpg
 
 import { NextResponse } from 'next/server'
+import { promises as fs } from 'fs'
+import path from 'path'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { fetchSettings } from '@/lib/db'
 
@@ -20,28 +22,32 @@ function guessContentType(urlOrPath?: string | null) {
 }
 
 function extractUploadsPathFromPublicUrl(u: string) {
-  const m = u.match(/\/storage\/v1\/object\/(public|sign)\/uploads\/(.+)$/i)
+  const m = String(u || '').match(/\/storage\/v1\/object\/(public|sign)\/uploads\/(.+)$/i)
   return m?.[2] ? decodeURIComponent(m[2]) : null
 }
 
-async function downloadFromUploads(path: string) {
+async function downloadFromUploads(pathValue: string) {
   const sb = supabaseServiceRole()
-  const clean = path.replace(/^\/+/, '')
+  const clean = pathValue.replace(/^\/+/, '')
   const { data, error } = await sb.storage.from('uploads').download(clean)
   if (error || !data) throw new Error(error?.message || 'download failed')
-  const buf = Buffer.from(await data.arrayBuffer())
-  return buf
+  return Buffer.from(await data.arrayBuffer())
 }
 
 async function fetchRemote(url: string) {
-  const res = await fetch(url, { redirect: 'follow' })
-  if (!res.ok) throw new Error('fetch failed')
+  const res = await fetch(url, { redirect: 'follow', cache: 'no-store' })
+  if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
   const buf = Buffer.from(await res.arrayBuffer())
   const ct = res.headers.get('content-type') || undefined
   return { buf, ct }
 }
 
-export async function GET(req: Request) {
+async function readLocalDefaultJpg() {
+  const localPath = path.join(process.cwd(), 'src', 'app', 'og', 'default.jpg')
+  return fs.readFile(localPath)
+}
+
+export async function GET() {
   try {
     const settings = await fetchSettings().catch(() => null)
     const ogUrl = String((settings as any)?.og_default_image_url || '').trim()
@@ -52,7 +58,7 @@ export async function GET(req: Request) {
       return new NextResponse(buf, {
         headers: {
           'content-type': guessContentType(uploadsPath),
-          'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+          'cache-control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600',
         },
       })
     }
@@ -62,30 +68,23 @@ export async function GET(req: Request) {
       return new NextResponse(buf, {
         headers: {
           'content-type': ct || guessContentType(ogUrl),
-          'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+          'cache-control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600',
         },
       })
     }
   } catch {
-    // continue to fallback
+    // continue to local fallback
   }
 
   try {
-    const origin = new URL(req.url).origin
-    const fallbackRes = await fetch(`${origin}/api/og/image?default=1`, { redirect: 'follow' })
-    if (fallbackRes.ok) {
-      const buf = Buffer.from(await fallbackRes.arrayBuffer())
-      const ct = fallbackRes.headers.get('content-type') || 'image/jpeg'
-      return new NextResponse(buf, {
-        headers: {
-          'content-type': ct,
-          'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
-        },
-      })
-    }
+    const buf = await readLocalDefaultJpg()
+    return new NextResponse(buf, {
+      headers: {
+        'content-type': 'image/jpeg',
+        'cache-control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600',
+      },
+    })
   } catch {
-    // ignore
+    return new NextResponse('missing default og image', { status: 404 })
   }
-
-  return new NextResponse('missing', { status: 404 })
 }
