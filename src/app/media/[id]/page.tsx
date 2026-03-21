@@ -1,6 +1,7 @@
 // Path: src/app/media/[id]/page.tsx
 // Version: V25.2
 // Updated: 2026-03-18 16:45
+
 // Note: remove default event fallback, infer event from gallery when missing, stabilize OG and back-to-gallery routing
 
 import type { Metadata } from 'next'
