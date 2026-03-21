@@ -1,7 +1,7 @@
 // Path: src/app/gl/[code]/page.tsx
-// Version: V26.2
-// Updated: 2026-03-21 10:20
-// Note: fix short-link event resolution without ido fallback + normalize target_path + safer gallery title lookup
+// Version: V26.3
+// Updated: 2026-03-21 10:45
+// Note: prefer target_path redirect before /media fallback + keep safe event/gallery metadata resolution
 
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
@@ -339,9 +339,10 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
   const resolved = await resolveTarget(code)
   if (!resolved) notFound()
 
-  const href = resolved.mediaItemId
-    ? `/media/${encodeURIComponent(resolved.mediaItemId)}`
-    : normalizeTargetPath(resolved.target)
+  const normalizedTarget = normalizeTargetPath(resolved.target)
+  const href =
+    normalizedTarget ||
+    (resolved.mediaItemId ? `/media/${encodeURIComponent(resolved.mediaItemId)}` : '')
 
   if (!href) notFound()
 
