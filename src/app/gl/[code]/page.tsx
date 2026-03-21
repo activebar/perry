@@ -1,6 +1,8 @@
 // Path: src/app/gl/[code]/page.tsx
-// Version: V26.1
-// Updated: 2026-03-21 18:20
+// Version: V26.2
+// Updated: 2026-03-21 10:20
+// Note: fix short-link event resolution without ido fallback + normalize target_path + safer gallery title lookup
+
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
@@ -17,41 +19,54 @@ function cleanCode(input: string) {
     .replace(/[^0-9a-z]/g, '')
 }
 
+function normalizeTargetPath(input: string | null | undefined) {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw)
+      return `${u.pathname || ''}${u.search || ''}${u.hash || ''}` || '/'
+    } catch {
+      return raw
+    }
+  }
+
+  return raw.startsWith('/') ? raw : `/${raw}`
+}
+
+function extractGalleryIdFromTarget(targetPath: string | null) {
+  if (!targetPath) return null
+  const m = String(targetPath).match(/\/gallery\/([0-9a-f-]{36})/i)
+  return m?.[1] || null
+}
+
+function extractEventSlugFromTarget(targetPath: string | null) {
+  if (!targetPath) return ''
+  const normalized = normalizeTargetPath(targetPath)
+  const m = normalized.match(/^\/([^/?#]+)\/gallery(?:\/|$)/i)
+  return String(m?.[1] || '').trim()
+}
+
 async function resolveTarget(code: string) {
   const srv = supabaseServiceRole()
 
-  const first = await srv
+  const { data } = await srv
     .from('short_links')
     .select('target_path, kind, media_item_id')
     .eq('code', code)
     .maybeSingle()
 
-  if (first.data) {
-    const mi = (first.data as any).media_item_id ? String((first.data as any).media_item_id) : null
-    if (mi) {
-      return {
-        target: String((first.data as any).target_path || ''),
-        mediaItemId: mi,
-      }
-    }
+  if (!data) return null
 
-    if ((first.data as any)?.target_path) {
-      return {
-        target: String((first.data as any).target_path),
-        mediaItemId: null,
-      }
-    }
-  }
-
-  const second = await srv
-    .from('short_links')
-    .select('target_path')
-    .eq('code', code)
-    .maybeSingle()
-
-  return (second.data as any)?.target_path
-    ? { target: String((second.data as any).target_path), mediaItemId: null }
+  const mediaItemId = (data as any)?.media_item_id
+    ? String((data as any).media_item_id).trim()
     : null
+
+  return {
+    target: normalizeTargetPath(String((data as any)?.target_path || '')),
+    mediaItemId: mediaItemId || null,
+  }
 }
 
 function baseUrlFromHeaders() {
@@ -72,21 +87,40 @@ function baseUrl() {
 }
 
 function absoluteUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path
   const b = baseUrl()
   if (!b) return path
   return `${b}${path.startsWith('/') ? path : `/${path}`}`
 }
 
-function extractGalleryIdFromTarget(targetPath: string | null) {
-  if (!targetPath) return null
-  const m = String(targetPath).match(/\/gallery\/([0-9a-f-]{36})/i)
-  return m?.[1] || null
-}
+async function getEventSlugForGallery(galleryId: string, targetPath?: string | null) {
+  const fromTarget = extractEventSlugFromTarget(targetPath || null)
+  if (fromTarget) return fromTarget
 
-async function getEventSlugForGallery(galleryId: string) {
   const srv = supabaseServiceRole()
 
-  const { data: mi } = await srv
+  const { data: g } = await srv
+    .from('galleries')
+    .select('event_id')
+    .eq('id', galleryId)
+    .maybeSingle()
+
+  const fromGallery = String((g as any)?.event_id || '').trim()
+  if (fromGallery) return fromGallery
+
+  const { data: miApproved } = await srv
+    .from('media_items')
+    .select('event_id, created_at')
+    .eq('gallery_id', galleryId)
+    .eq('is_approved', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const fromApprovedMedia = String((miApproved as any)?.event_id || '').trim()
+  if (fromApprovedMedia) return fromApprovedMedia
+
+  const { data: miAny } = await srv
     .from('media_items')
     .select('event_id, created_at')
     .eq('gallery_id', galleryId)
@@ -94,7 +128,7 @@ async function getEventSlugForGallery(galleryId: string) {
     .limit(1)
     .maybeSingle()
 
-  return String((mi as any)?.event_id || '').trim()
+  return String((miAny as any)?.event_id || '').trim()
 }
 
 async function getGalleryDisplayTitle(galleryId: string, eventSlug: string, fallbackTitle = 'גלריה') {
@@ -113,7 +147,9 @@ async function getGalleryDisplayTitle(galleryId: string, eventSlug: string, fall
     new Set([eventSlug, galleryEventSlug].map(x => String(x || '').trim()).filter(Boolean))
   )
 
-  let blocks: any[] = []
+  if (!searchEventIds.length) {
+    return title
+  }
 
   for (const eid of searchEventIds) {
     const { data } = await srv
@@ -125,38 +161,21 @@ async function getGalleryDisplayTitle(galleryId: string, eventSlug: string, fall
       .order('sort_order', { ascending: true })
       .order('order_index', { ascending: true })
 
-    if (data?.length) {
-      blocks = data as any[]
-      break
-    }
-  }
-
-  if (!blocks.length) {
-    const { data } = await srv
-      .from('blocks')
-      .select('event_id,type,config,is_visible,sort_order,order_index')
-      .eq('is_visible', true)
-      .or('type.eq.gallery,type.like.gallery_%')
-      .order('sort_order', { ascending: true })
-      .order('order_index', { ascending: true })
-
-    blocks = (data as any[]) || []
-  }
-
-  for (const row of blocks) {
-    const cfg = (row as any)?.config || {}
-    const cfgGalleryId = String(cfg?.gallery_id || cfg?.galleryId || '').trim()
-    const cfgTitle = String(cfg?.title || cfg?.display_title || '').trim()
-    if (cfgGalleryId && cfgGalleryId === galleryId && cfgTitle) {
-      title = cfgTitle
-      break
+    const rows = (data as any[]) || []
+    for (const row of rows) {
+      const cfg = (row as any)?.config || {}
+      const cfgGalleryId = String(cfg?.gallery_id || cfg?.galleryId || '').trim()
+      const cfgTitle = String(cfg?.title || cfg?.display_title || '').trim()
+      if (cfgGalleryId && cfgGalleryId === galleryId && cfgTitle) {
+        return cfgTitle
+      }
     }
   }
 
   return title
 }
 
-async function getOgForMedia(mediaItemId: string) {
+async function getOgForMedia(mediaItemId: string, targetPath?: string | null) {
   const srv = supabaseServiceRole()
 
   const { data: mi } = await srv
@@ -165,8 +184,13 @@ async function getOgForMedia(mediaItemId: string) {
     .eq('id', mediaItemId)
     .maybeSingle()
 
-  const eventSlug = String((mi as any)?.event_id || '').trim()
-  const settings = await fetchSettings(eventSlug || undefined).catch(() => null)
+  const mediaEventSlug = String((mi as any)?.event_id || '').trim()
+  const targetEventSlug = extractEventSlugFromTarget(targetPath || null)
+  const eventSlug = mediaEventSlug || targetEventSlug
+
+  const settings = eventSlug
+    ? await fetchSettings(eventSlug).catch(() => null)
+    : null
 
   let galleryTitle = 'תמונה'
   if ((mi as any)?.gallery_id) {
@@ -179,11 +203,13 @@ async function getOgForMedia(mediaItemId: string) {
     'אירוע'
 
   const description =
-    String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
+    String((settings as any)?.share_gallery_description || '').trim() ||
+    'לחצו לצפייה בתמונה'
 
   const versionKey = encodeURIComponent(
     String((mi as any)?.updated_at || (mi as any)?.created_at || mediaItemId)
   )
+
   const ogImage = absoluteUrl(
     `/api/og/image?media=${encodeURIComponent(String(mediaItemId))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}&v=${versionKey}`
   )
@@ -191,7 +217,7 @@ async function getOgForMedia(mediaItemId: string) {
   return { eventName, galleryTitle, description, ogImage, eventSlug }
 }
 
-async function getOgForGallery(galleryId: string) {
+async function getOgForGallery(galleryId: string, targetPath?: string | null) {
   const srv = supabaseServiceRole()
 
   const { data: mi } = await srv
@@ -203,8 +229,14 @@ async function getOgForGallery(galleryId: string) {
     .limit(1)
     .maybeSingle()
 
-  const eventSlug = String((mi as any)?.event_id || '').trim() || await getEventSlugForGallery(galleryId)
-  const settings = await fetchSettings(eventSlug || undefined).catch(() => null)
+  const mediaEventSlug = String((mi as any)?.event_id || '').trim()
+  const eventSlug =
+    mediaEventSlug ||
+    (await getEventSlugForGallery(galleryId, targetPath))
+
+  const settings = eventSlug
+    ? await fetchSettings(eventSlug).catch(() => null)
+    : null
 
   const eventName =
     String((settings as any)?.event_name || '').trim() ||
@@ -214,11 +246,13 @@ async function getOgForGallery(galleryId: string) {
   const galleryTitle = await getGalleryDisplayTitle(galleryId, eventSlug, 'גלריה')
 
   const description =
-    String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
+    String((settings as any)?.share_gallery_description || '').trim() ||
+    'לחצו לצפייה בתמונה'
 
   const versionKey = encodeURIComponent(
     String((mi as any)?.updated_at || (mi as any)?.created_at || galleryId)
   )
+
   const ogImage = mi?.id
     ? absoluteUrl(`/api/og/image?media=${encodeURIComponent(String(mi.id))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}&v=${versionKey}`)
     : absoluteUrl(`/api/og/image?default=1${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}&v=${versionKey}`)
@@ -237,7 +271,11 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const b = baseUrl()
 
   if (resolved.mediaItemId) {
-    const { eventName, galleryTitle, description, ogImage } = await getOgForMedia(resolved.mediaItemId)
+    const { eventName, galleryTitle, description, ogImage } = await getOgForMedia(
+      resolved.mediaItemId,
+      resolved.target
+    )
+
     const title = `${eventName} · ${galleryTitle}`
 
     return {
@@ -265,7 +303,11 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const galleryId = extractGalleryIdFromTarget(resolved.target)
   if (!galleryId) return {}
 
-  const { eventName, galleryTitle, description, ogImage } = await getOgForGallery(galleryId)
+  const { eventName, galleryTitle, description, ogImage } = await getOgForGallery(
+    galleryId,
+    resolved.target
+  )
+
   const title = `${eventName} · ${galleryTitle}`
 
   return {
@@ -297,7 +339,11 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
   const resolved = await resolveTarget(code)
   if (!resolved) notFound()
 
-  const href = resolved.mediaItemId ? `/media/${encodeURIComponent(resolved.mediaItemId)}` : resolved.target
+  const href = resolved.mediaItemId
+    ? `/media/${encodeURIComponent(resolved.mediaItemId)}`
+    : normalizeTargetPath(resolved.target)
+
+  if (!href) notFound()
 
   return (
     <main dir="rtl" className="mx-auto max-w-md p-6 text-center">
