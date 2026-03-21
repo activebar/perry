@@ -109,10 +109,14 @@ async function getDisplayGalleryTitleForMedia(mediaItemId: string) {
       .eq('is_visible', true)
       .order('sort_order', { ascending: true })
 
-    const match = (blocks || []).find((b: any) => String(b?.config?.gallery_id || '') === galleryId)
-    if (String(match?.config?.title || '').trim()) {
-      galleryTitle = String(match.config.title).trim()
-    }
+    const match = (blocks || []).find(
+  (b: any) => String(b?.config?.gallery_id || '') === galleryId
+)
+
+const matchedTitle = String(match?.config?.title || '').trim()
+if (matchedTitle) {
+  galleryTitle = matchedTitle
+}
   }
 
   return { galleryTitle, eventSlug }
