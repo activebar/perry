@@ -114,8 +114,7 @@ async function getDisplayGalleryTitleForMedia(mediaItemId: string) {
 )
 
 const matchedTitle = String(match?.config?.title || '').trim()
-if (matchedTitle) {
-  galleryTitle = matchedTitle
+if (matchedTitle) return matchedTitle
 }
   }
 
@@ -155,8 +154,7 @@ async function getDisplayGalleryTitleForGallery(galleryId: string) {
 )
 
 const matchedTitle = String(match?.config?.title || '').trim()
-if (matchedTitle) {
-  galleryTitle = matchedTitle
+if (matchedTitle) return matchedTitle
 }
   }
 
