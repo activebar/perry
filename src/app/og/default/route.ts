@@ -1,90 +1,53 @@
 // Path: src/app/og/default/route.ts
-// Version: V26.8
-// Updated: 2026-03-21 21:05
-// Note: stable default OG route that always returns a real image and falls back to local /og/default.jpg
+// Version: V26.9
+// Updated: 2026-03-21 21:20
+// Note: rebuilt from scratch - always returns a real 630x630 JPEG without depending on DB, storage, or other routes
 
 import { NextResponse } from 'next/server'
-import { promises as fs } from 'fs'
-import path from 'path'
-import { supabaseServiceRole } from '@/lib/supabase'
-import { fetchSettings } from '@/lib/db'
+import sharp from 'sharp'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-function guessContentType(urlOrPath?: string | null) {
-  const s = String(urlOrPath || '').toLowerCase()
-  if (s.endsWith('.png')) return 'image/png'
-  if (s.endsWith('.webp')) return 'image/webp'
-  if (s.endsWith('.gif')) return 'image/gif'
-  if (s.endsWith('.jpg') || s.endsWith('.jpeg')) return 'image/jpeg'
-  return 'image/jpeg'
-}
+const SIZE = 630
 
-function extractUploadsPathFromPublicUrl(u: string) {
-  const m = String(u || '').match(/\/storage\/v1\/object\/(public|sign)\/uploads\/(.+)$/i)
-  return m?.[2] ? decodeURIComponent(m[2]) : null
-}
-
-async function downloadFromUploads(pathValue: string) {
-  const sb = supabaseServiceRole()
-  const clean = pathValue.replace(/^\/+/, '')
-  const { data, error } = await sb.storage.from('uploads').download(clean)
-  if (error || !data) throw new Error(error?.message || 'download failed')
-  return Buffer.from(await data.arrayBuffer())
-}
-
-async function fetchRemote(url: string) {
-  const res = await fetch(url, { redirect: 'follow', cache: 'no-store' })
-  if (!res.ok) throw new Error(`fetch failed: ${res.status}`)
-  const buf = Buffer.from(await res.arrayBuffer())
-  const ct = res.headers.get('content-type') || undefined
-  return { buf, ct }
-}
-
-async function readLocalDefaultJpg() {
-  const localPath = path.join(process.cwd(), 'src', 'app', 'og', 'default.jpg')
-  return fs.readFile(localPath)
+function defaultSvg() {
+  return Buffer.from(`
+    <svg width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#111827"/>
+          <stop offset="100%" stop-color="#000000"/>
+        </linearGradient>
+      </defs>
+      <rect width="${SIZE}" height="${SIZE}" fill="url(#bg)"/>
+      <circle cx="315" cy="190" r="86" fill="#ffffff" fill-opacity="0.08"/>
+      <text x="50%" y="54%" text-anchor="middle" font-size="54" font-family="Arial, sans-serif" fill="#ffffff" font-weight="700">ActiveBar</text>
+      <text x="50%" y="63%" text-anchor="middle" font-size="24" font-family="Arial, sans-serif" fill="#d4d4d8">Event Platform</text>
+    </svg>
+  `)
 }
 
 export async function GET() {
-  try {
-    const settings = await fetchSettings().catch(() => null)
-    const ogUrl = String((settings as any)?.og_default_image_url || '').trim()
+  const out = await sharp({
+    create: {
+      width: SIZE,
+      height: SIZE,
+      channels: 3,
+      background: { r: 10, g: 10, b: 10 },
+    },
+  })
+    .composite([{ input: defaultSvg(), top: 0, left: 0 }])
+    .jpeg({ quality: 88, mozjpeg: true })
+    .toBuffer()
 
-    const uploadsPath = ogUrl ? extractUploadsPathFromPublicUrl(ogUrl) : null
-    if (uploadsPath) {
-      const buf = await downloadFromUploads(uploadsPath)
-      return new NextResponse(buf, {
-        headers: {
-          'content-type': guessContentType(uploadsPath),
-          'cache-control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600',
-        },
-      })
-    }
-
-    if (ogUrl && /^https?:\/\//i.test(ogUrl)) {
-      const { buf, ct } = await fetchRemote(ogUrl)
-      return new NextResponse(buf, {
-        headers: {
-          'content-type': ct || guessContentType(ogUrl),
-          'cache-control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600',
-        },
-      })
-    }
-  } catch {
-    // continue to local fallback
-  }
-
-  try {
-    const buf = await readLocalDefaultJpg()
-    return new NextResponse(buf, {
-      headers: {
-        'content-type': 'image/jpeg',
-        'cache-control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600',
-      },
-    })
-  } catch {
-    return new NextResponse('missing default og image', { status: 404 })
-  }
+  return new NextResponse(new Uint8Array(out), {
+    status: 200,
+    headers: {
+      'content-type': 'image/jpeg',
+      'cache-control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400',
+      'content-disposition': 'inline; filename=og-default.jpg',
+      'x-content-type-options': 'nosniff',
+    },
+  })
 }
