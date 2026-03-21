@@ -1,9 +1,6 @@
 // Path: src/app/media/[id]/page.tsx
-// Version: V25.2
-// Updated: 2026-03-18 16:45
-
-// Note: remove default event fallback, infer event from gallery when missing, stabilize OG and back-to-gallery routing
-
+// Version: V25.9
+// Updated: 2026-03-21 16:35
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -37,15 +34,22 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const id = decodeURIComponent(params.id)
   if (!/^[0-9a-f-]{36}$/i.test(id)) return {}
 
-  const settings = await fetchSettings().catch(() => null)
   const mi = await getMedia(id)
   if (!mi) return {}
 
-  const eventName = String((settings as any)?.event_name || 'אירוע')
-  const title = `${eventName} · תמונה` 
+  const eventSlug = String(mi.event_id || '').trim()
+  const settings = await fetchSettings(eventSlug || undefined).catch(() => null)
+
+  const eventName =
+    String((settings as any)?.event_name || '').trim() ||
+    eventSlug ||
+    'אירוע'
+
+  const title = `${eventName} · תמונה`
   const description = String((settings as any)?.share_gallery_description || 'לחצו לצפייה בתמונה')
+
   const b = baseUrl()
-  const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}`
+  const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}`
 
   return {
     title,
@@ -54,7 +58,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
       title,
       description,
       type: 'website',
-      images: [{ url: ogImage, width: 800, height: 800 }],
+      images: [{ url: ogImage, width: 630, height: 630 }],
     },
     twitter: {
       card: 'summary_large_image',
@@ -76,6 +80,15 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
   if (!url) notFound()
 
   const galleryId = mi.gallery_id ? String(mi.gallery_id) : null
+  const eventSlug = String(mi.event_id || '').trim()
+
+  const backToGallery = galleryId
+    ? eventSlug
+      ? `/${encodeURIComponent(eventSlug)}/gallery/${encodeURIComponent(galleryId)}`
+      : `/gallery/${encodeURIComponent(galleryId)}`
+    : eventSlug
+      ? `/${encodeURIComponent(eventSlug)}/gallery`
+      : `/gallery`
 
   return (
     <main className="py-10" dir="rtl">
@@ -101,15 +114,9 @@ export default async function MediaPage({ params }: { params: { id: string } }) 
                   <Button variant="ghost">הורדה</Button>
                 </a>
               </div>
-              {galleryId ? (
-                <Link href={`/gallery/${encodeURIComponent(galleryId)}`}>
-                  <Button variant="ghost">חזרה לגלריה</Button>
-                </Link>
-              ) : (
-                <Link href="/">
-                  <Button variant="ghost">לכל הגלריות</Button>
-                </Link>
-              )}
+              <Link href={backToGallery}>
+                <Button variant="ghost">חזרה לגלריה</Button>
+              </Link>
             </div>
           </div>
         </Card>
