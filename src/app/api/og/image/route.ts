@@ -1,7 +1,7 @@
-// src/app/api/og/image/route.ts
 // Path: src/app/api/og/image/route.ts
-// Version: V26.1
-// Updated: 2026-03-21 18:20
+// Version: V26.3
+// Updated: 2026-03-21 20:05
+// Note: generate square 630x630 OG images consistently and resolve the correct event before loading event settings, without falling back to ido
 
 import { NextResponse } from 'next/server'
 import sharp from 'sharp'
@@ -42,6 +42,44 @@ async function getPostByIdOrPrefix(post: string) {
   return data || null
 }
 
+async function getGalleryEventAndTitle(galleryId: string) {
+  const { data: gallery } = await sb
+    .from('galleries')
+    .select('id, title, event_id')
+    .eq('id', galleryId)
+    .maybeSingle()
+
+  let eventSlug = String((gallery as any)?.event_id || '').trim()
+  if (!eventSlug) {
+    const { data: mediaRow } = await sb
+      .from('media_items')
+      .select('event_id')
+      .eq('gallery_id', galleryId)
+      .not('event_id', 'is', null)
+      .limit(1)
+      .maybeSingle()
+
+    eventSlug = String((mediaRow as any)?.event_id || '').trim()
+  }
+
+  let blockTitle = ''
+  if (eventSlug) {
+    const { data: blocks } = await sb
+      .from('blocks')
+      .select('config, is_visible')
+      .eq('event_id', eventSlug)
+      .eq('is_visible', true)
+
+    const match = (blocks || []).find((b: any) => String((b as any)?.config?.gallery_id || '').trim() === galleryId)
+    blockTitle = String((match as any)?.config?.title || '').trim()
+  }
+
+  return {
+    eventSlug,
+    galleryTitle: blockTitle || String((gallery as any)?.title || '').trim() || 'גלריה',
+  }
+}
+
 async function getMediaItemByIdOrPrefix(media: string) {
   const byUuid = /^[0-9a-f-]{36}$/i.test(media)
   let q = sb
@@ -75,7 +113,7 @@ async function toSquareJpeg(input: Buffer) {
     .toBuffer()
 }
 
-async function buildDesignedCard(baseImage: Buffer, settings: any, eventName: string) {
+async function buildDesignedCard(baseImage: Buffer, settings: any, eventName: string, galleryTitle?: string) {
   const base = await sharp(baseImage)
     .rotate()
     .resize(OG_SIZE, OG_SIZE, { fit: 'cover', position: 'centre' })
@@ -85,15 +123,16 @@ async function buildDesignedCard(baseImage: Buffer, settings: any, eventName: st
   const titleEnabled = settings?.share_title_enabled !== false
   const logoEnabled = settings?.share_logo_enabled !== false
   const logoUrl = String(settings?.share_logo_url || '').trim()
-  const title = String(eventName || settings?.event_name || '').trim() || 'האירוע שלנו'
+  const title = String(galleryTitle || eventName || settings?.event_name || '').trim() || 'האירוע שלנו'
 
   const composites: sharp.OverlayOptions[] = []
 
   if (titleEnabled) {
+    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;')
     const svg = `
-      <svg width="${OG_SIZE}" height="96" xmlns="http://www.w3.org/2000/svg">
-        <rect x="12" y="12" rx="24" ry="24" width="${OG_SIZE - 24}" height="72" fill="rgba(255,255,255,0.88)"/>
-        <text x="${OG_SIZE / 2}" y="58" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#111">🎉 ${title.replace(/&/g, '&amp;').replace(/</g, '&lt;')} 🎉</text>
+      <svg width="${OG_SIZE}" height="110" xmlns="http://www.w3.org/2000/svg">
+        <rect x="12" y="12" rx="24" ry="24" width="${OG_SIZE - 24}" height="84" fill="rgba(255,255,255,0.88)"/>
+        <text x="${OG_SIZE / 2}" y="62" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#111">${safeTitle}</text>
       </svg>`
     composites.push({ input: Buffer.from(svg), top: 0, left: 0 })
   }
@@ -125,12 +164,13 @@ export async function GET(req: Request) {
   const media = url.searchParams.get('media')
   const fallback = url.searchParams.get('fallback')
 
-  const eventSlugFromUrl = (url.searchParams.get('event') || '').trim()
-  let eventSlug = eventSlugFromUrl || process.env.EVENT_SLUG || process.env.NEXT_PUBLIC_EVENT_SLUG || 'ido'
+  const eventSlugFromUrl = String(url.searchParams.get('event') || '').trim()
+  let eventSlug = eventSlugFromUrl
+  let galleryTitle = ''
 
   try {
     let imageUrl: string | null = null
-    let eventName = eventSlug
+    let eventName = 'אירוע'
 
     if (post) {
       const p = await getPostByIdOrPrefix(post)
@@ -148,16 +188,25 @@ export async function GET(req: Request) {
           String((m as any).url || '').trim() ||
           ((m as any).storage_path ? getPublicUploadUrl((m as any).storage_path) : null)
 
-        if ((m as any).event_id) eventSlug = String((m as any).event_id)
+        if ((m as any).event_id) {
+          eventSlug = String((m as any).event_id)
+        }
+
+        const galleryId = String((m as any).gallery_id || '').trim()
+        if (galleryId) {
+          const galleryCtx = await getGalleryEventAndTitle(galleryId)
+          if (!eventSlug && galleryCtx.eventSlug) eventSlug = galleryCtx.eventSlug
+          if (galleryCtx.galleryTitle) galleryTitle = galleryCtx.galleryTitle
+        }
       }
     }
 
-    const settings = await fetchSettings(eventSlug || undefined).catch(() => null)
-    eventName = String((settings as any)?.event_name || eventSlug)
+    const settings = eventSlug ? await fetchSettings(eventSlug).catch(() => null) : null
+    eventName = String((settings as any)?.event_name || eventSlug || 'אירוע')
 
     const defaultUrl =
       String((settings as any)?.og_default_image_url || '').trim() ||
-      getPublicUploadUrl(`${eventSlug}/og/default.jpg`)
+      (eventSlug ? getPublicUploadUrl(`${eventSlug}/og/default.jpg`) : '')
 
     if (!imageUrl && defaultParam) imageUrl = defaultUrl || null
     if (!imageUrl && fallback) imageUrl = fallback
@@ -168,7 +217,7 @@ export async function GET(req: Request) {
     const style = String((settings as any)?.share_image_style || 'plain_square')
     const out =
       style === 'designed_card'
-        ? await buildDesignedCard(buf, settings, eventName)
+        ? await buildDesignedCard(buf, settings, eventName, galleryTitle)
         : await toSquareJpeg(buf)
 
     return new NextResponse(new Uint8Array(out), {
