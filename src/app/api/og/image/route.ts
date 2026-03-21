@@ -1,7 +1,7 @@
 // Path: src/app/api/og/image/route.ts
-// Version: V27.1
-// Updated: 2026-03-21 22:10
-// Note: event-aware OG image route with per-site image support + improved default fallback instead of black placeholder
+// Version: V27.2
+// Updated: 2026-03-21 22:25
+// Note: prioritize per-event OG image from uploads bucket at {event_id}/og/default.jpg, then fallback to media/post/gallery, then styled default
 
 import { NextResponse } from 'next/server'
 import sharp from 'sharp'
@@ -63,6 +63,25 @@ async function fetchUploadsBuffer(pathOrPublicUrl: string) {
   return Buffer.from(await data.arrayBuffer())
 }
 
+async function uploadsFileExists(pathValue: string) {
+  const clean = String(pathValue || '').replace(/^\/+/, '')
+  if (!clean) return false
+
+  const parts = clean.split('/')
+  const fileName = parts.pop()
+  const folder = parts.join('/')
+
+  if (!fileName) return false
+
+  const { data, error } = await sb.storage.from('uploads').list(folder, {
+    limit: 200,
+    search: fileName,
+  })
+
+  if (error || !data) return false
+  return data.some((item: any) => String(item?.name || '') === fileName)
+}
+
 async function loadImageBufferFromUrl(url: string) {
   const normalized = String(url || '').trim()
   if (!normalized) throw new Error('empty image url')
@@ -105,11 +124,10 @@ function buildFallbackSvg(title: string, subtitle: string) {
       </defs>
 
       <rect width="${SIZE}" height="${SIZE}" fill="url(#bg)"/>
-      <rect x="32" y="32" width="${SIZE - 64}" height="${SIZE - 64}" rx="28" fill="url(#card)" stroke="rgba(255,255,255,0.10)"/>
-      <circle cx="${SIZE / 2}" cy="190" r="74" fill="rgba(255,255,255,0.10)"/>
-      <text x="50%" y="330" text-anchor="middle" font-size="50" font-family="Arial, sans-serif" fill="#ffffff" font-weight="700">${t}</text>
-      <text x="50%" y="390" text-anchor="middle" font-size="24" font-family="Arial, sans-serif" fill="#dbeafe">${s}</text>
-      <text x="50%" y="560" text-anchor="middle" font-size="22" font-family="Arial, sans-serif" fill="#cbd5e1">ActiveBar</text>
+      <rect x="32" y="32" width="${SIZE - 64}" height="${SIZE - 64}" rx="28" fill="url(#card)"/>
+      <text x="50%" y="320" text-anchor="middle" font-size="48" font-family="Arial, sans-serif" fill="#ffffff" font-weight="700">${t}</text>
+      <text x="50%" y="380" text-anchor="middle" font-size="22" font-family="Arial, sans-serif" fill="#dbeafe">${s}</text>
+      <text x="50%" y="560" text-anchor="middle" font-size="20" font-family="Arial, sans-serif" fill="#cbd5e1">ActiveBar</text>
     </svg>
   `)
 }
@@ -128,10 +146,37 @@ async function makeFallbackJpeg(title = 'אירוע', subtitle = 'תמונת ש�
     .toBuffer()
 }
 
+async function getEventTexts(eventId: string) {
+  const cleanEvent = String(eventId || '').trim()
+  if (!cleanEvent) {
+    return { title: 'אירוע', subtitle: 'תמונת שיתוף' }
+  }
+
+  try {
+    const s: any = await fetchSettings(cleanEvent)
+    return {
+      title: String(s?.event_name || cleanEvent).trim() || cleanEvent,
+      subtitle:
+        String(s?.share_gallery_description || '').trim() ||
+        String(s?.meta_description || '').trim() ||
+        'תמונת שיתוף',
+    }
+  } catch {
+    return { title: cleanEvent, subtitle: 'תמונת שיתוף' }
+  }
+}
+
 async function getEventImageUrl(eventId: string) {
   const cleanEvent = String(eventId || '').trim()
   if (!cleanEvent) return ''
 
+  // 1) highest priority: fixed storage path per event
+  const fixedPath = `${cleanEvent}/og/default.jpg`
+  if (await uploadsFileExists(fixedPath)) {
+    return getPublicUploadUrl(fixedPath)
+  }
+
+  // 2) settings fields if exist
   let settings: any = null
   try {
     settings = await fetchSettings(cleanEvent)
@@ -147,9 +192,10 @@ async function getEventImageUrl(eventId: string) {
 
   if (settingsImage) return settingsImage
 
+  // 3) hero / cover block image
   const { data: heroBlock } = await sb
     .from('blocks')
-    .select('config, type, is_visible')
+    .select('config, type, is_visible, sort_order')
     .eq('event_id', cleanEvent)
     .eq('is_visible', true)
     .in('type', ['hero', 'cover', 'home'])
@@ -164,6 +210,7 @@ async function getEventImageUrl(eventId: string) {
 
   if (heroImage) return heroImage
 
+  // 4) any approved event media
   const { data: latestApprovedMedia } = await sb
     .from('media_items')
     .select('thumb_url, public_url, url, storage_path')
@@ -231,32 +278,6 @@ async function findMediaUrl(params: URLSearchParams) {
   return ''
 }
 
-async function getEventTexts(eventId: string) {
-  const cleanEvent = String(eventId || '').trim()
-  if (!cleanEvent) {
-    return {
-      title: 'אירוע',
-      subtitle: 'תמונת שיתוף',
-    }
-  }
-
-  try {
-    const s: any = await fetchSettings(cleanEvent)
-    return {
-      title: String(s?.event_name || 'אירוע').trim() || 'אירוע',
-      subtitle:
-        String(s?.share_gallery_description || '').trim() ||
-        String(s?.meta_description || '').trim() ||
-        'תמונת שיתוף',
-    }
-  } catch {
-    return {
-      title: cleanEvent,
-      subtitle: 'תמונת שיתוף',
-    }
-  }
-}
-
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const params = url.searchParams
@@ -264,24 +285,20 @@ export async function GET(req: Request) {
   const forceDefault = params.get('default') === '1'
 
   try {
-    if (!forceDefault) {
-      const sourceUrl = await findMediaUrl(params)
+    const sourceUrl = forceDefault ? await getEventImageUrl(event) : await findMediaUrl(params)
 
-      if (sourceUrl) {
-        const input = await loadImageBufferFromUrl(sourceUrl)
-        const out = await squareJpegFromBuffer(input)
-        return new NextResponse(new Uint8Array(out), { status: 200, headers: JPEG_HEADERS })
-      }
+    if (sourceUrl) {
+      const input = await loadImageBufferFromUrl(sourceUrl)
+      const out = await squareJpegFromBuffer(input)
+      return new NextResponse(new Uint8Array(out), { status: 200, headers: JPEG_HEADERS })
     }
 
     const texts = await getEventTexts(event)
     const out = await makeFallbackJpeg(texts.title, texts.subtitle)
-
     return new NextResponse(new Uint8Array(out), { status: 200, headers: JPEG_HEADERS })
   } catch {
     const texts = await getEventTexts(event)
     const out = await makeFallbackJpeg(texts.title, texts.subtitle)
-
     return new NextResponse(new Uint8Array(out), { status: 200, headers: JPEG_HEADERS })
   }
 }
