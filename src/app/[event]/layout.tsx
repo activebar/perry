@@ -1,5 +1,114 @@
+// Path: src/app/[event]/layout.tsx
+// Version: V27.0
+// Updated: 2026-03-21 21:35
+// Note: dynamic per-event metadata from current host + event settings, shared automatically across all event pages
+
+import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import SiteChrome from '@/components/SiteChrome'
 import { fetchBlocks, fetchSettings } from '@/lib/db'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+function getBaseUrl() {
+  const h = headers()
+  const host = h.get('x-forwarded-host') || h.get('host') || ''
+  const proto = h.get('x-forwarded-proto') || 'https'
+  return host ? `${proto}://${host}` : ''
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { event: string }
+}): Promise<Metadata> {
+  const eventId = String(params?.event || '').trim()
+  const base = getBaseUrl()
+  const pageUrl = base ? `${base}/${encodeURIComponent(eventId)}` : `/${eventId}`
+
+  try {
+    const s: any = await fetchSettings(eventId)
+
+    const title = String(s?.event_name || '').trim() || 'אירוע'
+    const description =
+      String(s?.meta_description || '').trim() ||
+      String(s?.share_gallery_description || '').trim() ||
+      title
+
+    const image =
+      base
+        ? `${base}/api/og/image?event=${encodeURIComponent(eventId)}&default=1`
+        : `/api/og/image?event=${encodeURIComponent(eventId)}&default=1`
+
+    return {
+      metadataBase: base ? new URL(base) : undefined,
+      title,
+      description,
+      alternates: {
+        canonical: pageUrl,
+      },
+      openGraph: {
+        title,
+        description,
+        type: 'website',
+        url: pageUrl,
+        locale: 'he_IL',
+        images: [
+          {
+            url: image,
+            width: 630,
+            height: 630,
+            alt: title,
+          },
+        ],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: [image],
+      },
+    }
+  } catch {
+    const title = 'אירוע'
+    const description = 'אירוע'
+    const image =
+      base
+        ? `${base}/api/og/image?event=${encodeURIComponent(eventId)}&default=1`
+        : `/api/og/image?event=${encodeURIComponent(eventId)}&default=1`
+
+    return {
+      metadataBase: base ? new URL(base) : undefined,
+      title,
+      description,
+      alternates: {
+        canonical: pageUrl,
+      },
+      openGraph: {
+        title,
+        description,
+        type: 'website',
+        url: pageUrl,
+        locale: 'he_IL',
+        images: [
+          {
+            url: image,
+            width: 630,
+            height: 630,
+            alt: title,
+          },
+        ],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title,
+        description,
+        images: [image],
+      },
+    }
+  }
+}
 
 export default async function EventLayout({
   children,
@@ -10,7 +119,6 @@ export default async function EventLayout({
 }) {
   const eventId = params.event
 
-  // Public site chrome title (event name) – safe fallback
   let eventName: string | undefined = undefined
   let footerEnabled: boolean | undefined = undefined
   let footerLabel: string | null | undefined = undefined
@@ -27,7 +135,6 @@ export default async function EventLayout({
     const s: any = await fetchSettings(eventId)
     const blocks: any[] = await fetchBlocks(eventId)
 
-    // Footer (fully controlled by admin)
     footerEnabled = !!s?.footer_enabled
     footerLabel = s?.footer_label ?? null
     footerUrl = s?.footer_url ?? null
@@ -35,7 +142,6 @@ export default async function EventLayout({
     footerLine2Label = s?.footer_line2_label ?? null
     footerLine2Url = s?.footer_line2_url ?? null
 
-    // Dynamic nav labels
     const sortedBlocks = [...(blocks || [])].sort(
       (a: any, b: any) => Number(a?.order_index || 0) - Number(b?.order_index || 0)
     )
@@ -60,9 +166,9 @@ export default async function EventLayout({
           ''
       ).trim() || 'ברכות'
 
-    // Gift nav button: shown only if the 'gift' block is visible and not auto-hidden by time.
     const giftBlock = sortedBlocks.find((b: any) => String(b?.type) === 'gift')
     giftNavLabel = String(giftBlock?.config?.title || '').trim() || 'מתנה'
+
     if (!giftBlock?.is_visible) {
       showGiftNavButton = false
     } else if (giftBlock?.config?.auto_hide_after_hours) {
