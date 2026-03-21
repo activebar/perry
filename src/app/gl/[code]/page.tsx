@@ -309,4 +309,3 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
     </main>
   )
 }
-
