@@ -1,5 +1,7 @@
-// Public OG image endpoint (no query string), friendlier for WhatsApp/Facebook.
-// It serves the latest default OG image configured in admin, from Supabase Storage.
+// Path: src/app/og/default/route.ts
+// Version: V26.7
+// Updated: 2026-03-21 20:45
+// Note: stable default OG image route that serves admin-configured default image or falls back to /api/og/image?default=1
 
 import { NextResponse } from 'next/server'
 import { supabaseServiceRole } from '@/lib/supabase'
@@ -18,7 +20,6 @@ function guessContentType(urlOrPath?: string | null) {
 }
 
 function extractUploadsPathFromPublicUrl(u: string) {
-  // https://<project>.supabase.co/storage/v1/object/public/uploads/<path>
   const m = u.match(/\/storage\/v1\/object\/(public|sign)\/uploads\/(.+)$/i)
   return m?.[2] ? decodeURIComponent(m[2]) : null
 }
@@ -41,19 +42,16 @@ async function fetchRemote(url: string) {
 }
 
 export async function GET(req: Request) {
-  // Prefer admin configured OG default image URL.
-  const settings = await fetchSettings()
-  const ogUrl = String((settings as any)?.og_default_image_url || '')
-
   try {
-    // If it's a Supabase public URL, fetch via service role for reliability.
+    const settings = await fetchSettings().catch(() => null)
+    const ogUrl = String((settings as any)?.og_default_image_url || '').trim()
+
     const uploadsPath = ogUrl ? extractUploadsPathFromPublicUrl(ogUrl) : null
     if (uploadsPath) {
       const buf = await downloadFromUploads(uploadsPath)
       return new NextResponse(buf, {
         headers: {
           'content-type': guessContentType(uploadsPath),
-          // Short cache to allow updates; WhatsApp may still cache aggressively.
           'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
         },
       })
@@ -69,21 +67,24 @@ export async function GET(req: Request) {
       })
     }
   } catch {
-    // ignore and fallback
+    // continue to fallback
   }
 
-  // Fallback: same as /api/og/image?default=1
-  const origin = new URL(req.url).origin
-  const fallbackRes = await fetch(`${origin}/api/og/image?default=1`).catch(() => null)
-  if (fallbackRes && fallbackRes.ok) {
-    const buf = Buffer.from(await fallbackRes.arrayBuffer())
-    const ct = fallbackRes.headers.get('content-type') || 'image/jpeg'
-    return new NextResponse(buf, {
-      headers: {
-        'content-type': ct,
-        'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
-      },
-    })
+  try {
+    const origin = new URL(req.url).origin
+    const fallbackRes = await fetch(`${origin}/api/og/image?default=1`, { redirect: 'follow' })
+    if (fallbackRes.ok) {
+      const buf = Buffer.from(await fallbackRes.arrayBuffer())
+      const ct = fallbackRes.headers.get('content-type') || 'image/jpeg'
+      return new NextResponse(buf, {
+        headers: {
+          'content-type': ct,
+          'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+        },
+      })
+    }
+  } catch {
+    // ignore
   }
 
   return new NextResponse('missing', { status: 404 })
