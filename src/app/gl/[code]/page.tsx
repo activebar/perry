@@ -1,11 +1,11 @@
 // Path: src/app/gl/[code]/page.tsx
-// Version: V26.3
-// Updated: 2026-03-21 10:45
-// Note: prefer target_path redirect before /media fallback + keep safe event/gallery metadata resolution
+// Version: V26.4
+// Updated: 2026-03-21 17:05
+// Note: keep metadata generation on server and use server redirect instead of client refresh/script to avoid intermediate page and 404 chain
 
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { supabaseServiceRole } from '@/lib/supabase'
 import { fetchSettings } from '@/lib/db'
 
@@ -340,25 +340,9 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
   if (!resolved) notFound()
 
   const normalizedTarget = normalizeTargetPath(resolved.target)
-  const href =
-    normalizedTarget ||
-    (resolved.mediaItemId ? `/media/${encodeURIComponent(resolved.mediaItemId)}` : '')
+  const href = normalizedTarget || (resolved.mediaItemId ? `/media/${encodeURIComponent(resolved.mediaItemId)}` : '')
 
   if (!href) notFound()
 
-  return (
-    <main dir="rtl" className="mx-auto max-w-md p-6 text-center">
-      <meta httpEquiv="refresh" content={`0;url=${href}`} />
-      <p className="text-sm text-zinc-600">מעבירים אותך לתמונה…</p>
-      <a className="mt-3 inline-block rounded-full border px-4 py-2 text-sm no-underline" href={href}>
-        אם לא עברת אוטומטית — לחץ כאן
-      </a>
-
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `setTimeout(function(){ window.location.href = ${JSON.stringify(href)}; }, 60);`,
-        }}
-      />
-    </main>
-  )
+  redirect(href)
 }
