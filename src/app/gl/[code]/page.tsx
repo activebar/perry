@@ -1,6 +1,6 @@
 // src/app/gl/[code]/page.tsx
-// Version: V25.3
-// Updated: 2026-03-21 14:05
+// Version: V25.91
+// Updated: 2026-03-21 16:35
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
@@ -77,9 +77,38 @@ function extractGalleryIdFromTarget(targetPath: string | null) {
   return m?.[1] || null
 }
 
+async function getGalleryDisplayTitle(galleryId: string, fallbackTitle = 'גלריה') {
+  const srv = supabaseServiceRole()
+
+  const { data: g } = await srv
+    .from('galleries')
+    .select('id,title')
+    .eq('id', galleryId)
+    .maybeSingle()
+
+  let title = String((g as any)?.title || fallbackTitle).trim() || fallbackTitle
+
+  const { data: blocks } = await srv
+    .from('blocks')
+    .select('config,is_visible,sort_order')
+    .eq('is_visible', true)
+    .order('sort_order', { ascending: true })
+
+  for (const row of (blocks as any[]) || []) {
+    const cfg = (row as any)?.config || {}
+    const cfgGalleryId = String(cfg?.gallery_id || '').trim()
+    const cfgTitle = String(cfg?.title || '').trim()
+    if (cfgGalleryId && cfgGalleryId === galleryId && cfgTitle) {
+      title = cfgTitle
+      break
+    }
+  }
+
+  return title
+}
+
 async function getOgForMedia(mediaItemId: string) {
   const srv = supabaseServiceRole()
-  const settings = await fetchSettings()
 
   const { data: mi } = await srv
     .from('media_items')
@@ -87,23 +116,23 @@ async function getOgForMedia(mediaItemId: string) {
     .eq('id', mediaItemId)
     .maybeSingle()
 
+  const eventSlug = String((mi as any)?.event_id || '').trim()
+  const settings = await fetchSettings(eventSlug || undefined)
+
   let galleryTitle = 'תמונה'
   if ((mi as any)?.gallery_id) {
-    const { data: g } = await srv
-      .from('galleries')
-      .select('id,title')
-      .eq('id', String((mi as any).gallery_id))
-      .maybeSingle()
-
-    if ((g as any)?.title) galleryTitle = String((g as any).title)
+    galleryTitle = await getGalleryDisplayTitle(String((mi as any).gallery_id), 'תמונה')
   }
 
-  const eventName = String((settings as any)?.event_name || 'אירוע')
+  const eventName =
+    String((settings as any)?.event_name || '').trim() ||
+    eventSlug ||
+    'אירוע'
+
   const description =
     String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
 
   const b = baseUrl()
-  const eventSlug = String((mi as any)?.event_id || '').trim()
   const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mediaItemId))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}`
 
   return { eventName, galleryTitle, description, ogImage }
@@ -111,13 +140,6 @@ async function getOgForMedia(mediaItemId: string) {
 
 async function getOgForGallery(galleryId: string) {
   const srv = supabaseServiceRole()
-  const settings = await fetchSettings()
-
-  const { data: g } = await srv
-    .from('galleries')
-    .select('id,title')
-    .eq('id', galleryId)
-    .maybeSingle()
 
   const { data: mi } = await srv
     .from('media_items')
@@ -129,16 +151,23 @@ async function getOgForGallery(galleryId: string) {
     .limit(1)
     .maybeSingle()
 
-  const eventName = String((settings as any)?.event_name || 'אירוע')
-  const galleryTitle = String((g as any)?.title || 'גלריה')
+  const eventSlug = String((mi as any)?.event_id || '').trim()
+  const settings = await fetchSettings(eventSlug || undefined)
+
+  const eventName =
+    String((settings as any)?.event_name || '').trim() ||
+    eventSlug ||
+    'אירוע'
+
+  const galleryTitle = await getGalleryDisplayTitle(galleryId, 'גלריה')
+
   const description =
-    String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בגלריה והעלאת תמונות'
+    String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
 
   const b = baseUrl()
-  const eventSlug = String((mi as any)?.event_id || '').trim()
   const ogImage = mi?.id
     ? `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}`
-    : `${b}/api/og/image?default=1`
+    : `${b}/api/og/image?default=1${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}`
 
   return { eventName, galleryTitle, description, ogImage }
 }
