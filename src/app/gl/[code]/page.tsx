@@ -1,8 +1,3 @@
-// Path: src/app/gl/[code]/page.tsx
-// Version: V26.2
-// Updated: 2026-03-21 10:20
-// Note: fix short-link event resolution without ido fallback + normalize target_path + safer gallery title lookup
-
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
@@ -19,54 +14,32 @@ function cleanCode(input: string) {
     .replace(/[^0-9a-z]/g, '')
 }
 
-function normalizeTargetPath(input: string | null | undefined) {
-  const raw = String(input || '').trim()
-  if (!raw) return ''
-
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      const u = new URL(raw)
-      return `${u.pathname || ''}${u.search || ''}${u.hash || ''}` || '/'
-    } catch {
-      return raw
-    }
-  }
-
-  return raw.startsWith('/') ? raw : `/${raw}`
-}
-
-function extractGalleryIdFromTarget(targetPath: string | null) {
-  if (!targetPath) return null
-  const m = String(targetPath).match(/\/gallery\/([0-9a-f-]{36})/i)
-  return m?.[1] || null
-}
-
-function extractEventSlugFromTarget(targetPath: string | null) {
-  if (!targetPath) return ''
-  const normalized = normalizeTargetPath(targetPath)
-  const m = normalized.match(/^\/([^/?#]+)\/gallery(?:\/|$)/i)
-  return String(m?.[1] || '').trim()
-}
-
 async function resolveTarget(code: string) {
   const srv = supabaseServiceRole()
 
-  const { data } = await srv
+  // Prefer schemas that include kind, but fallback to legacy schema without kind.
+  const first = await srv
     .from('short_links')
     .select('target_path, kind, media_item_id')
     .eq('code', code)
     .maybeSingle()
 
-  if (!data) return null
+  if (first.data) {
+    const k = String((first.data as any).kind || '').trim()
+    const mi = (first.data as any).media_item_id ? String((first.data as any).media_item_id) : null
 
-  const mediaItemId = (data as any)?.media_item_id
-    ? String((data as any).media_item_id).trim()
-    : null
+    // If media_item_id exists, treat as media link (new behavior)
+    if (mi) return { target: String((first.data as any).target_path || ''), mediaItemId: mi }
 
-  return {
-    target: normalizeTargetPath(String((data as any)?.target_path || '')),
-    mediaItemId: mediaItemId || null,
+    if ((first.data as any)?.target_path) {
+      // Legacy gallery link: target_path points to /gallery/<uuid>
+      return { target: String((first.data as any).target_path), mediaItemId: null }
+    }
   }
+
+  // Legacy fallback: some schemas may not have `kind` column at all.
+  const second = await srv.from('short_links').select('target_path').eq('code', code).maybeSingle()
+  return (second.data as any)?.target_path ? { target: String((second.data as any).target_path), mediaItemId: null } : null
 }
 
 function baseUrlFromHeaders() {
@@ -83,181 +56,94 @@ function baseUrl() {
   const vercel = process.env.VERCEL_URL
   if (vercel) return `https://${vercel}`.replace(/\/$/, '')
 
+  // IMPORTANT: WhatsApp/Facebook scrapers rely on absolute URLs.
+  // If env vars are missing in runtime, fall back to request headers.
   return baseUrlFromHeaders()
 }
 
-function absoluteUrl(path: string) {
-  if (/^https?:\/\//i.test(path)) return path
-  const b = baseUrl()
-  if (!b) return path
-  return `${b}${path.startsWith('/') ? path : `/${path}`}`
+function extractGalleryIdFromTarget(targetPath: string | null) {
+  if (!targetPath) return null
+  const m = String(targetPath).match(/\/gallery\/([0-9a-f-]{36})/i)
+  return m?.[1] || null
 }
 
-async function getEventSlugForGallery(galleryId: string, targetPath?: string | null) {
-  const fromTarget = extractEventSlugFromTarget(targetPath || null)
-  if (fromTarget) return fromTarget
-
+async function getOgForMedia(mediaItemId: string) {
   const srv = supabaseServiceRole()
-
-  const { data: g } = await srv
-    .from('galleries')
-    .select('event_id')
-    .eq('id', galleryId)
-    .maybeSingle()
-
-  const fromGallery = String((g as any)?.event_id || '').trim()
-  if (fromGallery) return fromGallery
-
-  const { data: miApproved } = await srv
-    .from('media_items')
-    .select('event_id, created_at')
-    .eq('gallery_id', galleryId)
-    .eq('is_approved', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const fromApprovedMedia = String((miApproved as any)?.event_id || '').trim()
-  if (fromApprovedMedia) return fromApprovedMedia
-
-  const { data: miAny } = await srv
-    .from('media_items')
-    .select('event_id, created_at')
-    .eq('gallery_id', galleryId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  return String((miAny as any)?.event_id || '').trim()
-}
-
-async function getGalleryDisplayTitle(galleryId: string, eventSlug: string, fallbackTitle = 'גלריה') {
-  const srv = supabaseServiceRole()
-
-  const { data: g } = await srv
-    .from('galleries')
-    .select('id,title,event_id')
-    .eq('id', galleryId)
-    .maybeSingle()
-
-  const galleryEventSlug = String((g as any)?.event_id || '').trim()
-  let title = String((g as any)?.title || fallbackTitle).trim() || fallbackTitle
-
-  const searchEventIds = Array.from(
-    new Set([eventSlug, galleryEventSlug].map(x => String(x || '').trim()).filter(Boolean))
-  )
-
-  if (!searchEventIds.length) {
-    return title
-  }
-
-  for (const eid of searchEventIds) {
-    const { data } = await srv
-      .from('blocks')
-      .select('event_id,type,config,is_visible,sort_order,order_index')
-      .eq('event_id', eid)
-      .eq('is_visible', true)
-      .or('type.eq.gallery,type.like.gallery_%')
-      .order('sort_order', { ascending: true })
-      .order('order_index', { ascending: true })
-
-    const rows = (data as any[]) || []
-    for (const row of rows) {
-      const cfg = (row as any)?.config || {}
-      const cfgGalleryId = String(cfg?.gallery_id || cfg?.galleryId || '').trim()
-      const cfgTitle = String(cfg?.title || cfg?.display_title || '').trim()
-      if (cfgGalleryId && cfgGalleryId === galleryId && cfgTitle) {
-        return cfgTitle
-      }
-    }
-  }
-
-  return title
-}
-
-async function getOgForMedia(mediaItemId: string, targetPath?: string | null) {
-  const srv = supabaseServiceRole()
+  const settings = await fetchSettings()
 
   const { data: mi } = await srv
     .from('media_items')
-    .select('id, gallery_id, event_id, updated_at, created_at')
+    .select('id, gallery_id, public_url, storage_path, url, thumb_url')
     .eq('id', mediaItemId)
     .maybeSingle()
 
-  const mediaEventSlug = String((mi as any)?.event_id || '').trim()
-  const targetEventSlug = extractEventSlugFromTarget(targetPath || null)
-  const eventSlug = mediaEventSlug || targetEventSlug
-
-  const settings = eventSlug
-    ? await fetchSettings(eventSlug).catch(() => null)
-    : null
+  // Prefer a direct public URL for WhatsApp reliability.
+  // (WhatsApp sometimes fails to fetch dynamic OG image routes.)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const bucket = 'uploads'
+  const toPublic = (storagePath: string) => (supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${storagePath}` : '')
+  const directUrl =
+    (mi as any)?.thumb_url || (mi as any)?.public_url || (mi as any)?.url || ((mi as any)?.storage_path ? toPublic(String((mi as any).storage_path)) : '')
 
   let galleryTitle = 'תמונה'
   if ((mi as any)?.gallery_id) {
-    galleryTitle = await getGalleryDisplayTitle(String((mi as any).gallery_id), eventSlug, 'תמונה')
+    const { data: g } = await srv
+      .from('galleries')
+      .select('id,title')
+      .eq('id', String((mi as any).gallery_id))
+      .maybeSingle()
+
+    if ((g as any)?.title) galleryTitle = String((g as any).title)
   }
 
-  const eventName =
-    String((settings as any)?.event_name || '').trim() ||
-    eventSlug ||
-    'אירוע'
+  const eventName = String((settings as any)?.event_name || 'אירוע')
+  const description = String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
 
-  const description =
-    String((settings as any)?.share_gallery_description || '').trim() ||
-    'לחצו לצפייה בתמונה'
+  const b = baseUrl()
+  // Use direct URL if available, otherwise fall back to the dynamic OG generator
+  const ogImage = directUrl ? String(directUrl) : `${b}/api/og/image?media=${encodeURIComponent(String(mediaItemId))}`
 
-  const versionKey = encodeURIComponent(
-    String((mi as any)?.updated_at || (mi as any)?.created_at || mediaItemId)
-  )
-
-  const ogImage = absoluteUrl(
-    `/api/og/image?media=${encodeURIComponent(String(mediaItemId))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}&v=${versionKey}`
-  )
-
-  return { eventName, galleryTitle, description, ogImage, eventSlug }
+  return { eventName, galleryTitle, description, ogImage }
 }
 
-async function getOgForGallery(galleryId: string, targetPath?: string | null) {
+async function getOgForGallery(galleryId: string) {
   const srv = supabaseServiceRole()
+  const settings = await fetchSettings()
+
+  const { data: g } = await srv
+    .from('galleries')
+    .select('id,title')
+    .eq('id', galleryId)
+    .maybeSingle()
 
   const { data: mi } = await srv
     .from('media_items')
-    .select('id, event_id, updated_at, created_at, is_approved')
+    .select('id, public_url, storage_path, url, thumb_url')
+    .in('kind', ['gallery', 'galleries'])
     .eq('gallery_id', galleryId)
     .eq('is_approved', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
-  const mediaEventSlug = String((mi as any)?.event_id || '').trim()
-  const eventSlug =
-    mediaEventSlug ||
-    (await getEventSlugForGallery(galleryId, targetPath))
+  const eventName = String((settings as any)?.event_name || 'אירוע')
+  const galleryTitle = String((g as any)?.title || 'גלריה')
+  const description = String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בגלריה והעלאת תמונות'
 
-  const settings = eventSlug
-    ? await fetchSettings(eventSlug).catch(() => null)
-    : null
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const bucket = 'uploads'
+  const toPublic = (storagePath: string) => (supabaseUrl ? `${supabaseUrl}/storage/v1/object/public/${bucket}/${storagePath}` : '')
+  const directUrl =
+    (mi as any)?.thumb_url || (mi as any)?.public_url || (mi as any)?.url || ((mi as any)?.storage_path ? toPublic(String((mi as any).storage_path)) : '')
 
-  const eventName =
-    String((settings as any)?.event_name || '').trim() ||
-    eventSlug ||
-    'אירוע'
+  const b = baseUrl()
+  const ogImage = directUrl
+    ? String(directUrl)
+    : mi?.id
+      ? `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}`
+      : `${b}/api/og/image?default=1`
 
-  const galleryTitle = await getGalleryDisplayTitle(galleryId, eventSlug, 'גלריה')
-
-  const description =
-    String((settings as any)?.share_gallery_description || '').trim() ||
-    'לחצו לצפייה בתמונה'
-
-  const versionKey = encodeURIComponent(
-    String((mi as any)?.updated_at || (mi as any)?.created_at || galleryId)
-  )
-
-  const ogImage = mi?.id
-    ? absoluteUrl(`/api/og/image?media=${encodeURIComponent(String(mi.id))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}&v=${versionKey}`)
-    : absoluteUrl(`/api/og/image?default=1${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}&v=${versionKey}`)
-
-  return { eventName, galleryTitle, description, ogImage, eventSlug }
+  return { eventName, galleryTitle, description, ogImage }
 }
 
 export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
@@ -267,68 +153,50 @@ export async function generateMetadata({ params }: { params: { code: string } })
   const resolved = await resolveTarget(code)
   if (!resolved) return {}
 
-  const pageUrl = absoluteUrl(`/gl/${encodeURIComponent(code)}`)
-  const b = baseUrl()
-
+  // Media link: OG should be based on the specific media item
   if (resolved.mediaItemId) {
-    const { eventName, galleryTitle, description, ogImage } = await getOgForMedia(
-      resolved.mediaItemId,
-      resolved.target
-    )
-
+    const { eventName, galleryTitle, description, ogImage } = await getOgForMedia(resolved.mediaItemId)
     const title = `${eventName} · ${galleryTitle}`
 
     return {
-      metadataBase: b ? new URL(b) : undefined,
       title,
       description,
-      alternates: { canonical: pageUrl },
       openGraph: {
         title,
         description,
-        url: pageUrl,
         type: 'website',
-        locale: 'he_IL',
-        images: [{ url: ogImage, width: 630, height: 630, alt: title }],
+        images: [{ url: ogImage, width: 630, height: 630 }]
       },
       twitter: {
         card: 'summary_large_image',
         title,
         description,
-        images: [ogImage],
-      },
+        images: [ogImage]
+      }
     }
   }
 
   const galleryId = extractGalleryIdFromTarget(resolved.target)
   if (!galleryId) return {}
 
-  const { eventName, galleryTitle, description, ogImage } = await getOgForGallery(
-    galleryId,
-    resolved.target
-  )
-
+  const { eventName, galleryTitle, description, ogImage } = await getOgForGallery(galleryId)
   const title = `${eventName} · ${galleryTitle}`
 
   return {
-    metadataBase: b ? new URL(b) : undefined,
     title,
     description,
-    alternates: { canonical: pageUrl },
     openGraph: {
       title,
       description,
-      url: pageUrl,
       type: 'website',
-      locale: 'he_IL',
-      images: [{ url: ogImage, width: 630, height: 630, alt: title }],
+      images: [{ url: ogImage, width: 630, height: 630 }]
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [ogImage],
-    },
+      images: [ogImage]
+    }
   }
 }
 
@@ -339,15 +207,11 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
   const resolved = await resolveTarget(code)
   if (!resolved) notFound()
 
-  const href = resolved.mediaItemId
-    ? `/media/${encodeURIComponent(resolved.mediaItemId)}`
-    : normalizeTargetPath(resolved.target)
-
-  if (!href) notFound()
+  // IMPORTANT: keep as client-side redirect so OG meta is visible to scrapers.
+  const href = resolved.mediaItemId ? `/media/${encodeURIComponent(resolved.mediaItemId)}` : resolved.target
 
   return (
     <main dir="rtl" className="mx-auto max-w-md p-6 text-center">
-      <meta httpEquiv="refresh" content={`0;url=${href}`} />
       <p className="text-sm text-zinc-600">מעבירים אותך לתמונה…</p>
       <a className="mt-3 inline-block rounded-full border px-4 py-2 text-sm no-underline" href={href}>
         אם לא עברת אוטומטית — לחץ כאן
@@ -355,7 +219,7 @@ export default async function ShortGLLinkPage({ params }: { params: { code: stri
 
       <script
         dangerouslySetInnerHTML={{
-          __html: `setTimeout(function(){ window.location.href = ${JSON.stringify(href)}; }, 60);`,
+          __html: `setTimeout(function(){ window.location.href = ${JSON.stringify(href)}; }, 60);`
         }}
       />
     </main>
