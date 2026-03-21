@@ -1,6 +1,6 @@
 // Path: src/app/media/[id]/page.tsx
-// Version: V25.3
-// Updated: 2026-03-21 14:05
+// Version: V25.9
+// Updated: 2026-03-21 16:35
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -34,15 +34,21 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   const id = decodeURIComponent(params.id)
   if (!/^[0-9a-f-]{36}$/i.test(id)) return {}
 
-  const settings = await fetchSettings().catch(() => null)
   const mi = await getMedia(id)
   if (!mi) return {}
 
-  const eventName = String((settings as any)?.event_name || 'אירוע')
+  const eventSlug = String(mi.event_id || '').trim()
+  const settings = await fetchSettings(eventSlug || undefined).catch(() => null)
+
+  const eventName =
+    String((settings as any)?.event_name || '').trim() ||
+    eventSlug ||
+    'אירוע'
+
   const title = `${eventName} · תמונה`
   const description = String((settings as any)?.share_gallery_description || 'לחצו לצפייה בתמונה')
+
   const b = baseUrl()
-  const eventSlug = String(mi.event_id || '').trim()
   const ogImage = `${b}/api/og/image?media=${encodeURIComponent(String(mi.id))}${eventSlug ? `&event=${encodeURIComponent(eventSlug)}` : ''}`
 
   return {
