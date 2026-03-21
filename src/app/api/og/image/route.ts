@@ -1,7 +1,7 @@
 // Path: src/app/api/og/image/route.ts
-// Version: V26.3
-// Updated: 2026-03-21 20:05
-// Note: generate square 630x630 OG images consistently and resolve the correct event before loading event settings, without falling back to ido
+// Version: V26.4
+// Updated: 2026-03-21 19:35
+// Note: always return a square 630x630 JPEG for media/gallery/default without ido fallback
 
 import { NextResponse } from 'next/server'
 import sharp from 'sharp'
@@ -26,11 +26,21 @@ async function fetchImageBuffer(url: string) {
   return Buffer.from(ab)
 }
 
+async function loadBufferFromAnyUrl(url: string) {
+  const uploadsPath = extractUploadsPathFromPublicUrl(url)
+  if (uploadsPath) {
+    const { data, error } = await sb.storage.from('uploads').download(uploadsPath)
+    if (error) throw error
+    return Buffer.from(await data.arrayBuffer())
+  }
+  return fetchImageBuffer(url)
+}
+
 async function getPostByIdOrPrefix(post: string) {
   const byUuid = /^[0-9a-f-]{36}$/i.test(post)
   let q = sb
     .from('posts')
-    .select('id, event_id, author_name, text, media_url, status, kind')
+    .select('id, event_id, media_url, status, kind')
     .eq('kind', 'blessing')
     .limit(1)
 
@@ -42,49 +52,11 @@ async function getPostByIdOrPrefix(post: string) {
   return data || null
 }
 
-async function getGalleryEventAndTitle(galleryId: string) {
-  const { data: gallery } = await sb
-    .from('galleries')
-    .select('id, title, event_id')
-    .eq('id', galleryId)
-    .maybeSingle()
-
-  let eventSlug = String((gallery as any)?.event_id || '').trim()
-  if (!eventSlug) {
-    const { data: mediaRow } = await sb
-      .from('media_items')
-      .select('event_id')
-      .eq('gallery_id', galleryId)
-      .not('event_id', 'is', null)
-      .limit(1)
-      .maybeSingle()
-
-    eventSlug = String((mediaRow as any)?.event_id || '').trim()
-  }
-
-  let blockTitle = ''
-  if (eventSlug) {
-    const { data: blocks } = await sb
-      .from('blocks')
-      .select('config, is_visible')
-      .eq('event_id', eventSlug)
-      .eq('is_visible', true)
-
-    const match = (blocks || []).find((b: any) => String((b as any)?.config?.gallery_id || '').trim() === galleryId)
-    blockTitle = String((match as any)?.config?.title || '').trim()
-  }
-
-  return {
-    eventSlug,
-    galleryTitle: blockTitle || String((gallery as any)?.title || '').trim() || 'גלריה',
-  }
-}
-
 async function getMediaItemByIdOrPrefix(media: string) {
   const byUuid = /^[0-9a-f-]{36}$/i.test(media)
   let q = sb
     .from('media_items')
-    .select('id, event_id, public_url, url, storage_path, mime_type, kind, post_id, gallery_id')
+    .select('id, event_id, public_url, url, storage_path, thumb_url, kind, post_id, gallery_id, is_approved')
     .limit(1)
 
   if (byUuid) q = q.or(`id.eq.${media},post_id.eq.${media}`)
@@ -95,14 +67,17 @@ async function getMediaItemByIdOrPrefix(media: string) {
   return data || null
 }
 
-async function loadBufferFromAnyUrl(url: string) {
-  const uploadsPath = extractUploadsPathFromPublicUrl(url)
-  if (uploadsPath) {
-    const { data, error } = await sb.storage.from('uploads').download(uploadsPath)
-    if (error) throw error
-    return Buffer.from(await data.arrayBuffer())
-  }
-  return fetchImageBuffer(url)
+async function getApprovedGalleryCover(galleryId: string) {
+  const { data, error } = await sb
+    .from('media_items')
+    .select('id, event_id, public_url, url, storage_path, thumb_url, gallery_id, is_approved')
+    .eq('gallery_id', galleryId)
+    .eq('is_approved', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data || null
 }
 
 async function toSquareJpeg(input: Buffer) {
@@ -113,48 +88,14 @@ async function toSquareJpeg(input: Buffer) {
     .toBuffer()
 }
 
-async function buildDesignedCard(baseImage: Buffer, settings: any, eventName: string, galleryTitle?: string) {
-  const base = await sharp(baseImage)
-    .rotate()
-    .resize(OG_SIZE, OG_SIZE, { fit: 'cover', position: 'centre' })
-    .jpeg({ quality: 84, mozjpeg: true })
-    .toBuffer()
-
-  const titleEnabled = settings?.share_title_enabled !== false
-  const logoEnabled = settings?.share_logo_enabled !== false
-  const logoUrl = String(settings?.share_logo_url || '').trim()
-  const title = String(galleryTitle || eventName || settings?.event_name || '').trim() || 'האירוע שלנו'
-
-  const composites: sharp.OverlayOptions[] = []
-
-  if (titleEnabled) {
-    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    const svg = `
-      <svg width="${OG_SIZE}" height="110" xmlns="http://www.w3.org/2000/svg">
-        <rect x="12" y="12" rx="24" ry="24" width="${OG_SIZE - 24}" height="84" fill="rgba(255,255,255,0.88)"/>
-        <text x="${OG_SIZE / 2}" y="62" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#111">${safeTitle}</text>
-      </svg>`
-    composites.push({ input: Buffer.from(svg), top: 0, left: 0 })
-  }
-
-  if (logoEnabled && logoUrl) {
-    try {
-      const logoBuf = await loadBufferFromAnyUrl(logoUrl)
-      const logoPng = await sharp(logoBuf)
-        .rotate()
-        .resize({ width: 160, height: 72, fit: 'inside' })
-        .png()
-        .toBuffer()
-
-      const badgeSvg = `<svg width="190" height="88" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" rx="22" ry="22" width="190" height="88" fill="rgba(255,255,255,0.82)"/></svg>`
-      composites.push({ input: Buffer.from(badgeSvg), left: 220, top: OG_SIZE - 108 })
-      composites.push({ input: logoPng, left: 235, top: OG_SIZE - 100 })
-    } catch {
-      // ignore logo failures
-    }
-  }
-
-  return await sharp(base).composite(composites).jpeg({ quality: 84, mozjpeg: true }).toBuffer()
+function pickImageUrl(row: any) {
+  return (
+    String(row?.thumb_url || '').trim() ||
+    String(row?.public_url || '').trim() ||
+    String(row?.url || '').trim() ||
+    (row?.storage_path ? getPublicUploadUrl(String(row.storage_path)) : '') ||
+    ''
+  )
 }
 
 export async function GET(req: Request) {
@@ -162,20 +103,19 @@ export async function GET(req: Request) {
   const defaultParam = url.searchParams.get('default')
   const post = url.searchParams.get('post')
   const media = url.searchParams.get('media')
+  const gallery = url.searchParams.get('gallery')
   const fallback = url.searchParams.get('fallback')
-
   const eventSlugFromUrl = String(url.searchParams.get('event') || '').trim()
+
   let eventSlug = eventSlugFromUrl
-  let galleryTitle = ''
 
   try {
     let imageUrl: string | null = null
-    let eventName = 'אירוע'
 
     if (post) {
       const p = await getPostByIdOrPrefix(post)
       if (p?.kind === 'blessing' && p?.status === 'approved') {
-        imageUrl = p.media_url || null
+        imageUrl = String((p as any).media_url || '').trim() || null
         if (p.event_id) eventSlug = String(p.event_id)
       }
     }
@@ -183,27 +123,20 @@ export async function GET(req: Request) {
     if (!imageUrl && media) {
       const m = await getMediaItemByIdOrPrefix(media)
       if (m) {
-        imageUrl =
-          String((m as any).public_url || '').trim() ||
-          String((m as any).url || '').trim() ||
-          ((m as any).storage_path ? getPublicUploadUrl((m as any).storage_path) : null)
+        imageUrl = pickImageUrl(m) || null
+        if ((m as any).event_id) eventSlug = String((m as any).event_id)
+      }
+    }
 
-        if ((m as any).event_id) {
-          eventSlug = String((m as any).event_id)
-        }
-
-        const galleryId = String((m as any).gallery_id || '').trim()
-        if (galleryId) {
-          const galleryCtx = await getGalleryEventAndTitle(galleryId)
-          if (!eventSlug && galleryCtx.eventSlug) eventSlug = galleryCtx.eventSlug
-          if (galleryCtx.galleryTitle) galleryTitle = galleryCtx.galleryTitle
-        }
+    if (!imageUrl && gallery) {
+      const cover = await getApprovedGalleryCover(gallery)
+      if (cover) {
+        imageUrl = pickImageUrl(cover) || null
+        if ((cover as any).event_id) eventSlug = String((cover as any).event_id)
       }
     }
 
     const settings = eventSlug ? await fetchSettings(eventSlug).catch(() => null) : null
-    eventName = String((settings as any)?.event_name || eventSlug || 'אירוע')
-
     const defaultUrl =
       String((settings as any)?.og_default_image_url || '').trim() ||
       (eventSlug ? getPublicUploadUrl(`${eventSlug}/og/default.jpg`) : '')
@@ -214,11 +147,7 @@ export async function GET(req: Request) {
     if (!imageUrl) return new NextResponse('Missing OG image source', { status: 404 })
 
     const buf = await loadBufferFromAnyUrl(imageUrl)
-    const style = String((settings as any)?.share_image_style || 'plain_square')
-    const out =
-      style === 'designed_card'
-        ? await buildDesignedCard(buf, settings, eventName, galleryTitle)
-        : await toSquareJpeg(buf)
+    const out = await toSquareJpeg(buf)
 
     return new NextResponse(new Uint8Array(out), {
       status: 200,
