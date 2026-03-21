@@ -1,6 +1,6 @@
 // src/app/gl/[code]/page.tsx
-// Version: V25.91
-// Updated: 2026-03-21 16:35
+// Version: V26.0
+// Updated: 2026-03-21 17:05
 import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
@@ -77,7 +77,22 @@ function extractGalleryIdFromTarget(targetPath: string | null) {
   return m?.[1] || null
 }
 
-async function getGalleryDisplayTitle(galleryId: string, fallbackTitle = 'גלריה') {
+async function getEventSlugForGallery(galleryId: string) {
+  const srv = supabaseServiceRole()
+
+  const { data: mi } = await srv
+    .from('media_items')
+    .select('event_id')
+    .in('kind', ['gallery', 'galleries'])
+    .eq('gallery_id', galleryId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return String((mi as any)?.event_id || '').trim()
+}
+
+async function getGalleryDisplayTitle(galleryId: string, eventSlug: string, fallbackTitle = 'גלריה') {
   const srv = supabaseServiceRole()
 
   const { data: g } = await srv
@@ -88,11 +103,17 @@ async function getGalleryDisplayTitle(galleryId: string, fallbackTitle = 'גלר
 
   let title = String((g as any)?.title || fallbackTitle).trim() || fallbackTitle
 
-  const { data: blocks } = await srv
+  let blocksQuery = srv
     .from('blocks')
-    .select('config,is_visible,sort_order')
+    .select('event_id,config,is_visible,sort_order')
     .eq('is_visible', true)
     .order('sort_order', { ascending: true })
+
+  if (eventSlug) {
+    blocksQuery = blocksQuery.eq('event_id', eventSlug)
+  }
+
+  const { data: blocks } = await blocksQuery
 
   for (const row of (blocks as any[]) || []) {
     const cfg = (row as any)?.config || {}
@@ -121,7 +142,7 @@ async function getOgForMedia(mediaItemId: string) {
 
   let galleryTitle = 'תמונה'
   if ((mi as any)?.gallery_id) {
-    galleryTitle = await getGalleryDisplayTitle(String((mi as any).gallery_id), 'תמונה')
+    galleryTitle = await getGalleryDisplayTitle(String((mi as any).gallery_id), eventSlug, 'תמונה')
   }
 
   const eventName =
@@ -151,7 +172,7 @@ async function getOgForGallery(galleryId: string) {
     .limit(1)
     .maybeSingle()
 
-  const eventSlug = String((mi as any)?.event_id || '').trim()
+  const eventSlug = String((mi as any)?.event_id || '').trim() || await getEventSlugForGallery(galleryId)
   const settings = await fetchSettings(eventSlug || undefined)
 
   const eventName =
@@ -159,7 +180,7 @@ async function getOgForGallery(galleryId: string) {
     eventSlug ||
     'אירוע'
 
-  const galleryTitle = await getGalleryDisplayTitle(galleryId, 'גלריה')
+  const galleryTitle = await getGalleryDisplayTitle(galleryId, eventSlug, 'גלריה')
 
   const description =
     String((settings as any)?.share_gallery_description || '').trim() || 'לחצו לצפייה בתמונה'
